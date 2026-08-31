@@ -4,6 +4,9 @@
 #include "root/app/utils.h"
 #include "menu/gps/gps_tracker.h"
 #include "menu/gps/wardriving.h"
+#if defined(EVIL_EXTENSIONS)
+#include "menu/gps/wardriving_master/wardriving_master.h"
+#endif
 #include <math.h>
 
 void GpsMenu::optionsMenu() {
@@ -25,6 +28,9 @@ void GpsMenu::wardrivingMenu() {
         {"Scan WiFi Networks", []() { Wardriving(true, false); }},
         {"Scan BLE Devices",   []() { Wardriving(false, true); }},
         {"Scan Both",          []() { Wardriving(true, true); } },
+#if defined(EVIL_EXTENSIONS)
+        {"Wardriving Master",  wardrivingMasterMenu             },
+#endif
         {"Back",               [this]() { optionsMenu(); }      },
     };
 

@@ -1,5 +1,6 @@
 #include "root/ui/display.h"
 #include "root/ui/kvx_ui.h"
+#include "root/ui/theme.h"
 #include "root/net/webInterface.h" // for server
 #include "root/net/wg.h"           //for isConnectedWireguard to print wireguard lock
 #include "root/input/mykeyboard.h"
@@ -512,6 +513,8 @@ void padprintln(double n, int digits, int16_t padx) {
 **  Function: loopOptions
 **  Where you choose among the options in menu
 **********************************************************************/
+static String kvxActiveTitle = "Menu";
+
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter
 ) {
@@ -542,6 +545,9 @@ int loopOptions(
         index = firstEnabled;
     }
 
+    String prevTitle = kvxActiveTitle;
+    if (subText != nullptr && subText[0] != '\0') kvxActiveTitle = subText;
+
     Opt_Coord coord;
     bool redraw = true;
     bool exit = false;
@@ -549,7 +555,7 @@ int loopOptions(
     int devModeCounter = 0;
     static unsigned long _clock_bat_timer = millis();
     if (options.size() > MAX_MENU_SIZE) { menuSize = MAX_MENU_SIZE; }
-    if (index > 0)
+    if (menuType == MENU_TYPE_REGULAR && index > 0)
         tft.fillRoundRect(
             tftWidth * 0.10,
             tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
@@ -562,7 +568,7 @@ int loopOptions(
     bool firstRender = true;
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
-    drawMainBorder();
+    if (menuType != MENU_TYPE_SUBMENU) drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
         if (exit) break;
@@ -576,11 +582,14 @@ int loopOptions(
                 _clock_bat_timer = millis();
                 drawStatusBar(); // update clock and battery status each 30s
             }
+        } else if (menuType == MENU_TYPE_SUBMENU && millis() - _clock_bat_timer > 30000) {
+            _clock_bat_timer = millis();
+            drawKvxTopBar(kvxActiveTitle.c_str());
         }
 
         if (redraw) {
             menuOptionType = menuType; // updates menutype to the remote controller
-            menuOptionLabel = subText;
+            menuOptionLabel = kvxActiveTitle;
             // update the hovered
             for (auto &opt : options) opt.hovered = false;
             options[index].hovered = true;
@@ -590,7 +599,7 @@ int loopOptions(
                 renderedByLambda = options[index].hover(options[index].hoverPointer, true);
 
             if (!renderedByLambda) {
-                if (menuType == MENU_TYPE_SUBMENU) drawSubmenu(index, options, subText);
+                if (menuType == MENU_TYPE_SUBMENU) drawSubmenu(index, options, kvxActiveTitle.c_str());
                 else
                     coord = drawOptions(
                         index,
@@ -740,6 +749,7 @@ int loopOptions(
     }
 
     RotaryNetSteps = 0; // reset rotary steps to avoid unexpected jumps in the next menu
+    kvxActiveTitle = prevTitle;
     return index;
 }
 
@@ -1055,49 +1065,55 @@ void drawWireguardStatus(int x, int y) {
 
 /***************************************************************************************
 ** Function name: listFiles
-** Description:   Função para desenhar e mostrar o menu principal
+** Description:   CLI file list with kvx top bar
 ***************************************************************************************/
-#define MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
-Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
+Opt_Coord listFiles(int index, std::vector<FileList> fileList, const char *title) {
     Opt_Coord coord;
-    tft.drawPixel(0, 0, kvxConfig.bgColor);
-    if (index == 0) {
-        tft.fillScreen(kvxConfig.bgColor);
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
-    }
-    tft.setCursor(10, 10);
-    tft.setTextSize(FM);
-    int i = 0;
-    int arraySize = fileList.size();
-    int start = 0;
-    if (index >= MAX_ITEMS) {
-        start = index - MAX_ITEMS + 1;
-        if (start < 0) start = 0;
-    }
-    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
-    String txt = ">";
-    while (i < arraySize) {
-        if (i >= start) {
-            tft.setCursor(10, tft.getCursorY());
-            if (fileList[i].folder == true)
-                tft.setTextColor(getColorVariation(kvxConfig.priColor), kvxConfig.bgColor);
-            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, kvxConfig.bgColor);
-            else { tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor); }
+    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
+    const uint16_t purple = DEFAULT_PRICOLOR;
+    const uint16_t green = DEFAULT_SECCOLOR;
 
-            if (index == i) {
-                txt = ">";
-                coord.x = 10 + FM * LW;
-                coord.y = tft.getCursorY();
-                coord.size = nchars;
-                coord.fgcolor =
-                    fileList[i].folder ? getColorVariation(kvxConfig.priColor) : kvxConfig.priColor;
-                coord.bgcolor = kvxConfig.bgColor;
-            } else txt = " ";
-            txt += fileList[i].filename + "                 ";
-            tft.println(txt.substring(0, nchars));
+    if (title == nullptr || title[0] == '\0') title = "Files";
+    tft.fillRect(0, KVX_TOPBAR_H + 1, tftWidth, tftHeight - KVX_TOPBAR_H - 1, bg);
+    drawKvxTopBar(title);
+
+    const int lineH = FM * LH + 4;
+    const int startY = KVX_TOPBAR_H + 4;
+    const int visible = max(1, (tftHeight - startY - 6) / lineH);
+    int scroll = 0;
+    if (index >= visible) scroll = index - visible + 1;
+
+    int nchars = max(1, (tftWidth - 12) / (FM * LW));
+    int arraySize = (int)fileList.size();
+
+    for (int i = scroll; i < arraySize && i < scroll + visible; i++) {
+        int y = startY + (i - scroll) * lineH;
+        bool sel = (i == index);
+        String line = sel ? String("> ") : String("  ");
+        line += fileList[i].filename;
+        if ((int)line.length() > nchars) line = line.substring(0, nchars);
+
+        tft.setTextSize(FM);
+        if (fileList[i].folder) {
+            tft.setTextColor(sel ? purple : getColorVariation(green), bg);
+        } else if (fileList[i].operation) {
+            tft.setTextColor(ALCOLOR, bg);
+        } else if (sel) {
+            tft.setTextColor(purple, bg);
+        } else {
+            tft.setTextColor(green, bg);
         }
-        i++;
-        if (i == (start + MAX_ITEMS) || i == arraySize) break;
+        tft.drawString(line, 6, y, 1);
+
+        if (sel) {
+            coord.x = 6 + 2 * FM * LW;
+            coord.y = y;
+            coord.size = nchars > 2 ? nchars - 2 : 1;
+            if (fileList[i].folder) coord.fgcolor = getColorVariation(green);
+            else if (fileList[i].operation) coord.fgcolor = ALCOLOR;
+            else coord.fgcolor = purple;
+            coord.bgcolor = bg;
+        }
     }
     return coord;
 }

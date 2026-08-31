@@ -73,7 +73,7 @@ int gsetRotation(bool set) {
 #endif
     };
     addOptionToMainMenu();
-    if (set) loopOptions(options);
+    if (set) loopOptions(options, "Rotation");
     else result = getRot;
 
     if (result > 3 || result < 0) {
@@ -156,7 +156,7 @@ void setBrightnessMenu() {
          }}
     };
     addOptionToMainMenu(); // this one bugs the brightness selection
-    loopOptions(options, MENU_TYPE_REGULAR, "", idx);
+    loopOptions(options, "Brightness", idx);
     setBrightness(kvxConfig.bright, false);
 }
 
@@ -194,7 +194,7 @@ void setDimmerTimeMenu() {
         {"60s",      [=]() { kvxConfig.setDimmer(60); }, kvxConfig.dimmerSet == 60},
         {"Disabled", [=]() { kvxConfig.setDimmer(0); },  kvxConfig.dimmerSet == 0 },
     };
-    loopOptions(options, idx);
+    loopOptions(options, "Dimmer", idx);
 }
 
 /*********************************************************************
@@ -257,7 +257,7 @@ void setUIColor() {
 
         addOptionToMainMenu();
 
-        int selectedOption = loopOptions(options, idx);
+        int selectedOption = loopOptions(options, "UI Color", idx);
         if (selectedOption == -1 || selectedOption == options.size() - 1) return;
     }
 }
@@ -284,7 +284,7 @@ bool setCustomUIColorMenu() {
             {"Cancel",     [=]() {}                                }
         };
 
-        int selectedOption = loopOptions(options);
+        int selectedOption = loopOptions(options, "Custom Color");
         if (selectedOption == -1 || selectedOption == options.size() - 1) {
             return false;
         } else if (selectedOption == 3) {
@@ -302,7 +302,7 @@ void setCustomUIColorChoiceMenu(int colorType) {
             {"Back",          [=]() {}                                          }
         };
 
-        int selectedOption = loopOptions(options);
+        int selectedOption = loopOptions(options, "Color Channel");
         if (selectedOption == -1 || selectedOption == options.size() - 1) return;
     }
 }
@@ -434,7 +434,7 @@ void setSoundConfig() {
         {"Sound off", [=]() { kvxConfig.setSoundEnabled(0); }, kvxConfig.soundEnabled == 0},
         {"Sound on",  [=]() { kvxConfig.setSoundEnabled(1); }, kvxConfig.soundEnabled == 1},
     };
-    loopOptions(options, kvxConfig.soundEnabled);
+    loopOptions(options, "Sound", kvxConfig.soundEnabled);
 }
 
 /*********************************************************************
@@ -454,7 +454,7 @@ void setSoundVolume() {
         {"90%",  [=]() { kvxConfig.setSoundVolume(90); },  kvxConfig.soundVolume == 90 },
         {"100%", [=]() { kvxConfig.setSoundVolume(100); }, kvxConfig.soundVolume == 100},
     };
-    loopOptions(options, kvxConfig.soundVolume);
+    loopOptions(options, "Volume", kvxConfig.soundVolume);
 }
 
 #ifdef HAS_RGB_LED
@@ -468,7 +468,7 @@ void setLedBlinkConfig() {
         {"Led Blink off", [=]() { kvxConfig.setLedBlinkEnabled(0); }, kvxConfig.ledBlinkEnabled == 0},
         {"Led Blink on",  [=]() { kvxConfig.setLedBlinkEnabled(1); }, kvxConfig.ledBlinkEnabled == 1},
     };
-    loopOptions(options, kvxConfig.ledBlinkEnabled);
+    loopOptions(options, "LED Blink", kvxConfig.ledBlinkEnabled);
 }
 #endif
 
@@ -481,7 +481,7 @@ void setWifiStartupConfig() {
         {"Disable", [=]() { kvxConfig.setWifiAtStartup(0); }, kvxConfig.wifiAtStartup == 0},
         {"Enable",  [=]() { kvxConfig.setWifiAtStartup(1); }, kvxConfig.wifiAtStartup == 1},
     };
-    loopOptions(options, kvxConfig.wifiAtStartup);
+    loopOptions(options, "WiFi Startup", kvxConfig.wifiAtStartup);
 }
 
 /*********************************************************************
@@ -506,7 +506,7 @@ void removeEvilWifiMenu() {
 
     options.push_back({"Cancel", [=]() { backToMenu(); }});
 
-    loopOptions(options);
+    loopOptions(options, "Evil WiFi");
 }
 
 /*********************************************************************
@@ -541,7 +541,7 @@ void setEvilAllowGetCreds() {
          [=]() { kvxConfig.setEvilAllowGetCreds(true); },
          kvxConfig.evilPortalEndpoints.allowGetCreds == true },
     };
-    loopOptions(options, kvxConfig.evilPortalEndpoints.allowGetCreds);
+    loopOptions(options, "Get Creds", kvxConfig.evilPortalEndpoints.allowGetCreds);
 }
 
 /*********************************************************************
@@ -558,7 +558,7 @@ void setEvilAllowSetSsid() {
          [=]() { kvxConfig.setEvilAllowSetSsid(true); },
          kvxConfig.evilPortalEndpoints.allowSetSsid == true },
     };
-    loopOptions(options, kvxConfig.evilPortalEndpoints.allowSetSsid);
+    loopOptions(options, "Set SSID", kvxConfig.evilPortalEndpoints.allowSetSsid);
 }
 
 /*********************************************************************
@@ -575,7 +575,7 @@ void setEvilAllowEndpointDisplay() {
          [=]() { kvxConfig.setEvilAllowEndpointDisplay(true); },
          kvxConfig.evilPortalEndpoints.showEndpoints == true },
     };
-    loopOptions(options, kvxConfig.evilPortalEndpoints.showEndpoints);
+    loopOptions(options, "Endpoints", kvxConfig.evilPortalEndpoints.showEndpoints);
 }
 
 /*********************************************************************
@@ -597,7 +597,7 @@ void setEvilPasswordMode() {
          [=]() { kvxConfig.setEvilPasswordMode(SAVE_LENGTH); },
          kvxConfig.evilPortalPasswordMode == SAVE_LENGTH    },
     };
-    loopOptions(options, kvxConfig.evilPortalPasswordMode);
+    loopOptions(options, "Password Mode", kvxConfig.evilPortalPasswordMode);
 }
 
 /*********************************************************************
@@ -617,7 +617,7 @@ void setEvilGatewayIp() {
              kvxConfig.setEvilGatewayIp(ip);
          }},
     };
-    loopOptions(options, kvxConfig.evilPortalGatewayIp == "192.168.4.1" ? 1 : 0);
+    loopOptions(options, "Gateway IP", kvxConfig.evilPortalGatewayIp == "192.168.4.1" ? 1 : 0);
 }
 
 /*********************************************************************
@@ -650,7 +650,7 @@ void setRFModuleMenu() {
          * #endif
          */
     };
-    loopOptions(options, idx);
+    loopOptions(options, "RF Module", idx);
     if (result == CC1101_SPI_MODULE || pins_setup > 0) {
         // This setting is meant to StickCPlus and StickCPlus2 to setup the ports from RF Menu
         if (pins_setup == 1) {
@@ -769,7 +769,7 @@ void setRFIDModuleMenu() {
          kvxConfigPins.rfidModule == ST25R3916_I2C_MODULE},
 #endif
     };
-    loopOptions(options, kvxConfigPins.rfidModule);
+    loopOptions(options, "RFID Module", kvxConfigPins.rfidModule);
 }
 
 /*********************************************************************
@@ -817,9 +817,7 @@ void setClock() {
     };
 
     addOptionToMainMenu();
-    loopOptions(options);
-
-    if (returnToMenu) return;
+    loopOptions(options, "Clock");
 
     if (kvxConfig.automaticTimeUpdateViaNTP) {
         if (!wifiConnected) wifiConnectMenu();
@@ -908,7 +906,7 @@ void setClock() {
 
         addOptionToMainMenu();
 
-        loopOptions(options, idx);
+        loopOptions(options, "Timezone", idx);
 
         updateClockTimezone();
 
@@ -936,7 +934,7 @@ void setClock() {
             {"PM", [&]() { am = 12; }},
         };
 
-        loopOptions(options);
+        loopOptions(options, "AM/PM");
 
 #if defined(HAS_RTC)
         TimeStruct.Hours = hr + am;
@@ -1083,10 +1081,7 @@ int gsetIrTxPin(bool set) {
                 );
         }
 
-        loopOptions(options, idx);
-        options.clear();
-
-        Serial.println("Saved pin: " + String(kvxConfigPins.irTx));
+        loopOptions(options, "IR TX Pin", idx);
     }
 
     returnToMenu = true;
@@ -1109,11 +1104,7 @@ void setIrTxRepeats() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options);
-
-    if (returnToMenu) return;
-
-    kvxConfigPins.setIrTxRepeats(chRpts);
+    loopOptions(options, "IR Repeats");
 }
 /*********************************************************************
 **  Function: gsetIrRxPin
@@ -1144,7 +1135,7 @@ int gsetIrRxPin(bool set) {
                 );
         }
 
-        loopOptions(options);
+        loopOptions(options, "IR RX Pin");
     }
 
     returnToMenu = true;
@@ -1180,7 +1171,7 @@ int gsetRfTxPin(bool set) {
                 );
         }
 
-        loopOptions(options);
+        loopOptions(options, "RF TX Pin");
         options.clear();
     }
 
@@ -1217,7 +1208,7 @@ int gsetRfRxPin(bool set) {
                 );
         }
 
-        loopOptions(options);
+        loopOptions(options, "RF RX Pin");
         options.clear();
     }
 
@@ -1253,7 +1244,7 @@ void setStartupApp() {
                            }});
     }
 
-    loopOptions(options, idx);
+    loopOptions(options, "Startup App", idx);
     options.clear();
 }
 
@@ -1272,7 +1263,7 @@ void setGpsBaudrateMenu() {
          kvxConfigPins.gpsBaudrate == 115200                                                               },
     };
 
-    loopOptions(options, kvxConfigPins.gpsBaudrate);
+    loopOptions(options, "GPS Baud", kvxConfigPins.gpsBaudrate);
 }
 
 /*********************************************************************
@@ -1297,7 +1288,7 @@ void setWifiApSsidMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options, isDefault ? 0 : 1);
+    loopOptions(options, "AP SSID", isDefault ? 0 : 1);
 }
 
 /*********************************************************************
@@ -1322,7 +1313,7 @@ void setWifiApPasswordMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options, isDefault ? 0 : 1);
+    loopOptions(options, "AP Password", isDefault ? 0 : 1);
 }
 
 /*********************************************************************
@@ -1336,7 +1327,7 @@ void setWifiApCredsMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options);
+    loopOptions(options, "AP Creds");
 }
 
 /*********************************************************************
@@ -1349,7 +1340,7 @@ void setNetworkCredsMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options);
+    loopOptions(options, "Network Creds");
 }
 
 /*********************************************************************
@@ -1364,7 +1355,7 @@ void setBadUSBBLEMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options);
+    loopOptions(options, "BadUSB BLE");
 }
 
 /*********************************************************************
@@ -1393,7 +1384,7 @@ void setBadUSBBLEKeyboardLayoutMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options, opt);
+    loopOptions(options, "Keyboard", opt);
 
     if (opt != kvxConfig.badUSBBLEKeyboardLayout) { kvxConfig.setBadUSBBLEKeyboardLayout(opt); }
 }
@@ -1426,7 +1417,7 @@ void setBadUSBBLEShowOutputMenu() {
     };
     addOptionToMainMenu();
 
-    loopOptions(options, kvxConfig.badUSBBLEShowOutput ? 0 : 1);
+    loopOptions(options, "Show Output", kvxConfig.badUSBBLEShowOutput ? 0 : 1);
 }
 
 /*********************************************************************
@@ -1472,7 +1463,7 @@ void setMacAddressMenu() {
     };
 
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_REGULAR, ("Current: " + currentMAC).c_str());
+    loopOptions(options, "MAC Address");
 }
 
 /*********************************************************************
@@ -1496,7 +1487,7 @@ RELOAD:
         {"Main Menu", [&]() { opt = 0; }},
     };
 
-    loopOptions(options);
+    loopOptions(options, "SPI Pins");
     if (opt == 0) return;
     else if (opt == 7) {
         if (changed) {
@@ -1517,7 +1508,7 @@ RELOAD:
             String tmp = String(i);
             options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
         }
-        loopOptions(options, index);
+        loopOptions(options, "GPIO", index);
         options.clear();
         if (opt == 1) points.sck = sel;
         else if (opt == 2) points.miso = sel;
@@ -1547,7 +1538,7 @@ RELOAD:
         {"Main Menu", [&]() { opt = 0; }},
     };
 
-    loopOptions(options);
+    loopOptions(options, "UART Pins");
     if (opt == 0) return;
     else if (opt == 7) {
         if (changed) {
@@ -1564,7 +1555,7 @@ RELOAD:
             String tmp = String(i);
             options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
         }
-        loopOptions(options, index);
+        loopOptions(options, "GPIO", index);
         options.clear();
         if (opt == 1) points.rx = sel;
         else if (opt == 2) points.tx = sel;
@@ -1594,7 +1585,7 @@ RELOAD:
         {"Main Menu", [&]() { opt = 0; }},
     };
 
-    loopOptions(options);
+    loopOptions(options, "I2C Pins");
     if (opt == 0) return;
     else if (opt == 7) {
         if (changed) {
@@ -1611,7 +1602,7 @@ RELOAD:
             String tmp = String(i);
             options.push_back({tmp.c_str(), [i, &sel]() { sel = (gpio_num_t)i; }});
         }
-        loopOptions(options, index);
+        loopOptions(options, "GPIO", index);
         options.clear();
         if (opt == 1) points.sda = sel;
         else if (opt == 2) points.scl = sel;
@@ -1653,7 +1644,7 @@ void setTheme() {
     if (setupSdCard()) {
         options.insert(options.begin(), {"SD Card", [&]() { fs = &SD; }});
     }
-    loopOptions(options);
+    loopOptions(options, "Theme");
     if (fs == nullptr) return;
 
     String filepath = loopSD(*fs, true, "JSON");

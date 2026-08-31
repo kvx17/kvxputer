@@ -10,6 +10,13 @@ Feature modules in this folder:
 | `wifi_atks.cpp` | Deauth, beacon, karma |
 | `netcut.cpp` | ARP spoof / netcut |
 | `responder.cpp` | LLMNR/NBT-NS responder |
-| `extras/` | Ported Evil-Cardputer WiFi stubs |
+| `probe/` | Probe attack / sniff / spear + CRUD |
+| `handshake_master/` | Handshake Master + Check Handshakes |
+| `wall_of_flipper/` | Flipper BLE beacon wall |
+| `dead_drop/` | WiFi file drop AP |
+| `open_wifi/` | Open AP dashboard |
+| `aircrack/` | On-device wordlist vs captured handshake |
+| `csi_radar/` | Channel RSSI heatmap (promiscuous RX) |
+| `c5_serial/` | UART toolkit for ESP32-C5 slave |
 
-Support files: `/support_files/wifi/` (captures, portal HTML, creds).
+Support files: `/support_files/wifi/` (captures, portals, probes, wordlists, deaddrop, wof).

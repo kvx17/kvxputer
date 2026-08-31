@@ -6,6 +6,9 @@
 #include "menu/infrared/custom_ir.h"
 #include "menu/infrared/ir_jammer.h"
 #include "menu/infrared/ir_read.h"
+#if defined(EVIL_EXTENSIONS)
+#include "menu/infrared/tagtinker/tagtinker.h"
+#endif
 
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
@@ -18,6 +21,9 @@ void IRMenu::optionsMenu() {
         {"IR Read",   [=]() { IrRead(); }       },
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer
+#endif
+#if defined(EVIL_EXTENSIONS)
+        {"TagTinker ESL", tagTinkerMenu         },
 #endif
         {"Config",    [this]() { configMenu(); }},
     };

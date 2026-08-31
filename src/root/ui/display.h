@@ -166,10 +166,13 @@ int loopOptions(
     bool interpreter = false
 );
 inline int loopOptions(std::vector<Option> &options, int _index) {
-    return loopOptions(options, MENU_TYPE_REGULAR, "", _index, false);
+    return loopOptions(options, MENU_TYPE_SUBMENU, "", _index, false);
 }
 inline int loopOptions(std::vector<Option> &options) {
-    return loopOptions(options, MENU_TYPE_REGULAR, "", 0, false);
+    return loopOptions(options, MENU_TYPE_SUBMENU, "", 0, false);
+}
+inline int loopOptions(std::vector<Option> &options, const char *subText, int index = 0) {
+    return loopOptions(options, MENU_TYPE_SUBMENU, subText, index, false);
 }
 
 Opt_Coord drawOptions(
@@ -187,7 +190,7 @@ void printSubtitle(const String &subtitle, bool withLine = true);
 void printFootnote(const String &text);
 void printCenterFootnote(const String &text);
 
-Opt_Coord listFiles(int index, std::vector<FileList> fileList);
+Opt_Coord listFiles(int index, std::vector<FileList> fileList, const char *title = "Files");
 
 void drawWireguardStatus(int x, int y);
 

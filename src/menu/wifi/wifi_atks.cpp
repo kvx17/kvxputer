@@ -258,7 +258,7 @@ void wifi_atk_menu() {
         {"Enhanced Deauth", [=]() { enhancedDeauthMenu(); }},
     };
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "WiFi Atks");
     if (!returnToMenu) {
         if (!wifi_atk_setWifi()) return;
     }
@@ -319,7 +319,7 @@ void wifi_atk_menu() {
 
         addOptionToMainMenu();
 
-        loopOptions(options);
+        loopOptions(options, "Target Atks");
         options.clear();
         ap_records.clear();
         ap_records.shrink_to_fit();
@@ -653,7 +653,7 @@ AGAIN:
     };
     addOptionToMainMenu();
 
-    loopOptions(options);
+    loopOptions(options, "Target");
     if (!returnToMenu) goto AGAIN;
 }
 
@@ -855,9 +855,7 @@ void beaconAttack() {
 #endif
     };
     addOptionToMainMenu();
-    loopOptions(options);
-
-    wifiConnected = true;
+    loopOptions(options, "Beacon");
     String beaconFile = "";
     File file;
     FS *fs;
@@ -895,7 +893,7 @@ void beaconAttack() {
                 options.push_back({"LittleFS", [&]() { fs = &LittleFS; }});
                 addOptionToMainMenu();
 
-                loopOptions(options);
+                loopOptions(options, "Beacon File");
                 if (fs != nullptr) beaconFile = loopSD(*fs, true, "TXT");
                 else return;
                 file = fs->open(beaconFile, FILE_READ);
@@ -928,5 +926,5 @@ void enhancedDeauthMenu() {
         {"Back",                    [=]() { returnToMenu = true; }   },
     };
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Deauth");
 }

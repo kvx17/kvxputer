@@ -10,8 +10,12 @@ Source domains: `src/menu/<id>/` — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | Unit Scroll unplug mid-session | Next poll marks absent; keyboard still works |
 | Grove RF (CC1101) + Scroll | Status shows Grove busy; prefer one accessory |
 | `menu/wifi` → Evil Portal / Wifi Atks | P0 WiFi path works |
-| `menu/netops` carousel tile | Present after WiFi; tools + extras stubs |
-| `menu/ble` → BLE Keyboard + extras | HID works; extras show pending message |
+| `menu/wifi` → Probes / Handshakes / Wall Of Flipper / Dead Drop / Open Wifi / Aircrack / CSI Radar / C5 Serial | Addon menus open (`EVIL_EXTENSIONS`) |
+| `menu/netops` carousel tile | Present after WiFi; Bruce rows + P1/P2 addon menus |
+| `menu/ble` → HID Remote + Name Flood / AirTag / FindMy | HID works; addons open |
+| `menu/gps` → Wardriving → Wardriving Master | Addon under existing Wardriving submenu |
+| `menu/infrared` → TagTinker ESL | Addon listed with other IR tools |
+| `menu/others` → LLM Chat | Hardware-missing message unless `HAS_LLM_MODULE` |
 | SD missing | SD error handling (no hard-lock) |
 | Flash size | Full `m5stack-cardputer`; use `m5stack-cardputer-lite` if oversize |
 | Legacy SD paths | First boot migrates `/Bruce*` → `/support_files/*` |

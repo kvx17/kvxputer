@@ -170,7 +170,7 @@ JSValue native_dialogChoice(JSContext *ctx, JSValue *this_val, int argc, JSValue
         }
     }
 
-    loopOptions(options, MENU_TYPE_REGULAR, "", 0, true);
+    loopOptions(options, MENU_TYPE_SUBMENU, "", 0, true);
     options.clear();
 
     return JS_NewString(ctx, result);

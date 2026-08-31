@@ -32,6 +32,10 @@ constexpr const char *WIFI_CAPTURES_LEGACY       = "/BrucePCAP";
 constexpr const char *WIFI_PORTAL_CREDS          = "/support_files/wifi/portals/creds";
 constexpr const char *WIFI_PORTAL_CREDS_LEGACY     = "/BruceEvilCreds";
 constexpr const char *WIFI_PORTALS               = "/support_files/wifi/portals/default";
+constexpr const char *WIFI_PROBES                = "/support_files/wifi/probes";
+constexpr const char *WIFI_WORDLISTS             = "/support_files/wifi/wordlists";
+constexpr const char *WIFI_DEADDROP              = "/support_files/wifi/deaddrop";
+constexpr const char *WIFI_WOF                   = "/support_files/wifi/wof";
 
 // NetOps
 constexpr const char *NETOPS_RESPONDER       = "/support_files/netops/responder";
@@ -39,6 +43,10 @@ constexpr const char *NETOPS_RESPONDER_LEGACY = "/BruceResponder";
 constexpr const char *NETOPS_RESPONDER_NTLM  = "/support_files/netops/responder/ntlm_hashes.txt";
 constexpr const char *NETOPS_TERMINAL        = "/support_files/netops/terminal";
 constexpr const char *NETOPS_TERMINAL_LEGACY  = "/Bruce/Terminal";
+constexpr const char *NETOPS_CRAWLER         = "/support_files/netops/crawler";
+constexpr const char *NETOPS_PRINTER         = "/support_files/netops/printer";
+constexpr const char *NETOPS_CCTV            = "/support_files/netops/cctv";
+constexpr const char *NETOPS_CIW             = "/support_files/netops/ciw";
 
 // RFID
 constexpr const char *RFID                 = "/support_files/rfid";
@@ -55,6 +63,7 @@ constexpr const char *RFID2                = "/support_files/rfid2";
 constexpr const char *IR_PROFILES        = "/support_files/infrared/profiles";
 constexpr const char *IR_PROFILES_LEGACY   = "/BruceIR";
 constexpr const char *IR_TVBG              = "/support_files/infrared/tvbg";
+constexpr const char *IR_ESL               = "/support_files/infrared/esl";
 
 // RF
 constexpr const char *RF_PRESETS           = "/support_files/rf/presets";
@@ -79,6 +88,8 @@ constexpr const char *GPS_WARDRIVING_LEGACY = "/BruceWardriving";
 // BLE
 constexpr const char *BLE_CAPTURES         = "/support_files/ble/captures";
 constexpr const char *BLE_CAPTURES_LEGACY  = "/BruceSniffer";
+constexpr const char *BLE_AIRTAGS          = "/support_files/ble/airtags";
+constexpr const char *BLE_FINDMY_KEYS      = "/support_files/ble/FindMyEvil_keys.txt";
 
 // Others / misc support
 constexpr const char *IBUTTON              = "/support_files/others/ibutton";

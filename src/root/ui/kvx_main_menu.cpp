@@ -1,14 +1,15 @@
 #include "kvx_main_menu.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/theme.h"
 #include "root/input/mykeyboard.h"
 #include "root/app/powerSave.h"
 #include "root/app/utils.h"
 #include <globals.h>
 
-static const uint16_t KVX_PURPLE = 0x9818;
-static const uint16_t KVX_PURPLE_DARK = 0x600C;
-static const uint16_t KVX_GREEN = 0x07E0;
-static const uint16_t KVX_BG = 0x0841;
+static const uint16_t KVX_PURPLE = DEFAULT_PRICOLOR;
+static const uint16_t KVX_GREEN = DEFAULT_SECCOLOR;
+static const uint16_t KVX_BG = KVX_DEFAULT_BGCOLOR;
 
 static constexpr int KVX_COLS = 3;
 static constexpr int KVX_ROWS = 2;
@@ -70,7 +71,7 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
 
     const int page = globalIndex / KVX_SLOTS;
     const int pageStart = page * KVX_SLOTS;
-    const int top = 28;
+    const int top = KVX_TOPBAR_H + 4;
     const int bottom = tftHeight - KVX_FOOTER_H;
     const int gridH = bottom - top - 4;
     const int marginX = 8;
@@ -115,13 +116,7 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
     tft.setTextColor(KVX_PURPLE, KVX_GREEN);
     tft.drawCentreString(label, tftWidth / 2, tftHeight - KVX_FOOTER_H + 6, 1);
 
-    tft.fillRect(0, 0, tftWidth, 24, KVX_BG);
-    tft.drawLine(0, 24, tftWidth, 24, KVX_PURPLE);
-    tft.setTextSize(FP);
-    tft.setTextColor(KVX_GREEN, KVX_BG);
-    tft.drawString("kvxputer", 8, 6, 1);
-    uint8_t bat = getBattery();
-    if (bat > 0) drawBatteryStatus(bat);
+    drawKvxTopBar("kvxputer");
 }
 
 int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
@@ -133,6 +128,7 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
 
     bool redraw = true;
     unsigned long menuOpenTs = 0;
+    unsigned long batTimer = millis();
     int devModeCounter = 0;
 
     while (true) {
@@ -141,7 +137,11 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
         if (redraw) {
             drawKvxGrid(index, items);
             menuOpenTs = millis();
+            batTimer = millis();
             redraw = false;
+        } else if (millis() - batTimer > 30000) {
+            batTimer = millis();
+            drawKvxTopBar("kvxputer");
         }
 
 #ifdef HAS_KEYBOARD

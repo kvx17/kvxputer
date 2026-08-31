@@ -11,7 +11,9 @@
 #include "menu/ble/ble_sniffer.h"
 #endif
 #if defined(EVIL_EXTENSIONS)
-#include "menu/ble/ble_extras.h"
+#include "menu/ble/name_flood/name_flood.h"
+#include "menu/ble/wall_of_airtag/wall_of_airtag.h"
+#include "menu/ble/findmy/findmy.h"
 #endif
 #include "menu/ble/hid_remote/hid_remote.h"
 #include <globals.h>
@@ -48,7 +50,9 @@ void BleMenu::optionsMenu() {
     options.push_back({"BLE Sniffer", [=]() { BLE_SnifferMenu(); }});
 #endif
 #if defined(EVIL_EXTENSIONS)
-    bleExtrasAppend(options);
+    options.push_back({"BLE Name Flood", nameFloodMenu});
+    options.push_back({"Wall Of Airtag", wallOfAirtagMenu});
+    options.push_back({"FindMyEvil", findMyMenu});
 #endif
     addOptionToMainMenu();
 

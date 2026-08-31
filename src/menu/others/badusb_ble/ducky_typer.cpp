@@ -499,7 +499,7 @@ static void openKeySection(
 
         sectionOptions.push_back({"Back", []() {}});
 
-        int selected = loopOptions(sectionOptions, MENU_TYPE_REGULAR, title, index);
+        int selected = loopOptions(sectionOptions, MENU_TYPE_SUBMENU, title, index);
         if (selected < 0 || selected == static_cast<int>(keyCount)) break;
         index = selected;
     }
@@ -1158,7 +1158,7 @@ void ducky_keyboard(HIDInterface *&hid, bool ble) {
 
             options.push_back({"Exit Keyboard", [&]() { exitKeyboard = true; }});
 
-            menuIndex = loopOptions(options, MENU_TYPE_REGULAR, menuTitle.c_str(), menuIndex);
+            menuIndex = loopOptions(options, MENU_TYPE_SUBMENU, menuTitle.c_str(), menuIndex);
 
             if (menuIndex < 0) exitKeyboard = true;
             options.clear();

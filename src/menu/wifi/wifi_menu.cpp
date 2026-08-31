@@ -39,7 +39,14 @@
 #include "menu/wifi/tcp_utils.h"
 
 #if defined(EVIL_EXTENSIONS)
-#include "menu/wifi/extras/wifi_extras.h"
+#include "menu/wifi/probe/probe.h"
+#include "menu/wifi/handshake_master/handshake_master.h"
+#include "menu/wifi/wall_of_flipper/wall_of_flipper.h"
+#include "menu/wifi/dead_drop/dead_drop.h"
+#include "menu/wifi/open_wifi/open_wifi.h"
+#include "menu/wifi/aircrack/aircrack.h"
+#include "menu/wifi/csi_radar/csi_radar.h"
+#include "menu/wifi/c5_serial/c5_serial.h"
 #endif
 
 // global toggle - controls whether scanNetworks includes hidden SSIDs
@@ -102,12 +109,14 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Config", [this]() { configMenu(); }});
 
 #if defined(EVIL_EXTENSIONS)
-    options.push_back({"Evil WiFi Extras", [=]() {
-                           std::vector<Option> extras;
-                           wifiExtrasAppend(extras);
-                           extras.push_back({"Back", [=]() {}});
-                           loopOptions(extras, MENU_TYPE_SUBMENU, "Evil WiFi");
-                       }});
+    options.push_back({"Probes", probeMenu});
+    options.push_back({"Handshakes", handshakeMasterMenu});
+    options.push_back({"Wall Of Flipper", wallOfFlipperMenu});
+    options.push_back({"WiFi Dead Drop", deadDropMenu});
+    options.push_back({"Open Wifi Checker", openWifiMenu});
+    options.push_back({"Aircrack", aircrackMenu});
+    options.push_back({"CSI Radar", csiRadarMenu});
+    options.push_back({"ESP32C5 Serial", c5SerialMenu});
 #endif
 
     addOptionToMainMenu();

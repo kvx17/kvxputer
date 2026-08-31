@@ -27,7 +27,7 @@ void ClockMenu::showSubMenu() {
     };
 
     delay(200);
-    loopOptions(options);
+    loopOptions(options, "Clock");
 }
 
 void ClockMenu::drawIcon(float scale) {

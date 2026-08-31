@@ -7,4 +7,6 @@
 | `ir_read.cpp` | Learn IR signals |
 | `TV-B-Gone.cpp` | TV power off |
 
-Support files: `/support_files/infrared/profiles/` (`.ir` files).
+| `tagtinker/` | ESL IR (Evil TagTinker) |
+
+Support files: `/support_files/infrared/profiles/` (`.ir` files), `/support_files/infrared/esl/`.

@@ -48,7 +48,7 @@ RESTART:
     }
     options.push_back({"Show All", [=]() { kvxConfig.disabledMenus.clear(); }, true});
     addOptionToMainMenu();
-    index = loopOptions(options, index);
+    index = loopOptions(options, "Hide Apps", index);
     kvxConfig.saveFile();
     if (!returnToMenu) goto RESTART;
 }

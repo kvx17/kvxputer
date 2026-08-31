@@ -848,7 +848,7 @@ void deauthAllFromScan() {
     options.push_back({"Back", []() { returnToMenu = true; }});
 
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Deauther");
 }
 
 void deauthAllByChannel() {
@@ -874,7 +874,7 @@ void deauthAllByChannel() {
     options.push_back({"Back", []() { returnToMenu = true; }});
 
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Channel");
 }
 
 void deauthAllMenu() {
@@ -886,7 +886,7 @@ void deauthAllMenu() {
         {"Back",             [=]() { returnToMenu = true; } },
     };
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Deauth All");
 }
 
 void runDeauthTargetList(const std::vector<Host> &targets, uint8_t *targetMAC, int channel) {
@@ -1037,7 +1037,7 @@ void showAPSelectionForClientDeauth() {
     options.push_back({"Back", []() { returnToMenu = true; }});
 
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Select AP");
 }
 
 void clientSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
@@ -1178,7 +1178,7 @@ void showClientSelectionForDeauth(const std::vector<Host> &clients, uint8_t *tar
     options.push_back({"Back", []() { returnToMenu = true; }});
 
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Clients");
 }
 
 void deauthTargetListMenu() { showAPSelectionForClientDeauth(); }
@@ -1229,7 +1229,7 @@ void showTargetSelection() {
     options.push_back({"Back", []() { returnToMenu = true; }});
 
     addOptionToMainMenu();
-    loopOptions(options);
+    loopOptions(options, "Target");
 }
 
 std::vector<Host> buildTargetListFromScan() {

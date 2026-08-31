@@ -1,6 +1,8 @@
 #include "root/storage/sd_functions.h"
 #include "root/hal/bus_HAL.h"
 #include "root/ui/display.h" // using displayRedStripe as error msg
+#include "root/ui/kvx_ui.h"
+#include "root/ui/theme.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
 #include "root/scripting/bjs_interpreter/interpreter.h"
 #include "menu/gps/wdgwars.h"
@@ -25,6 +27,13 @@
 // SPIClass sdcardSPI;
 String fileToCopy;
 std::vector<FileList> fileList;
+
+static String kvxFilesBarTitle(const String &folder) {
+    if (folder.length() <= 1) return "Files";
+    int slash = folder.lastIndexOf('/');
+    String name = (slash >= 0) ? folder.substring(slash + 1) : folder;
+    return name.length() ? name : "Files";
+}
 
 /***************************************************************************************
 ** Function name: setupLittleFS
@@ -612,7 +621,9 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
 
     Opt_Coord coord;
     String result = "";
-    const short PAGE_JUMP_SIZE = (tftHeight - 20) / (LH * FM);
+    const int lineH = FM * LH + 4;
+    const int startY = KVX_TOPBAR_H + 4;
+    const short PAGE_JUMP_SIZE = max(1, (tftHeight - startY - 6) / lineH);
     bool reload = false;
     bool redraw = true;
     int index = 0;
@@ -620,8 +631,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
     String Folder = rootPath;
     String PreFolder = rootPath;
     tft.drawPixel(0, 0, 0);
-    tft.fillScreen(kvxConfig.bgColor); // TODO: Does only the T-Embed CC1101 need this?
-    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
+    tft.fillScreen(KVX_DEFAULT_BGCOLOR);
     if (&fs == &SD) {
         if (!setupSdCard()) {
             displayError("Fail Mounting SD", true);
@@ -648,8 +658,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
         if (redraw) {
             if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || reload) {
                 index = 0;
-                tft.fillScreen(kvxConfig.bgColor);
-                tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
+                tft.fillScreen(KVX_DEFAULT_BGCOLOR);
                 Serial.println("reload to read: " + Folder);
                 readFs(fs, Folder, allowed_ext);
                 PreFolder = Folder;
@@ -659,7 +668,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             }
             if (fileList.size() < 2) readFs(fs, Folder, allowed_ext);
 
-            coord = listFiles(index, fileList);
+            coord = listFiles(index, fileList, kvxFilesBarTitle(Folder).c_str());
 #if defined(HAS_TOUCH)
             TouchFooter();
 #endif
@@ -776,8 +785,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                     while (check(SelPress)) {
                         vTaskDelay(pdMS_TO_TICKS(1));
                     } // wait for SEL release to avoid repeated activations
-                    loopOptions(options);
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
+                    loopOptions(options, "Folder");
                     reload = true;
                     redraw = true;
                 } else if (fileList[index].folder == false && fileList[index].operation == false) {
@@ -792,8 +800,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                     while (check(SelPress)) {
                         vTaskDelay(pdMS_TO_TICKS(1));
                     } // wait for SEL release to avoid repeated activations
-                    loopOptions(options);
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
+                    loopOptions(options, "Files");
                     reload = true;
                     redraw = true;
                 }
@@ -965,12 +972,11 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                         while (check(SelPress)) {
                             vTaskDelay(pdMS_TO_TICKS(1));
                         } // wait for SEL release to avoid repeated activations
-                        loopOptions(options);
+                        loopOptions(options, "File");
                     } else {
                         result = filepath;
                         break;
                     }
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
                     reload = true;
                     redraw = true;
                 } else {

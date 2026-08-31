@@ -21,9 +21,9 @@ Upstream: https://github.com/7h30th3r0n3/Evil-M5project
 Reference snapshot: resources/Evil-Cardputer-v1-5-4.ino
 License: see copyright header in the .ino (permissive / MIT-style grant)
 
-Ported Evil-derived modules under src/modules/evil_* retain upstream copyright
-notices in their source headers. Combined distribution of this firmware is under
-AGPL-3.0-or-later because it is based on Bruce.
+Ported Evil-derived modules under src/menu/<domain>/<addon>/ retain upstream
+copyright notices in their source headers. Combined distribution of this
+firmware is under AGPL-3.0-or-later because it is based on Bruce.
 
 M5Stack Unit Scroll
 -------------------

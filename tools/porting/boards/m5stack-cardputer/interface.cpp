@@ -149,10 +149,12 @@ void _post_setup_gpio() {
 
     pinMode(kvxConfigPins.NRF24_bus.cs, OUTPUT);
     pinMode(kvxConfigPins.CC1101_bus.cs, OUTPUT);
-    pinMode(kvxConfigPins.LoRa_bus.cs, OUTPUT);
     digitalWrite(kvxConfigPins.NRF24_bus.cs, HIGH);
     digitalWrite(kvxConfigPins.CC1101_bus.cs, HIGH);
+#if !defined(LITE_VERSION)
+    pinMode(kvxConfigPins.LoRa_bus.cs, OUTPUT);
     digitalWrite(kvxConfigPins.LoRa_bus.cs, HIGH);
+#endif
 
     tca.matrix(7, 8);
     tca.flush();

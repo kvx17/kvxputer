@@ -443,7 +443,7 @@ void RFScan::select_menu_option() {
     options.emplace_back("Close Menu", [this]() { set_option(CLOSE_MENU); });
     options.emplace_back("Main Menu", [this]() { set_option(MAIN_MENU); });
 
-    loopOptions(options);
+    loopOptions(options, "RF Scan");
 }
 
 void RFScan::set_option(RFMenuOption option) {
@@ -515,7 +515,7 @@ void RFScan::set_threshold() {
         {"(-75)",               [&]() { rssiThreshold = -75; }},
         {"(-80) Less Accurate", [&]() { rssiThreshold = -80; }},
     };
-    loopOptions(options, idx);
+    loopOptions(options, "Threshold", idx);
 }
 /*
 // Using similar function from rf_utils.h

@@ -91,7 +91,9 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         displayError("Low RAM: free WiFi/SD first", true);
         return false;
     }
+#if !defined(LITE_VERSION)
     safeCleanupDuckyBLE(hid_ble);
+#endif
     setHidRemoteBleMac();
 
     String deviceName = kvxConfig.hidRemoteBleName;
@@ -113,7 +115,9 @@ static bool ensureBle(HidRemoteTransportSession &s) {
     s.keyboardHid = s.bleHid;
     s.keyboardActive = true;
     s.mouseActive = true;
+#if !defined(LITE_VERSION)
     hid_ble = s.bleHid;
+#endif
     BLEConnected = false;
     return true;
 #else
@@ -125,7 +129,9 @@ static bool ensureBle(HidRemoteTransportSession &s) {
 static void teardownBle(HidRemoteTransportSession &s) {
 #if defined(CONFIG_BT_ENABLED)
     if (s.bleHid != nullptr) {
+#if !defined(LITE_VERSION)
         safeCleanupDuckyBLE(hid_ble);
+#endif
         delete s.bleHid;
         s.bleHid = nullptr;
     }

@@ -10,7 +10,9 @@
 #include "menu/others/qrcode_menu.h"
 #include "menu/others/u2f.h"
 #include "menu/ble/hid_remote/hid_remote.h"
-// Removed: #include "menu/others/timer.h"
+#if defined(EVIL_EXTENSIONS)
+#include "menu/others/llm_chat/llm_chat.h"
+#endif
 
 void OthersMenu::optionsMenu() {
     options = {
@@ -26,6 +28,9 @@ void OthersMenu::optionsMenu() {
 
 #ifndef LITE_VERSION
         {"iButton",      setup_ibutton                },
+#endif
+#if defined(EVIL_EXTENSIONS)
+        {"LLM Chat",     llmChatMenu                  },
 #endif
     };
 
@@ -44,12 +49,6 @@ void OthersMenu::badUsbHidMenu() {
 #ifdef USB_as_HID
         {"USB Clicker (legacy)",  clicker_setup                            },
         {"USB U2F",      u2f_setup                                },
-#endif
-#if defined(EVIL_EXTENSIONS)
-        {"SD on USB",
-         []() {
-             displayInfo("SD on USB\n(port pending — see docs/EVIL_FEATURE_MAP.md)", true);
-         }},
 #endif
 
         {"Back",         [this]() { optionsMenu(); }              },

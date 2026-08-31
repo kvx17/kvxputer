@@ -1,13 +1,14 @@
 #include "hid_remote_ui.h"
 #include "root/input/mykeyboard.h"
 #include "root/config/configPins.h"
+#include "root/ui/theme.h"
 #include <globals.h>
 
-static const uint16_t KVX_PURPLE = 0x9818;
-static const uint16_t KVX_GREEN = 0x07E0;
-static const uint16_t KVX_BG = 0x0841;
+static const uint16_t KVX_PURPLE = DEFAULT_PRICOLOR;
+static const uint16_t KVX_GREEN = DEFAULT_SECCOLOR;
+static const uint16_t KVX_BG = KVX_DEFAULT_BGCOLOR;
 static const uint16_t KVX_BTN = 0x600C;
-static const uint16_t KVX_BTN_HI = 0x9818;
+static const uint16_t KVX_BTN_HI = DEFAULT_PRICOLOR;
 
 static const int KVX_HEADER_H = 26;
 static const int KVX_FOOTER_H = 18;

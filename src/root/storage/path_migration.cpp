@@ -134,20 +134,36 @@ void migrateOnFs(FS &fs, const char *label) {
     kvx::paths::ensureDir(fs, "/support_files");
 }
 
+void ensureAddonDirs(FS &fs) {
+    kvx::paths::ensureDir(fs, kvx::paths::WIFI_PROBES);
+    kvx::paths::ensureDir(fs, kvx::paths::WIFI_WORDLISTS);
+    kvx::paths::ensureDir(fs, kvx::paths::WIFI_DEADDROP);
+    kvx::paths::ensureDir(fs, kvx::paths::WIFI_WOF);
+    kvx::paths::ensureDir(fs, kvx::paths::NETOPS_CRAWLER);
+    kvx::paths::ensureDir(fs, kvx::paths::NETOPS_PRINTER);
+    kvx::paths::ensureDir(fs, kvx::paths::NETOPS_CCTV);
+    kvx::paths::ensureDir(fs, kvx::paths::NETOPS_CIW);
+    kvx::paths::ensureDir(fs, kvx::paths::BLE_AIRTAGS);
+    kvx::paths::ensureDir(fs, kvx::paths::IR_ESL);
+}
+
 } // namespace
 
 void kvxRunPathMigration() {
     Preferences prefs;
-    if (!prefs.begin(NVS_NS, true)) return;
-    bool done = prefs.getBool(NVS_KEY, false);
-    prefs.end();
-    if (done) return;
+    if (prefs.begin(NVS_NS, true)) {
+        bool done = prefs.getBool(NVS_KEY, false);
+        prefs.end();
+        if (!done) {
+            migrateOnFs(LittleFS, "LittleFS");
+            if (setupSdCard()) migrateOnFs(SD, "SD");
+            prefs.begin(NVS_NS, false);
+            prefs.putBool(NVS_KEY, true);
+            prefs.end();
+            Serial.println("[kvx] path migration complete");
+        }
+    }
 
-    migrateOnFs(LittleFS, "LittleFS");
-    if (setupSdCard()) migrateOnFs(SD, "SD");
-
-    prefs.begin(NVS_NS, false);
-    prefs.putBool(NVS_KEY, true);
-    prefs.end();
-    Serial.println("[kvx] path migration complete");
+    ensureAddonDirs(LittleFS);
+    if (setupSdCard()) ensureAddonDirs(SD);
 }

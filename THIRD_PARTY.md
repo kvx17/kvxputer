@@ -226,13 +226,14 @@ trimmed or adapted. Each retains its original author's license.
 - Reference demo: `resources/Evil-Cardputer-v1-5-4.ino` (not compiled)
 - License: see copyright header in the upstream / reference `.ino` (permissive grant)
 - Copyright (c) 7h30th3r0n3 and contributors
-- Used by: optional Evil-unique feature ports under `src/modules/evil_*` and
-  NetOps / BLE / WiFi menu extensions in the root firmware. Bruce implementations
-  are preferred where features overlap (Evil Portal, Karma, WiFi attacks, BadUSB, etc.).
+- Used by: optional Evil-unique addon modules under `src/menu/<domain>/<addon>/`
+  (WiFi, NetOps, BLE, GPS, Infrared, Others), gated by `-DEVIL_EXTENSIONS=1`.
+  Bruce implementations are preferred where features overlap (Evil Portal, Karma,
+  WiFi attacks, BadUSB, HID Remote, Files, etc.).
 
 ## M5Stack Unit Scroll
 
 - Docs: <https://docs.m5stack.com/en/unit/UNIT-Scroll>
 - Library: <https://github.com/m5stack/M5Unit-Scroll> (MIT)
-- Used by: Cardputer Grove PORT.A optional encoder input (`src/core/unit_scroll.*`,
+- Used by: Cardputer Grove PORT.A optional encoder input (`src/root/input/unit_scroll.*`,
   `tools/porting/boards/m5stack-cardputer/interface.cpp`).
