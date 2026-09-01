@@ -4,6 +4,8 @@
 #include "PN532.h"
 #include <Arduino.h>
 
+class PahubChannelGuard;
+
 typedef enum emv_vendor {
     EMV_VISA,
     EMV_MASTERCARD,
@@ -68,6 +70,7 @@ private:
 
     PN532 *_rfid;
     Adafruit_PN532 *nfc = nullptr;
+    PahubChannelGuard *_pahub = nullptr;
     bool _cancelled = false;
     EMVCard read_emv_card();
     void display_emv(EMVCard card);
@@ -75,7 +78,7 @@ private:
 
 public:
     EMVReader() { setup(); };
-    ~EMVReader() {};
+    ~EMVReader();
     void setup();
 };
 

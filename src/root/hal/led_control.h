@@ -35,6 +35,7 @@ void setLedEffectSpeedConfig();
 void setLedEffectDirectionConfig();
 void ledSetup();
 void ledEffects(bool enable);
+void ledPauseEffects(bool pause);
 void ledPreviewMode(bool enable);
 void setLedBrightness(int value);
 void setLedBrightnessConfig();

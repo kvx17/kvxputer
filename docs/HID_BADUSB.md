@@ -1,11 +1,11 @@
 # HID / BadUSB / BLE keyboard (Cardputer ADV)
 
-## HID Remote (preferred)
+## kvxkeyboard HID (preferred)
 
-Use **HID Remote** for unified USB/Bluetooth control (presenter, keyboard, media, mouse, jiggler, push-to-talk, etc.):
+Use **kvxkeyboard HID** for unified USB/Bluetooth control (presenter, keyboard, media, mouse, jiggler, push-to-talk, etc.):
 
-- **Bluetooth → HID Remote**
-- **Others → BadUSB & HID → HID Remote**
+- **Bluetooth → kvxkeyboard HID**
+- **USB → kvxkeyboard HID**
 
 See [HID_REMOTE.md](HID_REMOTE.md).
 
@@ -14,7 +14,7 @@ See [HID_REMOTE.md](HID_REMOTE.md).
 Bruce Cardputer env enables:
 
 - `-DUSB_as_HID=1`
-- BadUSB under **Others → BadUSB & HID**
+- BadUSB under **USB**
 - **BLE → Bad BLE** and legacy `(legacy)` keyboard/media/presenter entries
 
 kvxputer **keeps Bruce** for BadUSB ducky scripts. Evil’s `Bad_Usb_Lib` core replace is **not** required unless Bruce HID regresses on ADV.
@@ -25,8 +25,10 @@ Scroll is navigation only (Prev/Next/Sel). It does not inject HID keystrokes; Ca
 
 ## Validation checklist
 
-- [ ] Bluetooth → HID Remote: presenter + keyboard over BLE
-- [ ] Others → BadUSB & HID → HID Remote: mouse/clicker over USB
-- [ ] Others → BadUSB: run a small ducky script over USB
+- [ ] Bluetooth → kvxkeyboard HID: presenter + keyboard over BLE
+- [ ] USB → kvxkeyboard HID: mouse/clicker over USB
+- [ ] USB → BadUSB: run a small ducky script over USB
 - [ ] With Unit Scroll connected: navigate menus; scroll wheel in Mouse mode sends wheel
-- [ ] Without Unit Scroll: same HID flows still work
+- [ ] With Unit Joystick2 on Grove PORT.A: Mouse mode stick moves cursor; click = left button
+- [ ] HID Settings → Forget BLE pairings, then pair again
+- [ ] HID Settings → Reconnect new BLE host (advertise under a new MAC)

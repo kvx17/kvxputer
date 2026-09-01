@@ -1,10 +1,15 @@
 #include "hid_remote_modes.h"
 #include "hid_remote_ui.h"
 #include "root/input/mykeyboard.h"
+#include "root/input/unit_joystick2.h"
 #include "root/app/utils.h"
 #include <pins_arduino.h>
 #include <globals.h>
 #include <keys.h>
+#if defined(HAS_KEYBOARD)
+#include <Keyboard.h>
+extern Keyboard_Class Keyboard;
+#endif
 
 static const HidRemoteModeInfo kModeTable[HID_MODE_COUNT] = {
     {"Presenter",           HID_CAP_KEYBOARD},
@@ -30,9 +35,12 @@ static bool checkModeExit(const keyStroke &key) { return key.pressed && key.fn &
 
 static void sendRawKey(HidRemoteTransportSession &s, uint8_t hidKey) {
     if (s.keyboardHid == nullptr) return;
-    s.keyboardHid->press(hidKey);
-    delay(30);
-    s.keyboardHid->releaseAll();
+    s.releaseAll();
+    delay(20);
+    if (s.keyboardHid->press(hidKey) == 0) return;
+    delay(80);
+    s.releaseAll();
+    delay(20);
 }
 
 static void sendCombo(HidRemoteTransportSession &s, uint8_t mod1, uint8_t mod2, uint8_t key) {
@@ -73,6 +81,70 @@ static const uint8_t kPresenterHid[] = {
     ' ', KEY_PAGE_UP, KEY_PAGE_DOWN, KEY_HOME, KEY_END,
 };
 
+static constexpr int kPresenterNext = 1;
+static constexpr int kPresenterF5 = 10;
+
+#if defined(HAS_KEYBOARD)
+static int presenterPollDirectKey() {
+    static char lastToken = 0;
+    static unsigned long lastFire = 0;
+
+    Keyboard.update();
+    Keyboard_Class::KeysState status = Keyboard.keysState();
+
+    char token = 0;
+    int action = -1;
+
+    if (status.fn) {
+        if (Keyboard.isKeyPressed(';')) {
+            token = ';';
+            action = 0;
+        } else if (Keyboard.isKeyPressed('.')) {
+            token = '.';
+            action = 1;
+        } else if (Keyboard.isKeyPressed(',')) {
+            token = ',';
+            action = 2;
+        } else if (Keyboard.isKeyPressed('/')) {
+            token = '/';
+            action = 3;
+        }
+    } else if (status.enter) {
+        token = '\n';
+        action = kPresenterNext;
+    } else {
+        struct Map {
+            char ch;
+            int act;
+        };
+        static const Map kMap[] = {
+            {';', 0},  {'.', 1},  {',', 2},  {'/', 3},  {' ', 4},  {'[', 5},  {']', 6},
+            {'h', 7},  {'H', 7},  {'e', 8},  {'E', 8},  {'p', 9},  {'P', 9},  {'5', kPresenterF5},
+        };
+        for (const auto &m : kMap) {
+            if (Keyboard.isKeyPressed(m.ch)) {
+                token = m.ch;
+                action = m.act;
+                break;
+            }
+        }
+    }
+
+    if (action < 0) {
+        lastToken = 0;
+        return -1;
+    }
+
+    unsigned long now = millis();
+    if (token != lastToken || now - lastFire >= 280) {
+        lastToken = token;
+        lastFire = now;
+        return action;
+    }
+    return -1;
+}
+#endif
+
 static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
     int flashId = -1;
     unsigned long flashUntil = 0;
@@ -80,7 +152,7 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
     auto draw = [&]() {
         hidRemoteDrawHeader(s.transport, s.isConnected(), vertical ? "Presenter V" : "Presenter");
         hidDrawPresenterPad(vertical, flashId);
-        hidRemoteDrawFooter("fn+Ok back");
+        hidRemoteDrawFooter("5=F5  Enter next  fn+Ok back");
     };
 
     draw();
@@ -91,30 +163,54 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
             draw();
         }
 
+        int sent = -1;
+#if defined(HAS_KEYBOARD)
+        sent = presenterPollDirectKey();
+#endif
+        if (sent < 0) {
+            if (check(UpPress)) sent = 0;
+            else if (check(DownPress)) sent = 1;
+            else if (check(PrevPress)) sent = 2;
+            else if (check(NextPress)) sent = 3;
+            else if (check(SelPress)) sent = kPresenterNext;
+        }
+
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
-        int sent = -1;
-        int arrowFlash = -1;
-        if (strokeHasArrow(key, KEY_UP_ARROW, arrowFlash)) sent = 0;
-        else if (strokeHasArrow(key, KEY_DOWN_ARROW, arrowFlash)) sent = 1;
-        else if (strokeHasArrow(key, KEY_LEFT_ARROW, arrowFlash)) sent = 2;
-        else if (strokeHasArrow(key, KEY_RIGHT_ARROW, arrowFlash)) sent = 3;
-        else {
-            char c = strokeChar(key);
-            if (c == ' ') sent = 4;
-            else if (c == '[') sent = 5;
-            else if (c == ']') sent = 6;
-            else if (c == 'h' || c == 'H') sent = 7;
-            else if (c == 'e' || c == 'E') sent = 8;
+        if (sent < 0) {
+            int arrowFlash = -1;
+            if (strokeHasArrow(key, KEY_UP_ARROW, arrowFlash)) sent = 0;
+            else if (strokeHasArrow(key, KEY_DOWN_ARROW, arrowFlash)) sent = 1;
+            else if (strokeHasArrow(key, KEY_LEFT_ARROW, arrowFlash)) sent = 2;
+            else if (strokeHasArrow(key, KEY_RIGHT_ARROW, arrowFlash)) sent = 3;
+            else if (key.pressed) {
+                if (key.enter) sent = kPresenterNext;
+                else {
+                    char c = strokeChar(key);
+                    if (c == ';') sent = 0;
+                    else if (c == '.') sent = 1;
+                    else if (c == ',') sent = 2;
+                    else if (c == '/') sent = 3;
+                    else if (c == ' ') sent = 4;
+                    else if (c == '[') sent = 5;
+                    else if (c == ']') sent = 6;
+                    else if (c == 'h' || c == 'H') sent = 7;
+                    else if (c == 'e' || c == 'E') sent = 8;
+                    else if (c == 'p' || c == 'P') sent = 9;
+                    else if (c == '5') sent = kPresenterF5;
+                }
+            }
         }
 
-        if (sent >= 0 && key.pressed) {
-            sendRawKey(s, kPresenterHid[sent]);
+        if (sent >= 0) {
+            if (sent == 9) s.pressMedia(KEY_MEDIA_PLAY_PAUSE);
+            else if (sent == kPresenterF5) sendRawKey(s, KEY_F5);
+            else sendRawKey(s, kPresenterHid[sent]);
             flashId = sent;
             flashUntil = millis() + 120;
             draw();
-            delay(80);
+            delay(40);
         }
 
         delay(8);
@@ -195,6 +291,70 @@ static void keyboardPressStroke(HidRemoteTransportSession &s, const keyStroke &k
     }
 }
 
+static bool handleKeyboardFn(HidRemoteTransportSession &s, const keyStroke &key, int &flashKey) {
+    if (!key.fn || !key.pressed) return false;
+    char c = strokeChar(key);
+    if (c == 0) return true;
+
+    uint8_t uc = (uint8_t)c;
+    if (uc == KEY_UP_ARROW || uc == KEY_DOWN_ARROW || uc == KEY_LEFT_ARROW || uc == KEY_RIGHT_ARROW) {
+        sendRawKey(s, uc);
+        return true;
+    }
+    if (uc == KEY_ESC || c == '`') {
+        sendRawKey(s, KEY_ESC);
+        flashKey = '`';
+        return true;
+    }
+
+    flashKey = (int)(unsigned char)c;
+    switch (c) {
+        case '1': sendRawKey(s, KEY_F1); break;
+        case '2': sendRawKey(s, KEY_F2); break;
+        case '3': sendRawKey(s, KEY_F3); break;
+        case '4': sendRawKey(s, KEY_F4); break;
+        case '5': sendRawKey(s, KEY_F5); break;
+        case '6': sendRawKey(s, KEY_F6); break;
+        case '7': sendRawKey(s, KEY_F7); break;
+        case '8': sendRawKey(s, KEY_F8); break;
+        case '9': sendRawKey(s, KEY_F9); break;
+        case '0': sendRawKey(s, KEY_F10); break;
+        case '-': sendRawKey(s, KEY_F11); break;
+        case '=': sendRawKey(s, KEY_F12); break;
+        case 'i':
+        case 'I': sendRawKey(s, KEY_INSERT); break;
+        case 'p':
+        case 'P': sendRawKey(s, KEY_PRINT_SCREEN); break;
+        case 'u':
+        case 'U': sendRawKey(s, KEY_PAUSE); break;
+        case 'h':
+        case 'H': sendRawKey(s, KEY_HOME); break;
+        case 'e':
+        case 'E': sendRawKey(s, KEY_END); break;
+        case '[': sendRawKey(s, KEY_PAGE_UP); break;
+        case ']': sendRawKey(s, KEY_PAGE_DOWN); break;
+        case 't':
+        case 'T': sendCombo(s, KEY_LEFT_ALT, 0, KEYTAB); break;
+        case 'w':
+        case 'W': sendCombo(s, KEY_LEFT_GUI, 0, KEYTAB); break;
+        case 'x':
+        case 'X': sendCombo(s, KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_ESC); break;
+        case 'd':
+        case 'D': sendCombo(s, KEY_LEFT_CTRL, KEY_LEFT_ALT, KEY_DELETE); break;
+        case 'n':
+        case 'N': sendRawKey(s, KEY_NUM_LOCK); break;
+        case 's':
+        case 'S': sendRawKey(s, KEY_SCROLL_LOCK); break;
+        case 'm':
+        case 'M': sendRawKey(s, KEY_MENU); break;
+        case 'l':
+        case 'L': sendRawKey(s, KEY_DELETE); break;
+        default: flashKey = 0; return true;
+    }
+    if (flashKey >= 'A' && flashKey <= 'Z') flashKey += 32;
+    return true;
+}
+
 static bool runKeyboard(HidRemoteTransportSession &s) {
 #if !defined(HAS_KEYBOARD)
     tft.fillScreen(0x0841);
@@ -206,25 +366,61 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
 
     String mirror;
     bool dirty = true;
+    bool fnLayer = false;
+    int fnFlash = 0;
+    unsigned long fnFlashUntil = 0;
 
     auto redrawKb = [&]() {
-        hidRemoteDrawHeader(s.transport, s.isConnected(), "Keyboard");
-        tft.fillRect(0, 27, tftWidth, tftHeight - 27 - 18, 0x0841);
-        tft.setTextSize(FP);
-        tft.setTextColor(0x07E0, 0x0841);
-        tft.setCursor(6, 30);
-        tft.println(mirror.length() > 0 ? mirror : "_");
-        hidRemoteDrawFooter("fn+Ok back");
+        hidRemoteDrawHeader(s.transport, s.isConnected(), fnLayer ? "Keyboard FN" : "Keyboard");
+        if (fnLayer) {
+            hidDrawKeyboardFnPad(fnFlash);
+            hidRemoteDrawFooter("FN layer  fn+Ok back");
+        } else {
+            tft.fillRect(0, 27, tftWidth, tftHeight - 27 - 18, 0x0841);
+            tft.setTextSize(FP);
+            tft.setTextColor(0x07E0, 0x0841);
+            tft.setCursor(6, 30);
+            tft.println(mirror.length() > 0 ? mirror : "_");
+            hidRemoteDrawFooter("hold FN for F-keys  fn+Ok");
+        }
         dirty = false;
     };
 
     redrawKb();
 
     while (true) {
+        if (fnLayer && fnFlash && millis() > fnFlashUntil) {
+            fnFlash = 0;
+            dirty = true;
+        }
         if (dirty) redrawKb();
 
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
+
+        if (key.fn) {
+            if (!fnLayer) {
+                fnLayer = true;
+                dirty = true;
+            }
+            if (key.pressed && strokeChar(key) != 0) {
+                int flash = 0;
+                handleKeyboardFn(s, key, flash);
+                fnFlash = flash;
+                fnFlashUntil = millis() + 150;
+                dirty = true;
+                delay(60);
+            }
+            delay(8);
+            continue;
+        }
+
+        if (fnLayer) {
+            fnLayer = false;
+            fnFlash = 0;
+            dirty = true;
+        }
+
         if (!key.pressed) {
             delay(5);
             continue;
@@ -245,6 +441,11 @@ static bool handleMediaKey(HidRemoteTransportSession &s, const keyStroke &key, i
     if (!key.pressed) return false;
 
     char c = strokeChar(key);
+    if (c == ' ') {
+        s.pressMedia(KEY_MEDIA_PLAY_PAUSE);
+        flashId = 13;
+        return true;
+    }
     if (c == ';') {
         s.pressMedia(KEY_MEDIA_VOLUME_UP);
         flashId = 0;
@@ -320,7 +521,7 @@ static bool runMediaLayout(HidRemoteTransportSession &s, const char *title) {
     auto draw = [&]() {
         hidRemoteDrawHeader(s.transport, s.isConnected(), title);
         hidDrawMediaPad(flashId);
-        hidRemoteDrawFooter("fn+Ok back");
+        hidRemoteDrawFooter("SPC play/pause  fn+Ok");
     };
 
     draw();
@@ -359,11 +560,18 @@ static bool runMouse(HidRemoteTransportSession &s) {
     int sens = kvxConfig.hidRemoteMouseSensitivity;
     int flashId = -1;
     unsigned long flashUntil = 0;
+    unitJoystick2Begin(true);
+    const bool joy = unitJoystick2IsPresent();
+    bool joyBtnHeld = false;
+    bool joyRightSent = false;
+    unsigned long joyBtnAt = 0;
+    const unsigned long joyRightHoldMs = 400;
 
     auto draw = [&]() {
-        hidRemoteDrawHeader(s.transport, s.isConnected(), "Mouse");
-        hidDrawMousePad(flashId);
-        hidRemoteDrawFooter("fn+Ok back");
+        hidRemoteDrawHeader(s.transport, s.isConnected(),
+                            kvxConfig.hidRemoteJoyInvertY ? "Mouse Y-inv" : "Mouse");
+        hidDrawMousePad(flashId, joy);
+        hidRemoteDrawFooter(joy ? "D invert  hold=R  fn+Ok" : "fn+Ok back");
     };
 
     draw();
@@ -400,7 +608,10 @@ static bool runMouse(HidRemoteTransportSession &s) {
         }
 
         char c = strokeChar(key);
-        if (c == 'l' || c == 'L') {
+        if (c == 'd' || c == 'D') {
+            kvxConfig.setHidRemoteJoyInvertY(!kvxConfig.hidRemoteJoyInvertY);
+            moved = true;
+        } else if (c == 'l' || c == 'L') {
             s.mouseClick(0x01);
             flashId = 4;
             moved = true;
@@ -408,6 +619,37 @@ static bool runMouse(HidRemoteTransportSession &s) {
             s.mouseClick(0x02);
             flashId = 5;
             moved = true;
+        }
+
+        int8_t jx = 0, jy = 0;
+        if (unitJoystick2ReadMove(jx, jy, sens)) {
+            s.mouseMove(jx, jy);
+            if (jx < 0) flashId = 2;
+            else if (jx > 0) flashId = 3;
+            if (jy < 0) flashId = 0;
+            else if (jy > 0) flashId = 1;
+            moved = true;
+        }
+
+        bool joyDown = unitJoystick2ButtonDown();
+        if (joyDown && !joyBtnHeld) {
+            joyBtnHeld = true;
+            joyRightSent = false;
+            joyBtnAt = millis();
+        }
+        if (joyDown && joyBtnHeld && !joyRightSent && (millis() - joyBtnAt) >= joyRightHoldMs) {
+            s.mouseClick(0x02);
+            joyRightSent = true;
+            flashId = 5;
+            moved = true;
+        }
+        if (!joyDown && joyBtnHeld) {
+            if (!joyRightSent) {
+                s.mouseClick(0x01);
+                flashId = 4;
+                moved = true;
+            }
+            joyBtnHeld = false;
         }
 
         int steps = drainRotarySteps();
@@ -429,26 +671,94 @@ static bool runMouse(HidRemoteTransportSession &s) {
 }
 
 static bool runShorts(HidRemoteTransportSession &s) {
-    hidRemoteDrawHeader(s.transport, s.isConnected(), "Shorts");
-    hidClearContentArea();
-    tft.setTextColor(0x07E0, 0x0841);
-    tft.drawCentreString("; /  prev/next video", tftWidth / 2, 50, 1);
-    tft.drawCentreString("Space = play/pause", tftWidth / 2, 70, 1);
-    hidRemoteDrawFooter("fn+Ok back");
+    int flashId = -1;
+    unsigned long flashUntil = 0;
+    int remapStep = 0; // 0 run, 1 wait up, 2 wait down
+    uint8_t pendingUp = kvxConfig.hidRemoteShortsUp;
+
+    auto prompt = [&]() -> const char * {
+        if (remapStep == 1) return "Press key for UP";
+        if (remapStep == 2) return "Press key for DOWN";
+        return nullptr;
+    };
+
+    auto draw = [&]() {
+        hidRemoteDrawHeader(s.transport, s.isConnected(), "Shorts");
+        hidDrawShortsPad((char)kvxConfig.hidRemoteShortsUp, (char)kvxConfig.hidRemoteShortsDown, flashId, prompt());
+        hidRemoteDrawFooter(remapStep ? "fn+Ok cancel" : "Ok remap  fn+Ok back");
+    };
+
+    draw();
 
     while (true) {
+        if (flashId >= 0 && millis() > flashUntil) {
+            flashId = -1;
+            draw();
+        }
+
         keyStroke key = _getKeyPress();
-        if (checkModeExit(key)) break;
+        if (checkModeExit(key)) {
+            if (remapStep) {
+                remapStep = 0;
+                draw();
+                continue;
+            }
+            break;
+        }
+
+        if (remapStep) {
+            if (!key.pressed) {
+                delay(8);
+                continue;
+            }
+            char c = strokeChar(key);
+            if (c == 0) {
+                delay(8);
+                continue;
+            }
+            if (key.enter || key.fn) {
+                delay(8);
+                continue;
+            }
+            if (remapStep == 1) {
+                pendingUp = (uint8_t)c;
+                remapStep = 2;
+            } else {
+                kvxConfig.setHidRemoteShortsKeys(pendingUp, (uint8_t)c);
+                remapStep = 0;
+            }
+            delay(80);
+            draw();
+            continue;
+        }
+
+        if (key.enter && key.pressed) {
+            remapStep = 1;
+            flashId = 3;
+            draw();
+            delay(80);
+            continue;
+        }
+
         char c = strokeChar(key);
-        if (c == '.' || check(NextPress)) {
+        if (key.pressed && c == (char)kvxConfig.hidRemoteShortsDown) {
             sendRawKey(s, KEY_DOWN_ARROW);
-            delay(100);
-        } else if (c == ';' || check(PrevPress)) {
+            flashId = 1;
+            flashUntil = millis() + 120;
+            draw();
+            delay(80);
+        } else if (key.pressed && c == (char)kvxConfig.hidRemoteShortsUp) {
             sendRawKey(s, KEY_UP_ARROW);
-            delay(100);
+            flashId = 0;
+            flashUntil = millis() + 120;
+            draw();
+            delay(80);
         } else if (c == ' ' && key.pressed) {
             sendRawKey(s, ' ');
-            delay(100);
+            flashId = 2;
+            flashUntil = millis() + 120;
+            draw();
+            delay(80);
         }
         delay(8);
     }
@@ -601,14 +911,16 @@ static void sendPttCombo(HidRemoteTransportSession &s, bool down) {
 }
 
 static bool runPushToTalk(HidRemoteTransportSession &s) {
-    hidRemoteDrawHeader(s.transport, s.isConnected(), "Push-to-Talk");
-    hidClearContentArea();
-    tft.setTextColor(0x07E0, 0x0841);
-    tft.drawCentreString("Hold Space to talk", tftWidth / 2, 50, 1);
-    tft.drawCentreString("Ctrl+Shift+M", tftWidth / 2, 70, 1);
-    hidRemoteDrawFooter("fn+Ok back");
-
     bool talking = false;
+
+    auto draw = [&]() {
+        hidRemoteDrawHeader(s.transport, s.isConnected(), "Push-to-Talk");
+        hidDrawPttPad(talking);
+        hidRemoteDrawFooter("fn+Ok back");
+    };
+
+    draw();
+
     while (true) {
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
@@ -617,10 +929,12 @@ static bool runPushToTalk(HidRemoteTransportSession &s) {
         if (spaceDown && !talking) {
             talking = true;
             sendPttCombo(s, true);
+            draw();
         }
         if (!spaceDown && talking && !key.pressed) {
             talking = false;
             sendPttCombo(s, false);
+            draw();
         }
         delay(10);
     }

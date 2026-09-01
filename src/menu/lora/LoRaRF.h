@@ -7,5 +7,8 @@
 #include "HWCDC.h"
 void lorachat();
 void loraconf();
+void applyLoraCapPinDefaults();
+void ensureLoraSettings();
+void configureLoraCap();
 #endif
 #endif

@@ -15,6 +15,7 @@
 #include "root/storage/sd_functions.h"
 #include "settingsColor.h"
 #include "root/app/utils.h"
+#include "root/hal/pahub.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <globals.h>
 
@@ -738,38 +739,69 @@ void setRFFreqMenu() {
 **  Handles Menu to set the RFID module in use
 **********************************************************************/
 void setRFIDModuleMenu() {
-    options = {
-        {"M5 RFID2",
-         [=]() { kvxConfigPins.setRfidModule(M5_RFID2_MODULE); },
-         kvxConfigPins.rfidModule == M5_RFID2_MODULE     },
+    int8_t rfid2Ch = pahubEnabled() ? pahubChannelFor(PahubDevRFID2) : (int8_t)-2;
+    int8_t nfcCh = pahubEnabled() ? pahubChannelFor(PahubDevNFC) : (int8_t)-2;
+    bool mux = pahubEnabled();
+
+    options.clear();
+    if (!mux || rfid2Ch >= 0) {
+        String lbl = "M5 RFID2";
+        if (rfid2Ch >= 0) lbl += " (ch" + String(rfid2Ch) + ")";
+        options.push_back(
+            {lbl,
+             [=]() { kvxConfigPins.setRfidModule(M5_RFID2_MODULE); },
+             kvxConfigPins.rfidModule == M5_RFID2_MODULE}
+        );
+    }
 #ifdef M5STICK
-        {"PN532 I2C G33",
-         [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
-         kvxConfigPins.rfidModule == PN532_I2C_MODULE    },
-        {"PN532 I2C G36",
-         [=]() { kvxConfigPins.setRfidModule(PN532_I2C_SPI_MODULE); },
-         kvxConfigPins.rfidModule == PN532_I2C_SPI_MODULE},
+    if (!mux || nfcCh >= 0) {
+        options.push_back(
+            {"PN532 I2C G33",
+             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
+             kvxConfigPins.rfidModule == PN532_I2C_MODULE}
+        );
+        options.push_back(
+            {"PN532 I2C G36",
+             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_SPI_MODULE); },
+             kvxConfigPins.rfidModule == PN532_I2C_SPI_MODULE}
+        );
+    }
 #else
-        {"PN532 on I2C",
-         [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
-         kvxConfigPins.rfidModule == PN532_I2C_MODULE},
+    if (!mux || nfcCh >= 0) {
+        String lbl = mux ? "M5 NFC" : "PN532 on I2C";
+        if (nfcCh >= 0) lbl += " (ch" + String(nfcCh) + ")";
+        options.push_back(
+            {lbl,
+             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
+             kvxConfigPins.rfidModule == PN532_I2C_MODULE}
+        );
+    }
 #endif
+    options.push_back(
         {"PN532 on SPI",
          [=]() { kvxConfigPins.setRfidModule(PN532_SPI_MODULE); },
-         kvxConfigPins.rfidModule == PN532_SPI_MODULE    },
+         kvxConfigPins.rfidModule == PN532_SPI_MODULE}
+    );
+    options.push_back(
         {"RC522 on SPI",
          [=]() { kvxConfigPins.setRfidModule(RC522_SPI_MODULE); },
-         kvxConfigPins.rfidModule == RC522_SPI_MODULE    },
+         kvxConfigPins.rfidModule == RC522_SPI_MODULE}
+    );
 #if !defined(LITE_VERSION)
+    options.push_back(
         {"ST25R3916 SPI",
          [=]() { kvxConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
-         kvxConfigPins.rfidModule == ST25R3916_SPI_MODULE},
-        {"ST25R3916 I2C",
-         [=]() { kvxConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
-         kvxConfigPins.rfidModule == ST25R3916_I2C_MODULE},
+         kvxConfigPins.rfidModule == ST25R3916_SPI_MODULE}
+    );
+    if (!mux) {
+        options.push_back(
+            {"ST25R3916 I2C",
+             [=]() { kvxConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
+             kvxConfigPins.rfidModule == ST25R3916_I2C_MODULE}
+        );
+    }
 #endif
-    };
-    loopOptions(options, "RFID Module", kvxConfigPins.rfidModule);
+    loopOptions(options, "RFID Module");
 }
 
 /*********************************************************************

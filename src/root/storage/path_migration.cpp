@@ -145,6 +145,7 @@ void ensureAddonDirs(FS &fs) {
     kvx::paths::ensureDir(fs, kvx::paths::NETOPS_CIW);
     kvx::paths::ensureDir(fs, kvx::paths::BLE_AIRTAGS);
     kvx::paths::ensureDir(fs, kvx::paths::IR_ESL);
+    kvx::paths::ensureDir(fs, kvx::paths::IR_REMOTES);
 }
 
 } // namespace

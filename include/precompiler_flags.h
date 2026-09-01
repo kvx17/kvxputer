@@ -103,6 +103,12 @@
 #ifndef LORA_DIO0
   #define LORA_DIO0 -1
 #endif
+#ifndef LORA_IRQ
+  #define LORA_IRQ LORA_DIO0
+#endif
+#ifndef LORA_BUSY
+  #define LORA_BUSY -1
+#endif
 
 // Default initializers
 #ifndef TFT_CS

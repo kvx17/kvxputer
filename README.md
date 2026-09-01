@@ -7,8 +7,9 @@ Cardputer ADV firmware — purple/green UI, Wii-style channel menu, optional Uni
 - **Boot:** `kvxputer` / `v.0.1` splash (no Bruce shark animation)
 - **Main menu:** 2×3 channel grid (6 apps per page), green arrows when more pages exist, selected app name in an inverted green footer bar
 - **Apps:** WiFi, NetOps, BLE, RF, files, config, etc. (Bruce core + kvxputer extensions)
-- **HID Remote:** USB/Bluetooth multi-mode HID (presenter, keyboard, media, mouse, jiggler) — see [docs/HID_REMOTE.md](docs/HID_REMOTE.md)
-- **Optional:** M5 [Unit Scroll](https://docs.m5stack.com/en/unit/UNIT-Scroll) on Grove PORT.A
+- **kvxkeyboard HID:** USB/Bluetooth multi-mode HID (presenter, keyboard, media, mouse, jiggler) — see [docs/HID_REMOTE.md](docs/HID_REMOTE.md)
+- **kvxputer universal remote:** Infrared learn/replay pad (12-button Flipper `.ir` profiles) — see [docs/KREMOTE.md](docs/KREMOTE.md)
+- **Optional:** M5 [Unit Scroll](https://docs.m5stack.com/en/unit/UNIT-Scroll) and [Unit PaHub v2.1](https://docs.m5stack.com/en/unit/Unit-PaHub%20v2.1) on Grove PORT.A
 
 ## Requirements
 
@@ -100,6 +101,15 @@ The **green bar at the bottom** shows the **selected** app name (inverted colors
 2. Boot probes I2C `0x40`; if missing, keyboard-only continues.
 3. **Config → System → Unit Scroll** — status, reconnect, invert direction.
 
+### Unit PaHub v2.1
+
+I2C multiplexer (PCA9548A) that turns PORT.A into six Grove channels. Off by default.
+
+1. Plug PaHub into **Grove PORT.A**. Match the hub I2C address to the DIP switch (`0x70`–`0x77`, default `0x70`).
+2. **Config → System → PaHub** — enable, set address (or use Reconnect to auto-detect `0x70`–`0x77`), assign each channel (RFID2, NFC, Unit Scroll, Joystick2, RF433R), Scan channels.
+3. RFID → Config → RFID Module picks **M5 RFID2 (chN)** / **M5 NFC (chN)** when both are assigned.
+4. Do not use Grove RF (CC1101) and PaHub on PORT.A at the same time.
+
 ### Submenus
 
 Inside apps, navigation uses the standard list UI (same keys as above). Press back to return to the channel grid.
@@ -127,7 +137,7 @@ pio run -e m5stack-cardputer -t uploadfs
 
 - [Evil feature map](docs/EVIL_FEATURE_MAP.md)
 - [WiFi / raw frames](docs/WIFI_P0_AND_RAW_FRAMES.md)
-- [HID Remote](docs/HID_REMOTE.md)
+- [kvxkeyboard HID](docs/HID_REMOTE.md)
 - [HID / BadUSB](docs/HID_BADUSB.md)
 - [QA matrix](docs/QA_MATRIX.md)
 

@@ -176,6 +176,7 @@ static TwoWire *userWire = nullptr;
 static bool userBusShared = false;
 static int8_t activeSda = -1;
 static int8_t activeScl = -1;
+static int i2cBusHoldCount = 0;
 
 void setSysI2CBus(TwoWire *wire) { sysWire = wire; }
 
@@ -239,8 +240,22 @@ TwoWire *acquireI2CBus() {
     return acquireI2CBus((int8_t)kvxConfigPins.i2c_bus.sda, (int8_t)kvxConfigPins.i2c_bus.scl);
 }
 
+void holdI2CBus(int8_t sda, int8_t scl) {
+    acquireI2CBus(sda, scl);
+    i2cBusHoldCount++;
+}
+
+void holdI2CBus() {
+    holdI2CBus((int8_t)kvxConfigPins.i2c_bus.sda, (int8_t)kvxConfigPins.i2c_bus.scl);
+}
+
+void releaseI2CBusHold() {
+    if (i2cBusHoldCount > 0 && --i2cBusHoldCount == 0) releaseI2CBus();
+}
+
 void releaseI2CBus() {
     BUSHAL_DBG("[busHAL] release(): userBusShared=%d userWire=%p\n", (int)userBusShared, (void *)userWire);
+    if (i2cBusHoldCount > 0) return;
     if (userBusShared) return;
     if (userWire == nullptr) return;
     if (!releaseBoardI2CBus(userWire)) {

@@ -22,8 +22,8 @@ Gated by `-DEVIL_EXTENSIONS=1` (on for `m5stack-cardputer`, off for lite).
 | 40 | Web Crawler | NetOps | P1 | port | `netops/web_crawler/` |
 | 41 | PwnGrid Spam | WiFi | P1 | reuse | `pwnagotchi/` (`kvxgotchi_start`) |
 | 42 | Skimmer Detector | BLE | P2 | deferred | (BLE if ported later) |
-| 43 | Mouse Jiggler | Others | P1 | reuse | HID Remote |
-| 44 | BadUSB | Others | P0 | reuse | `ducky_typer` |
+| 43 | Mouse Jiggler | USB | P1 | reuse | HID Remote |
+| 44 | BadUSB | USB | P0 | reuse | `ducky_typer` |
 | 45 | Bluetooth Keyboard | BLE | P0 | reuse | HID Remote |
 | 46 | Reverse TCP Tunnel | NetOps | P1 | port | `netops/reverse_tcp/` |
 | 47 | DHCP Starvation (WiFi) | NetOps | P1 | port | `netops/dhcp_starvation/` |

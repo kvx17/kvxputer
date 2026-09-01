@@ -237,3 +237,16 @@ trimmed or adapted. Each retains its original author's license.
 - Library: <https://github.com/m5stack/M5Unit-Scroll> (MIT)
 - Used by: Cardputer Grove PORT.A optional encoder input (`src/root/input/unit_scroll.*`,
   `tools/porting/boards/m5stack-cardputer/interface.cpp`).
+
+## M5Stack Unit Joystick2
+
+- Docs: <https://docs.m5stack.com/en/unit/Unit-JoyStick2>
+- Library: <https://github.com/m5stack/M5Unit-Joystick2> (MIT)
+- Used by: HID Remote mouse mode (`src/root/input/unit_joystick2.*`).
+
+## M5Stack Unit PaHub v2.1
+
+- Docs: <https://docs.m5stack.com/en/unit/Unit-PaHub%20v2.1>
+- IC: NXP PCA9548AP (I2C mux, address `0x70`–`0x77`)
+- No extra library; driver is `src/root/hal/pahub.*`.
+- Used by: Config → System → PaHub channel assignment; RFID2 / Unit NFC / Unit Scroll / Joystick2 / RF433R behind Grove PORT.A.

@@ -1,6 +1,8 @@
 #include "root/input/unit_scroll.h"
 #include "root/config/config.h"
 #include "root/config/configPins.h"
+#include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include <globals.h>
 
 #if defined(UNIT_SCROLL)
@@ -31,6 +33,7 @@
 static M5UnitScroll unitScroll;
 static bool present = false;
 static bool groveBusy = false;
+static bool busHeld = false;
 static int32_t detentAccumulator = 0;
 static bool pendingSel = false;
 static bool pendingEsc = false;
@@ -38,6 +41,7 @@ static bool btnDown = false;
 static bool longPressFired = false;
 static unsigned long btnDownMs = 0;
 static bool lastBtn = false;
+static uint8_t scrollIdlePolls = 0;
 
 static uint8_t scrollSda() {
     if (kvxConfigPins.i2c_bus.sda >= 0) return (uint8_t)kvxConfigPins.i2c_bus.sda;
@@ -62,9 +66,17 @@ static void setIdleLed() {
     unitScroll.setLEDColor(UNIT_SCROLL_LED_IDLE);
 }
 
-bool unitScrollBegin(bool quiet) {
+static void releaseScrollBus() {
+    if (busHeld) {
+        releaseI2CBusHold();
+        busHeld = false;
+    }
+}
+
+static bool unitScrollProbe(bool quiet, bool allowDisabled) {
     present = false;
     groveBusy = false;
+    releaseScrollBus();
     detentAccumulator = 0;
     pendingSel = false;
     pendingEsc = false;
@@ -72,16 +84,24 @@ bool unitScrollBegin(bool quiet) {
     longPressFired = false;
     lastBtn = false;
 
-    if (!kvxConfig.unitScrollEnabled) {
+    if (!allowDisabled && !kvxConfig.unitScrollEnabled) {
         if (!quiet) Serial.println("[UnitScroll] disabled in config");
         return false;
     }
+
+    PahubChannelGuard mux(PahubChannelGuard::forDevice(PahubDevScroll));
 
     uint8_t sda = scrollSda();
     uint8_t scl = scrollScl();
     if (!quiet) Serial.printf("[UnitScroll] probe addr=0x%02X SDA=%u SCL=%u\n", UNIT_SCROLL_ADDR, sda, scl);
 
-    if (!unitScroll.begin(&Wire, UNIT_SCROLL_ADDR, sda, scl, 100000U)) {
+    TwoWire *bus = acquireI2CBus((int8_t)sda, (int8_t)scl);
+    if (bus == nullptr) {
+        if (!quiet) Serial.println("[UnitScroll] I2C bus unavailable");
+        return false;
+    }
+
+    if (!unitScroll.begin(bus, UNIT_SCROLL_ADDR, sda, scl, 100000U)) {
         if (!quiet) Serial.println("[UnitScroll] begin failed");
         return false;
     }
@@ -92,37 +112,71 @@ bool unitScrollBegin(bool quiet) {
 
     present = true;
     groveBusy = true;
+    holdI2CBus((int8_t)sda, (int8_t)scl);
+    busHeld = true;
     unitScroll.resetEncoder();
     setIdleLed();
     if (!quiet) Serial.println("[UnitScroll] connected");
     return true;
 }
 
+bool unitScrollBegin(bool quiet) { return unitScrollProbe(quiet, false); }
+
 bool unitScrollReconnect() {
-    if (present) unitScroll.setLEDColor(0);
-    bool ok = unitScrollBegin(false);
-    if (!ok) {
-        present = false;
-        groveBusy = false;
+    bool wasPresent = present;
+    if (wasPresent) {
+        PahubChannelGuard mux(PahubChannelGuard::forDevice(PahubDevScroll));
+        if (!pahubDeviceOnMux(PahubDevScroll) || mux.active()) unitScroll.setLEDColor(0);
     }
-    return ok;
+
+    if (unitScrollProbe(false, true)) {
+        if (!kvxConfig.unitScrollEnabled) kvxConfig.setUnitScrollEnabled(true);
+        return true;
+    }
+
+    if (pahubDiscoverDevice(PahubDevScroll) >= 0 && unitScrollProbe(false, true)) {
+        if (!kvxConfig.unitScrollEnabled) kvxConfig.setUnitScrollEnabled(true);
+        return true;
+    }
+
+    pahubDeselect();
+    if (unitScrollProbe(false, true)) {
+        if (!kvxConfig.unitScrollEnabled) kvxConfig.setUnitScrollEnabled(true);
+        return true;
+    }
+
+    present = false;
+    groveBusy = false;
+    releaseScrollBus();
+    return false;
 }
 
 bool unitScrollIsPresent() { return present; }
 bool unitScrollGroveBusy() { return groveBusy; }
 
 void unitScrollPoll() {
-    if (!present || !kvxConfig.unitScrollEnabled) return;
+    if (!present) return;
+
+    if (pahubDeviceOnMux(PahubDevScroll)) {
+        PahubTryGuard mux(PahubDevScroll);
+        if (!mux.ok()) return;
+    }
 
     if (!unitScroll.getDevStatus()) {
         present = false;
         groveBusy = false;
+        releaseScrollBus();
         return;
     }
 
     int16_t inc = unitScroll.getIncEncoderValue();
+    if (inc > 8 || inc < -8) {
+        unitScroll.resetEncoder();
+        inc = 0;
+    }
     if (kvxConfig.unitScrollInvert) inc = (int16_t)(-inc);
     if (inc != 0) {
+        scrollIdlePolls = 0;
         detentAccumulator += inc;
         const int step = UNIT_SCROLL_DETENTS_PER_STEP;
         while (detentAccumulator >= step) {
@@ -133,6 +187,9 @@ void unitScrollPoll() {
             RotaryNetSteps++;
             detentAccumulator += step;
         }
+    } else if (scrollIdlePolls < 255) {
+        scrollIdlePolls++;
+        if (scrollIdlePolls > 40) detentAccumulator = 0;
     }
 
     bool btn = unitScroll.getButtonStatus();
@@ -174,7 +231,13 @@ void unitScrollApplyInput() {
 
 String unitScrollStatusLabel() {
     if (!kvxConfig.unitScrollEnabled) return "Unit Scroll: Disabled";
-    if (present) return "Unit Scroll: Connected";
+    if (present) {
+        int8_t ch = pahubChannelFor(PahubDevScroll);
+        if (pahubDeviceOnMux(PahubDevScroll)) {
+            return String("Unit Scroll: Connected (ch") + ch + ")";
+        }
+        return "Unit Scroll: Connected (direct)";
+    }
     return "Unit Scroll: Not found";
 }
 

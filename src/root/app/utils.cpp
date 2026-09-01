@@ -3,6 +3,17 @@
 #include "root/ui/scrollableTextArea.h"
 #include <Preferences.h>
 #include <globals.h>
+#if defined(SOC_USB_SERIAL_JTAG_SUPPORTED)
+#include "esp_idf_version.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+#include "driver/usb_serial_jtag.h"
+#define KVX_HAS_USB_JTAG_CONN 1
+#endif
+#endif
+#if defined(USB_as_HID) && __has_include("tusb.h")
+#include "tusb.h"
+#define KVX_HAS_TUD_CONN 1
+#endif
 
 /*********************************************************************
 **  Function: backToMenu
@@ -30,37 +41,198 @@ void addOptionToMainMenu() {
     options.push_back({"Main Menu", backToMenu});
 }
 
+#ifndef ANALOG_BAT_MULTIPLIER
+#define ANALOG_BAT_MULTIPLIER 2.0f
+#endif
+
+static const float kBatMinMv = 3300.0f;
+static const float kBatMaxMv = 4150.0f;
+static const int kBatHist = 8;
+
+static int gLastBatMv = 0;
+static int gBatHistMv[kBatHist];
+static unsigned long gBatHistMs[kBatHist];
+static int gBatHistCount = 0;
+static int gBatHistHead = 0;
+static uint8_t gFullStreak = 0;
+static ChargeState gLastChargeState = CHARGE_BATTERY;
+static volatile bool gBatReading = false;
+static int gShownPercent = 50;
+static bool gRailLatch = false;
+
+static void noteBatterySample(int mv) {
+    unsigned long now = millis();
+    if (gBatHistCount > 0) {
+        int last = (gBatHistHead + kBatHist - 1) % kBatHist;
+        if (now - gBatHistMs[last] < 800) return;
+    }
+    gBatHistMv[gBatHistHead] = mv;
+    gBatHistMs[gBatHistHead] = now;
+    gBatHistHead = (gBatHistHead + 1) % kBatHist;
+    if (gBatHistCount < kBatHist) gBatHistCount++;
+}
+
+static int milliVoltsToPercent(int mv) {
+    float percent = ((float)mv - kBatMinMv) / (kBatMaxMv - (kBatMinMv + 50.0f)) * 100.0f;
+    if (percent < 1.0f) return 1;
+    if (percent > 100.0f) return 100;
+    return (int)percent;
+}
+
+bool isUsbCablePresent() {
+#ifdef KVX_HAS_USB_JTAG_CONN
+    if (usb_serial_jtag_is_connected()) return true;
+#endif
+#ifdef KVX_HAS_TUD_CONN
+    if (tud_inited() && tud_connected()) return true;
+#endif
+    return false;
+}
+
+int getBatteryMilliVolts() {
+#ifdef USE_BQ27220_VIA_I2C
+    gLastBatMv = (int)bq.getVolt(VOLT_MODE::VOLT);
+    if (gLastBatMv < 0) gLastBatMv = 0;
+    noteBatterySample(gLastBatMv);
+    return gLastBatMv;
+#endif
+#ifdef ANALOG_BAT_PIN
+    if (gBatReading) return gLastBatMv > 0 ? gLastBatMv : 3700;
+    gBatReading = true;
+    static bool adcInitialized = false;
+    static int lastGoodMv = 0;
+    if (!adcInitialized) {
+        pinMode(ANALOG_BAT_PIN, INPUT);
+        adcInitialized = true;
+    }
+    uint32_t sum = 0;
+    for (int i = 0; i < 4; i++) sum += analogReadMilliVolts(ANALOG_BAT_PIN);
+    int raw = (int)((float)(sum / 4) * ANALOG_BAT_MULTIPLIER);
+
+    // Charge switch OFF: GPIO10 sees the 5 V USB rail (~4.1–6.6 V after the divider),
+    // not the pack. Latch until a mid-range pack reading comes back.
+    if (raw > 4200) gRailLatch = true;
+    else if (lastGoodMv > 0 && lastGoodMv < 3980 && raw >= 4050) gRailLatch = true;
+    else if (gRailLatch && raw >= 2800 && raw < 4000) gRailLatch = false;
+
+    int mv = raw;
+    if (gRailLatch) {
+        mv = lastGoodMv > 0 ? lastGoodMv : 3700;
+    } else if (raw > 4200 || raw < 2800) {
+        mv = lastGoodMv > 0 ? lastGoodMv : 3700;
+    } else if (lastGoodMv > 0 && abs(raw - lastGoodMv) > 200) {
+        mv = lastGoodMv + (raw > lastGoodMv ? 40 : -40);
+        lastGoodMv = mv;
+    } else {
+        lastGoodMv = mv;
+    }
+    gLastBatMv = mv;
+    noteBatterySample(gLastBatMv);
+    gBatReading = false;
+    return gLastBatMv;
+#endif
+    gLastBatMv = 0;
+    return 0;
+}
+
+int getBatteryTrendMilliVoltsPerMin() {
+    if (gBatHistCount < 2) return 0;
+    int oldest = (gBatHistCount < kBatHist) ? 0 : gBatHistHead;
+    int newest = (gBatHistHead + kBatHist - 1) % kBatHist;
+    long dt = (long)(gBatHistMs[newest] - gBatHistMs[oldest]);
+    if (dt < 1000) return 0;
+    int dv = gBatHistMv[newest] - gBatHistMv[oldest];
+    return (int)((long)dv * 60000L / dt);
+}
+
+const char *chargeStateLabel(ChargeState state) {
+    switch (state) {
+        case CHARGE_USB: return "On USB";
+        case CHARGE_CHARGING: return "Charging";
+        case CHARGE_FULL: return "Full";
+        case CHARGE_BATTERY:
+        default: return "Battery";
+    }
+}
+
+ChargeInfo readChargeInfo() {
+    ChargeInfo info;
+    info.milliVolts = getBatteryMilliVolts();
+    info.trendMvPerMin = getBatteryTrendMilliVoltsPerMin();
+    info.usb = isUsbCablePresent();
+
+#ifdef USE_BQ27220_VIA_I2C
+    info.estimated = false;
+    float pct = bq.getChargePcnt();
+    if (pct <= 0.0f) info.percent = 1;
+    else if (pct > 100.0f) info.percent = 100;
+    else info.percent = (int)pct;
+    info.remainMah = (int)bq.getRemainCap();
+    info.fullMah = (int)bq.getFullChargeCap();
+    info.designMah = (int)bq.getDesignCap();
+    info.currentMa = (int)bq.getCurr(CURR_MODE::CURR_AVERAGE);
+    info.avgPowerMw = (int)bq.getAvgPower();
+    info.timeToEmptyMin = (int)bq.getTimeToEmpty();
+    bool chg = bq.getIsCharging();
+    if (info.percent >= 99 && !chg) info.state = CHARGE_FULL;
+    else if (chg) info.state = CHARGE_CHARGING;
+    else if (info.usb) info.state = CHARGE_USB;
+    else info.state = CHARGE_BATTERY;
+#else
+    info.estimated = true;
+    info.percent = milliVoltsToPercent(info.milliVolts);
+    bool rising = info.trendMvPerMin >= 25;
+    bool holdingHigh = info.milliVolts >= 4000 && info.milliVolts <= 4200 && info.trendMvPerMin > -25;
+    if (info.percent >= 99 && info.milliVolts >= 4120 && info.milliVolts <= 4200 &&
+        (gLastChargeState == CHARGE_CHARGING || gLastChargeState == CHARGE_FULL)) {
+        if (gFullStreak < 10) gFullStreak++;
+    } else {
+        gFullStreak = 0;
+    }
+    bool full = gFullStreak >= 3 && !gRailLatch;
+
+    if (gRailLatch) {
+        info.percent = gShownPercent;
+        if (info.percent > 99) info.percent = 99;
+        info.state = info.usb ? CHARGE_USB : CHARGE_BATTERY;
+        gFullStreak = 0;
+        gLastChargeState = info.state;
+        return info;
+    }
+
+    if (full) {
+        info.state = CHARGE_FULL;
+    } else if (info.usb) {
+        if (rising) info.state = CHARGE_CHARGING;
+        else info.state = CHARGE_USB;
+    } else if (rising) {
+        info.state = CHARGE_CHARGING;
+    } else if (gLastChargeState == CHARGE_CHARGING && holdingHigh && info.trendMvPerMin > -40) {
+        info.state = CHARGE_CHARGING;
+    } else {
+        info.state = CHARGE_BATTERY;
+    }
+
+    gShownPercent = info.percent;
+    if (info.state != CHARGE_FULL && info.percent > 99) info.percent = 99;
+#endif
+    gLastChargeState = info.state;
+    return info;
+}
+
 /***************************************************************************************
 ** Function name: getBattery()
 ** Description:   Returns the battery value from 1-100
 ***************************************************************************************/
 int getBattery() {
 #ifdef USE_BQ27220_VIA_I2C
-    // Use BQ27220 fuel gauge for accurate battery reading
     float pct = bq.getChargePcnt();
-    // Guard against library/device errors returning out-of-range values
     if (pct <= 0.0f) return 1;
     if (pct > 100.0f) return 100;
     return (int)pct;
 #endif
 #ifdef ANALOG_BAT_PIN
-#ifndef ANALOG_BAT_MULTIPLIER
-#define ANALOG_BAT_MULTIPLIER 2.0f
-#endif
-    static bool adcInitialized = false;
-    if (!adcInitialized) {
-        pinMode(ANALOG_BAT_PIN, INPUT);
-        adcInitialized = true;
-    }
-    uint32_t adcReading = analogReadMilliVolts(ANALOG_BAT_PIN);
-    float actualVoltage = (float)adcReading * ANALOG_BAT_MULTIPLIER;
-    const float MIN_VOLTAGE = 3300.0f;
-    const float MAX_VOLTAGE = 4150.0f;
-    float percent = ((actualVoltage - MIN_VOLTAGE) / (MAX_VOLTAGE - (MIN_VOLTAGE + 50.0f))) * 100.0f;
-
-    if (percent < 0) percent = 1;
-    if (percent > 100) percent = 100;
-    return (int)percent;
+    return milliVoltsToPercent(getBatteryMilliVolts());
 #endif
     return 0;
 }

@@ -4,6 +4,8 @@
 #include "menu/rfid/ST25R3916.h"
 #endif
 #include "root/storage/sd_functions.h"
+#include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include "menu/rfid/PN532.h"
 #include "menu/rfid/RFID2.h"
 #include "menu/rfid/RFIDInterface.h"
@@ -18,6 +20,15 @@
 //   Write to a tag from a file:    rfid loadfile [filepath] -> rfid write [timeout=5000]
 
 static RFIDInterface *_rfid = nullptr;
+static PahubChannelGuard *_pahub = nullptr;
+
+static void _releaseRfid() {
+    delete _rfid;
+    _rfid = nullptr;
+    delete _pahub;
+    _pahub = nullptr;
+    releaseI2CBusHold();
+}
 
 static RFIDInterface *_createRfidModule() {
     switch (kvxConfigPins.rfidModule) {
@@ -38,10 +49,11 @@ static RFIDInterface *_createRfidModule() {
 
 static bool _ensureRfid() {
     if (_rfid != nullptr) return true;
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
     _rfid = _createRfidModule();
     if (!_rfid->begin()) {
-        delete _rfid;
-        _rfid = nullptr;
+        _releaseRfid();
         serialDevice->println("ERROR: RFID module not found");
         return false;
     }
@@ -277,8 +289,7 @@ uint32_t rfidNdefCallback(cmd *c) {
 
 uint32_t rfidResetCallback(cmd *c) {
     if (_rfid) {
-        delete _rfid;
-        _rfid = nullptr;
+        _releaseRfid();
         serialDevice->println("RFID module reset.");
     } else {
         serialDevice->println("No active RFID module.");

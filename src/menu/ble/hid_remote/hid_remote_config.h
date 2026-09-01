@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define KVXKEYBOARD_HID_NAME "kvxkeyboard HID"
+
 enum HidRemoteTransport {
     HID_REMOTE_USB = 0,
     HID_REMOTE_BLE = 1,

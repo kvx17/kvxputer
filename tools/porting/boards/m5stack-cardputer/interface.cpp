@@ -1,10 +1,16 @@
 #include "root/app/powerSave.h"
 #include "root/input/unit_scroll.h"
+#include "root/input/unit_joystick2.h"
+#include "root/hal/pahub.h"
 #include "root/app/utils.h"
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
 #include <Wire.h>
 #include <interface.h>
+#include <globals.h>
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+#include "menu/lora/LoRaRF.h"
+#endif
 
 // Cardputer and 1.1 keyboard
 Keyboard_Class Keyboard;
@@ -125,15 +131,21 @@ void _post_setup_gpio() {
         Serial.println("Probable standard Cardputer detected, switching to Keyboard library");
         Wire1.end();
         Keyboard.begin();
-        unitScrollBegin(true);
+        pahubBootProbe();
+        pahubInitInputDevices();
         return;
     }
     kvxConfigPins.sys_i2c.sda = (gpio_num_t)8;
     kvxConfigPins.sys_i2c.scl = (gpio_num_t)9;
 
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+    applyLoraCapPinDefaults();
+    ensureLoraSettings();
+#else
     kvxConfigPins.gps_bus.rx = (gpio_num_t)15;
     kvxConfigPins.gps_bus.tx = (gpio_num_t)13;
     kvxConfigPins.gpsBaudrate = 115200;
+#endif
 
     kvxConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     kvxConfigPins.CC1101_bus.miso = (gpio_num_t)39;
@@ -151,10 +163,6 @@ void _post_setup_gpio() {
     pinMode(kvxConfigPins.CC1101_bus.cs, OUTPUT);
     digitalWrite(kvxConfigPins.NRF24_bus.cs, HIGH);
     digitalWrite(kvxConfigPins.CC1101_bus.cs, HIGH);
-#if !defined(LITE_VERSION)
-    pinMode(kvxConfigPins.LoRa_bus.cs, OUTPUT);
-    digitalWrite(kvxConfigPins.LoRa_bus.cs, HIGH);
-#endif
 
     tca.matrix(7, 8);
     tca.flush();
@@ -162,15 +170,23 @@ void _post_setup_gpio() {
     attachInterruptArg(digitalPinToInterrupt(11), gpio_isr_handler, nullptr, CHANGE);
     tca.enableInterrupts();
 
-    // Optional Unit Scroll on Grove PORT.A — silent if absent
-    unitScrollBegin(true);
+    // Optional Unit Scroll / PaHub / Joystick2 on Grove PORT.A — silent if absent
+    pahubBootProbe();
+    pahubInitInputDevices();
 }
 
 /***************************************************************************************
 ** Function name: pollEncoder
 ** Samples Unit Scroll over I2C every input-task tick (not gated on AnyKeyPress).
 ***************************************************************************************/
-void pollEncoder(void) { unitScrollPoll(); }
+void pollEncoder(void) {
+    pahubBeginGrovePoll();
+    unitScrollPoll();
+    unitJoystick2Poll();
+    unitScrollApplyInput();
+    unitJoystick2ApplyInput();
+    pahubEndGrovePoll();
+}
 
 /*********************************************************************
 ** Function: setBrightness
@@ -178,12 +194,19 @@ void pollEncoder(void) { unitScrollPoll(); }
 ** set brightness value
 **********************************************************************/
 void _setBrightness(uint8_t brightval) {
+    if (brightval == 0 && chargeModeActive && !chargeUserSleep) return;
     if (brightval == 0) {
         analogWrite(TFT_BL, brightval);
-    } else {
-        int bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
-        analogWrite(TFT_BL, bl);
+        return;
     }
+    int bl;
+    if (chargeModeActive) {
+        // Nightstand: 1% must be visibly dimmer than MINBRIGHT (160/255).
+        bl = 12 + (int)(243 * (int)brightval / 100);
+    } else {
+        bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
+    }
+    analogWrite(TFT_BL, bl);
 }
 
 /*********************************************************************
@@ -432,10 +455,12 @@ void InputHandler(void) {
 
                 if (i == ';') {
                     arrow_up = true;
+                    UpPress = true;
                     PrevPress = true;
                 }
                 if (i == '.') {
                     arrow_dw = true;
+                    DownPress = true;
                     NextPress = true;
                 }
                 if (i == '/') {
@@ -480,8 +505,9 @@ void InputHandler(void) {
         } else KeyStroke.Clear();
     }
 
-    // Merge optional Unit Scroll events (Prev/Next/Sel) with keyboard
+    // Merge optional Unit Scroll / Joystick events with keyboard
     unitScrollApplyInput();
+    unitJoystick2ApplyInput();
 }
 
 /*********************************************************************
@@ -520,6 +546,15 @@ void _setup_codec_speaker(bool enable) {
     static constexpr const uint8_t disabled_bulk_data[] = {0};
 
     i2c_bulk_write(&Wire1, ES8311_ADDR, enable ? enabled_bulk_data : disabled_bulk_data);
+}
+
+/*********************************************************************
+** Function: isCharging
+** Heuristic: USB presence + pack voltage trend (no PMIC current sense).
+**********************************************************************/
+bool isCharging() {
+    ChargeState s = readChargeInfo().state;
+    return s == CHARGE_CHARGING || s == CHARGE_FULL;
 }
 
 /*********************************************************************

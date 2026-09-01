@@ -2,6 +2,7 @@
 #include "root/ui/display.h"
 #include "root/ui/settings.h"
 #include "root/app/utils.h"
+#include "root/hal/pahub.h"
 #include "menu/rfid/PN532KillerTools.h"
 #include "menu/rfid/amiibo.h"
 #include "menu/rfid/chameleon.h"
@@ -66,12 +67,18 @@ void RFIDMenu::optionsMenu() {
     vTaskDelay(pdMS_TO_TICKS(200));
 
     String txt = "RFID";
-    if (kvxConfigPins.rfidModule == M5_RFID2_MODULE) txt += " (RFID2)";
+    int8_t muxCh = pahubEnabled() ? pahubChannelForRfidModule() : (int8_t)-1;
+    if (kvxConfigPins.rfidModule == M5_RFID2_MODULE) {
+        txt += (muxCh >= 0) ? (" (RFID2 ch" + String(muxCh) + ")") : " (RFID2)";
+    }
 #ifdef M5STICK
-    else if (kvxConfigPins.rfidModule == PN532_I2C_MODULE) txt += " (PN532-G33)";
-    else if (kvxConfigPins.rfidModule == PN532_I2C_SPI_MODULE) txt += " (PN532-G36)";
+    else if (kvxConfigPins.rfidModule == PN532_I2C_MODULE) {
+        txt += (muxCh >= 0) ? (" (NFC ch" + String(muxCh) + ")") : " (PN532-G33)";
+    } else if (kvxConfigPins.rfidModule == PN532_I2C_SPI_MODULE) txt += " (PN532-G36)";
 #else
-    else if (kvxConfigPins.rfidModule == PN532_I2C_MODULE) txt += " (PN532-I2C)";
+    else if (kvxConfigPins.rfidModule == PN532_I2C_MODULE) {
+        txt += (muxCh >= 0) ? (" (NFC ch" + String(muxCh) + ")") : " (PN532-I2C)";
+    }
 #endif
     else if (kvxConfigPins.rfidModule == PN532_SPI_MODULE) txt += " (PN532-SPI)";
     else if (kvxConfigPins.rfidModule == RC522_SPI_MODULE) txt += " (RC522-SPI)";

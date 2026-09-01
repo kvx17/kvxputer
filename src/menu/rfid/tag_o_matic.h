@@ -12,6 +12,8 @@
 #include "RFIDInterface.h"
 #include <set>
 
+class PahubChannelGuard;
+
 class TagOMatic {
 public:
     enum RFID_State {
@@ -57,7 +59,8 @@ public:
 #endif
 
 private:
-    RFIDInterface *_rfid;
+    PahubChannelGuard *_pahub = nullptr;
+    RFIDInterface *_rfid = nullptr;
     RFID_State _initial_state;
     bool _read_uid = false;
     bool _ndef_created = false;

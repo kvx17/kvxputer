@@ -14,9 +14,12 @@
 #include "menu/files/files_menu.h"
 #include "menu/scripts/scripts_menu.h"
 #include "menu/clock/clock_menu.h"
+#include "menu/charge/charge_menu.h"
 #include "menu/others/others_menu.h"
 #include "menu/config/config_menu.h"
+#include "menu/modules/modules_menu.h"
 #include "menu/ethernet/ethernet_menu.h"
+#include "menu/usb/usb_menu.h"
 #include "menu/fm/fm_menu.h"
 #include "menu/nrf24/nrf24_menu.h"
 #include "menu/connect/connect_menu.h"
@@ -26,7 +29,9 @@ public:
     FileMenu fileMenu;
     BleMenu bleMenu;
     ClockMenu clockMenu;
+    ChargeMenu chargeMenu;
     ConnectMenu connectMenu;
+    ModulesMenu modulesMenu;
     ConfigMenu configMenu;
     FMMenu fmMenu;
     GpsMenu gpsMenu;
@@ -37,6 +42,7 @@ public:
     RFIDMenu rfidMenu;
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
+    UsbMenu usbMenu;
     WifiMenu wifiMenu;
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;

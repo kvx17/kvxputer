@@ -44,6 +44,7 @@ bool KvxputerTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigS
         {"wifi",        &theme.wifi,        theme.paths.wifi       },
         {"ble",         &theme.ble,         theme.paths.ble        },
         {"ethernet",    &theme.ethernet,    theme.paths.ethernet   },
+        {"usb",         &theme.usb,         theme.paths.usb        },
         {"rf",          &theme.rf,          theme.paths.rf         },
         {"rfid",        &theme.rfid,        theme.paths.rfid       },
         {"fm",          &theme.fm,          theme.paths.fm         },

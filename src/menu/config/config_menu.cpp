@@ -4,9 +4,12 @@
 #include "root/hal/i2c_finder.h"
 #include "root/ui/main_menu.h"
 #include "root/ui/settings.h"
-#include "root/input/unit_scroll.h"
 #include "root/app/utils.h"
 #include "root/net/wifi_common.h"
+#include "root/config/configPins.h"
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+#include "menu/lora/LoRaRF.h"
+#endif
 #ifdef HAS_RGB_LED
 #include "root/hal/led_control.h"
 #endif
@@ -175,7 +178,9 @@ void ConfigMenu::systemMenu() {
             {"Hide/Show Apps",                                                      [this]() { mainMenu.hideAppsMenu(); }},
             {"Clock",                                                               [this]() { setClock(); }             },
             {String("Keyboard Language: ") + kvxConfig.keyboardLang,              [this]() { setKeyboardLanguage(); }  },
-            {"Unit Scroll",                                                         [this]() { unitScrollMenu(); }       },
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+            {"LoRa Cap",                                                            []() { loraconf(); }                 },
+#endif
             {"Advanced",                                                            [this]() { advancedMenu(); }         },
             {"Back",                                                                []() {}                              },
         };
@@ -185,33 +190,6 @@ void ConfigMenu::systemMenu() {
         // Exit only if user pressed Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
         // Menu rebuilds to update toggle labels
-    }
-}
-
-/*********************************************************************
-**  Function: unitScrollMenu
-**  Optional M5 Unit Scroll status / reconnect / options
-**********************************************************************/
-void ConfigMenu::unitScrollMenu() {
-    while (true) {
-        String status = unitScrollStatusLabel();
-        String groveNote = unitScrollGroveBusy() ? " (Grove busy: Scroll)" : "";
-        std::vector<Option> localOptions = {
-            {status + groveNote, []() {}},
-            {"Reconnect Unit Scroll",
-             []() {
-                 bool ok = unitScrollReconnect();
-                 displayInfo(ok ? "Unit Scroll connected" : "Unit Scroll not found", true);
-             }},
-            {String("Probe at boot: ") + (kvxConfig.unitScrollEnabled ? "ON" : "OFF"),
-             []() { kvxConfig.setUnitScrollEnabled(!kvxConfig.unitScrollEnabled); }},
-            {String("Invert direction: ") + (kvxConfig.unitScrollInvert ? "ON" : "OFF"),
-             []() { kvxConfig.setUnitScrollInvert(!kvxConfig.unitScrollInvert); }},
-            {"Back", []() {}},
-        };
-
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Unit Scroll");
-        if (selected == -1 || selected == (int)localOptions.size() - 1) { return; }
     }
 }
 

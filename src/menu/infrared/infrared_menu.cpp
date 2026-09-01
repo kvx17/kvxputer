@@ -6,8 +6,9 @@
 #include "menu/infrared/custom_ir.h"
 #include "menu/infrared/ir_jammer.h"
 #include "menu/infrared/ir_read.h"
+#include "menu/infrared/kremote/kremote.h"
 #if defined(EVIL_EXTENSIONS)
-#include "menu/infrared/tagtinker/tagtinker.h"
+    #include "menu/infrared/tagtinker/tagtinker.h"
 #endif
 
 void IRMenu::optionsMenu() {
@@ -16,6 +17,7 @@ void IRMenu::optionsMenu() {
     M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT
 #endif
     options = {
+        {"kvxputer universal remote", kremoteMenu},
         {"TV-B-Gone", StartTvBGone              },
         {"Custom IR", otherIRcodes              },
         {"IR Read",   [=]() { IrRead(); }       },

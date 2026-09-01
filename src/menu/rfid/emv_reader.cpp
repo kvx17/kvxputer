@@ -2,11 +2,23 @@
 #include "root/storage/paths.h"
 #include "emv_reader.hpp"
 #include "BerTlv.h"
+#include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include "root/ui/display.h"
 #include <globals.h>
 
+EMVReader::~EMVReader() {
+    delete _rfid;
+    _rfid = nullptr;
+    delete _pahub;
+    _pahub = nullptr;
+    releaseI2CBusHold();
+}
+
 void EMVReader::setup() {
     _cancelled = false;
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
     switch (kvxConfigPins.rfidModule) {
         case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
 #ifdef M5STICK

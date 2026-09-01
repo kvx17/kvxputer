@@ -11,6 +11,7 @@ public:
     bool connected = false;
     bool keyboardActive = false;
     bool mouseActive = false;
+    String hostLabel = "";
 
     HIDInterface *keyboardHid = nullptr;
     BleCompositeHid *bleHid = nullptr;
@@ -21,6 +22,10 @@ public:
     void end();
     bool waitConnected(unsigned long timeoutMs = 0);
     bool isConnected();
+    void refreshHostLabel();
+    const String &getHostLabel() const { return hostLabel; }
+    bool forgetBonds();
+    bool reconnectNewHost();
 
     void pressKey(uint8_t key);
     void pressMedia(const MediaKeyReport &key);

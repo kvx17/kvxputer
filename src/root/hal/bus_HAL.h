@@ -38,6 +38,13 @@ bool releaseBoardI2CBus(TwoWire *wire);
 // same physical bus as sys_i2c (which must stay on).
 void releaseI2CBus();
 
+// Long-lived Grove / i2c_bus consumers (Unit Scroll, PaHub mux, RFID sessions) call holdI2CBus()
+// so releaseI2CBus() does not tear down Wire underneath them. Pair every hold with
+// releaseI2CBusHold().
+void holdI2CBus(int8_t sda, int8_t scl);
+void holdI2CBus();
+void releaseI2CBusHold();
+
 // Watchdog for a wedged sys_i2c bus (a peripheral holding SDA/SCL low indefinitely - e.g. a
 // target-mode PN532 session torn down mid-transaction - can leave the ESP32's I2C driver
 // permanently in ESP_ERR_INVALID_STATE, taking down every other peripheral sharing the bus, such

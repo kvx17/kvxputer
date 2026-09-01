@@ -4,17 +4,47 @@
 #include "root/ui/display.h"
 #include <KeyboardLayout.h>
 #include <NimBLEDevice.h>
+#include <NimBLEServer.h>
 #include <esp_mac.h>
-#include <USB.h>
 #if defined(USB_as_HID)
+#include <USB.h>
 #include "tusb.h"
 #endif
+#include <esp_random.h>
 #include <globals.h>
 
 HidRemoteTransportSession gHidRemoteSession;
 
+static bool gRandomHidMac = false;
+
+static void applyGenericUsbIdentity() {
+#if defined(USB_as_HID)
+    USB.manufacturerName("Generic");
+    USB.productName("HID Keyboard");
+    USB.serialNumber("1");
+    // pid.codes VID: generic HID, not Espressif/M5/Apple
+    USB.VID(0x1209);
+    USB.PID(0x0001);
+#endif
+}
+
 static void setHidRemoteBleMac() {
-    static const uint8_t mac[6] = {0x88, 0x3B, 0x5F, 0x2D, 0x71, 0x58};
+    // Locally administered unicast MAC (not a vendor OUI)
+    uint8_t mac[6];
+    uint64_t e = ESP.getEfuseMac();
+    mac[0] = 0x02;
+    mac[1] = (uint8_t)(e >> 32);
+    mac[2] = (uint8_t)(e >> 24);
+    mac[3] = (uint8_t)(e >> 16);
+    mac[4] = (uint8_t)(e >> 8);
+    mac[5] = (uint8_t)e;
+    if (gRandomHidMac) {
+        uint32_t r = (uint32_t)esp_random();
+        mac[3] = (uint8_t)(r >> 16);
+        mac[4] = (uint8_t)(r >> 8);
+        mac[5] = (uint8_t)r;
+        gRandomHidMac = false;
+    }
 #ifdef ESP_MAC_BT
     esp_iface_mac_addr_set(mac, ESP_MAC_BT);
 #else
@@ -26,7 +56,10 @@ static bool ensureUsbKeyboard(HidRemoteTransportSession &s) {
 #if defined(USB_as_HID)
     if (s.usbKeyboard == nullptr) s.usbKeyboard = new USBHIDKeyboard();
     if (!s.keyboardActive) {
-        if (!s.mouseActive) USB.begin();
+        if (!s.mouseActive) {
+            applyGenericUsbIdentity();
+            USB.begin();
+        }
         while (!tud_mounted() && !check(EscPress)) delay(50);
         if (check(EscPress)) return false;
         s.usbKeyboard->begin();
@@ -45,7 +78,10 @@ static bool ensureUsbMouse(HidRemoteTransportSession &s) {
 #if defined(USB_as_HID)
     if (s.usbMouse == nullptr) s.usbMouse = new USBHIDMouse();
     if (!s.mouseActive) {
-        if (!s.keyboardActive) USB.begin();
+        if (!s.keyboardActive) {
+            applyGenericUsbIdentity();
+            USB.begin();
+        }
         while (!tud_mounted() && !check(EscPress)) delay(50);
         if (check(EscPress)) return false;
         s.usbMouse->begin();
@@ -97,7 +133,7 @@ static bool ensureBle(HidRemoteTransportSession &s) {
     setHidRemoteBleMac();
 
     String deviceName = kvxConfig.hidRemoteBleName;
-    if (deviceName.isEmpty()) deviceName = "kvxputer HID";
+    if (deviceName.isEmpty()) deviceName = KVXKEYBOARD_HID_NAME;
 
     if (!NimBLEDevice::isInitialized()) {
         NimBLEDevice::init(std::string(deviceName.c_str()));
@@ -106,9 +142,13 @@ static bool ensureBle(HidRemoteTransportSession &s) {
     }
 
     if (s.bleHid == nullptr) {
-        s.bleHid = new BleCompositeHid(deviceName, "kvxputer", 100);
+        s.bleHid = new BleCompositeHid(deviceName, "HID", 100);
     }
     s.bleHid->setName(deviceName);
+    s.bleHid->set_vendor_id(0x0000);
+    s.bleHid->set_product_id(0x0001);
+    s.bleHid->set_version(0x0100);
+    s.bleHid->setAppearence(0x03C0);
     const uint8_t *layout = KeyboardLayout_en_US;
     s.bleHid->begin(layout);
     s.bleHid->setDelay(kvxConfig.badUSBBLEKeyDelay);
@@ -152,11 +192,14 @@ bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability 
         if (caps & HID_CAP_KEYBOARD) ok = ok && ensureUsbKeyboard(*this);
         if (caps & HID_CAP_MOUSE) ok = ok && ensureUsbMouse(*this);
         connected = ok;
+        if (ok) refreshHostLabel();
         return ok;
     }
 
     if (t == HID_REMOTE_BLE) {
-        return ensureBle(*this);
+        bool ok = ensureBle(*this);
+        if (ok) refreshHostLabel();
+        return ok;
     }
 
     return false;
@@ -166,6 +209,7 @@ void HidRemoteTransportSession::end() {
     if (transport == HID_REMOTE_USB) teardownUsb(*this);
     else teardownBle(*this);
     connected = false;
+    hostLabel = "";
 }
 
 bool HidRemoteTransportSession::waitConnected(unsigned long timeoutMs) {
@@ -176,9 +220,10 @@ bool HidRemoteTransportSession::waitConnected(unsigned long timeoutMs) {
 #if defined(CONFIG_BT_ENABLED)
     unsigned long start = millis();
     while (!check(EscPress)) {
-        if (bleHid != nullptr && bleHid->isConnected()) {
+        if (bleHid != nullptr && bleHid->isConnected() && bleHid->getSubscribedCount() > 0) {
             BLEConnected = true;
             connected = true;
+            refreshHostLabel();
             return true;
         }
         if (timeoutMs > 0 && (millis() - start) >= timeoutMs) break;
@@ -192,6 +237,67 @@ bool HidRemoteTransportSession::isConnected() {
     if (transport == HID_REMOTE_USB) return connected;
 #if defined(CONFIG_BT_ENABLED)
     return bleHid != nullptr && bleHid->isConnected();
+#else
+    return false;
+#endif
+}
+
+void HidRemoteTransportSession::refreshHostLabel() {
+    hostLabel = "";
+    if (!isConnected()) return;
+
+    if (kvxConfig.hidRemoteHostName.length() > 0) {
+        hostLabel = kvxConfig.hidRemoteHostName;
+        return;
+    }
+
+#if defined(CONFIG_BT_ENABLED)
+    if (transport == HID_REMOTE_BLE && NimBLEDevice::isInitialized()) {
+        NimBLEServer *server = NimBLEDevice::getServer();
+        if (server != nullptr && server->getConnectedCount() > 0) {
+            hostLabel = String(server->getPeerInfo(0).getAddress().toString().c_str());
+            return;
+        }
+    }
+#endif
+
+    if (transport == HID_REMOTE_USB) hostLabel = "USB Host";
+}
+
+bool HidRemoteTransportSession::forgetBonds() {
+#if defined(CONFIG_BT_ENABLED)
+    if (transport != HID_REMOTE_BLE) return false;
+    if (!NimBLEDevice::isInitialized()) return false;
+    NimBLEServer *server = NimBLEDevice::getServer();
+    if (server) {
+        while (server->getConnectedCount() > 0) {
+            NimBLEConnInfo info = server->getPeerInfo(0);
+            server->disconnect(info.getConnHandle());
+            delay(40);
+        }
+    }
+    NimBLEDevice::deleteAllBonds();
+    if (NimBLEDevice::getAdvertising()) NimBLEDevice::getAdvertising()->start();
+    connected = false;
+    BLEConnected = false;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool HidRemoteTransportSession::reconnectNewHost() {
+#if defined(CONFIG_BT_ENABLED)
+    if (NimBLEDevice::isInitialized()) NimBLEDevice::deleteAllBonds();
+    gRandomHidMac = true;
+    end();
+    if (!begin(
+            HID_REMOTE_BLE,
+            static_cast<HidRemoteCapability>(HID_CAP_KEYBOARD | HID_CAP_MEDIA | HID_CAP_MOUSE)
+        )) {
+        return false;
+    }
+    return waitConnected();
 #else
     return false;
 #endif

@@ -5,6 +5,36 @@
 void backToMenu();
 void addOptionToMainMenu();
 int getBattery() __attribute__((weak));
+int getBatteryMilliVolts();
+int getBatteryTrendMilliVoltsPerMin();
+bool isUsbCablePresent();
+
+enum ChargeState : uint8_t {
+    CHARGE_BATTERY = 0,
+    CHARGE_USB,
+    CHARGE_CHARGING,
+    CHARGE_FULL
+};
+
+struct ChargeInfo {
+    ChargeState state = CHARGE_BATTERY;
+    int percent = 0;
+    int milliVolts = 0;
+    int trendMvPerMin = 0;
+    bool usb = false;
+    bool estimated = true;
+#ifdef USE_BQ27220_VIA_I2C
+    int remainMah = 0;
+    int fullMah = 0;
+    int designMah = 0;
+    int currentMa = 0;
+    int avgPowerMw = 0;
+    int timeToEmptyMin = 0;
+#endif
+};
+
+ChargeInfo readChargeInfo();
+const char *chargeStateLabel(ChargeState state);
 void updateClockTimezone();
 #if !defined(HAS_RTC)
 void restorePersistedClock();

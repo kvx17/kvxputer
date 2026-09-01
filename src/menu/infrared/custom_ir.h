@@ -1,4 +1,6 @@
 
+#pragma once
+
 #include <Arduino.h>
 #include <FS.h>
 #include <IRremoteESP8266.h>

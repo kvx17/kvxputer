@@ -31,7 +31,7 @@ void BleMenu::optionsMenu() {
     }
 #endif
 #if !defined(LITE_VERSION)
-    options.push_back({"HID Remote", [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_BLE); }});
+    options.push_back({"kvxkeyboard HID", [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_BLE); }});
     options.push_back({"Media Cmds (legacy)", [=]() { MediaCommands(hid_ble, true); }});
     options.push_back({"BLE Scan", ble_scan});
     options.push_back({"iBeacon", [=]() {

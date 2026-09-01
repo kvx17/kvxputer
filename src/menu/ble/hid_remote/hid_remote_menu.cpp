@@ -24,6 +24,13 @@ static void hidRemoteSettingsMenu() {
                  String n = keyboard(kvxConfig.hidRemoteBleName, 20, "BLE HID name");
                  if (n.length() > 0 && n != "\x1B") kvxConfig.setHidRemoteBleName(n);
              }},
+            {"Host name: " + (kvxConfig.hidRemoteHostName.length() ? kvxConfig.hidRemoteHostName : "(auto)"),
+             []() {
+                 String n = keyboard(kvxConfig.hidRemoteHostName, 32, "Host name");
+                 if (n == "\x1B") return;
+                 kvxConfig.setHidRemoteHostName(n);
+                 gHidRemoteSession.refreshHostLabel();
+             }},
             {"Mouse sensitivity: " + String(kvxConfig.hidRemoteMouseSensitivity),
              []() {
                  kvxConfig.setHidRemoteMouseSensitivity(kvxConfig.hidRemoteMouseSensitivity % 10 + 1);
@@ -42,6 +49,31 @@ static void hidRemoteSettingsMenu() {
              []() { kvxConfig.setHidRemoteClickerButton((kvxConfig.hidRemoteClickerButton + 1) % 3); }},
             {"PTT preset: " + String(kvxConfig.hidRemotePttPreset),
              []() { kvxConfig.setHidRemotePttPreset((kvxConfig.hidRemotePttPreset + 1) % 5); }},
+            {"Forget BLE pairings",
+             []() {
+                 if (gHidRemoteSession.transport != HID_REMOTE_BLE) {
+                     displayInfo("Switch transport to BLE first", true);
+                     return;
+                 }
+                 if (gHidRemoteSession.forgetBonds()) displayInfo("Forgot BLE pairings.\nHost can pair again.", true);
+                 else displayError("Forget failed", true);
+             }},
+            {"Reconnect new BLE host",
+             []() {
+                 if (gHidRemoteSession.transport != HID_REMOTE_BLE) {
+                     displayInfo("Switch transport to BLE first", true);
+                     return;
+                 }
+                 tft.fillScreen(0x0841);
+                 hidRemoteDrawHeader(HID_REMOTE_BLE, false, "New host");
+                 hidRemoteDrawStatus("Pair a new device", kvxConfig.hidRemoteBleName.c_str());
+                 hidRemoteDrawFooter("ESC cancel");
+                 if (gHidRemoteSession.reconnectNewHost()) {
+                     displayInfo("Connected to new host", true);
+                 } else {
+                     displayError("No new host (cancelled)", true);
+                 }
+             }},
             {"Back", []() {}},
         };
         int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "HID Settings");
@@ -78,7 +110,7 @@ static int hidRemoteModePicker(int startIndex) {
     opts.push_back({"Settings", hidRemoteSettingsMenu});
     opts.push_back({"Exit", []() {}});
     if (startIndex < 0 || startIndex >= HID_MODE_COUNT) startIndex = 0;
-    int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "HID Remote", startIndex, false);
+    int sel = loopOptions(opts, MENU_TYPE_SUBMENU, KVXKEYBOARD_HID_NAME, startIndex, false);
     if (sel < 0 || sel >= HID_MODE_COUNT) return -1;
     return sel;
 }

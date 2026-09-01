@@ -1,7 +1,9 @@
 #include "root/storage/paths.h"
 #include "root/config/config.h"
 #include "root/config/mifare_keys_manager.h"
+#include "root/hal/pahub.h"
 #include "root/storage/sd_functions.h"
+#include <globals.h>
 #include <algorithm>
 
 JsonDocument KvxputerConfig::toJson() const {
@@ -75,17 +77,27 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["badUSBBLEShowOutput"] = badUSBBLEShowOutput;
     setting["unitScrollEnabled"] = unitScrollEnabled;
     setting["unitScrollInvert"] = unitScrollInvert;
+    setting["pahubEnabled"] = pahubEnabled;
+    setting["pahubAddr"] = pahubAddr;
+    JsonArray pahubCh = setting["pahubChannels"].to<JsonArray>();
+    for (int i = 0; i < 6; i++) pahubCh.add(pahubChannels[i]);
 
     setting["hidRemoteTransport"] = hidRemoteTransport;
     setting["hidRemoteBleName"] = hidRemoteBleName;
+    setting["hidRemoteHostName"] = hidRemoteHostName;
     setting["hidRemoteLastMode"] = hidRemoteLastMode;
     setting["hidRemoteMouseSensitivity"] = hidRemoteMouseSensitivity;
+    setting["hidRemoteJoyInvertY"] = hidRemoteJoyInvertY;
     setting["hidRemoteJigglerInterval"] = hidRemoteJigglerInterval;
     setting["hidRemoteStealthMin"] = hidRemoteStealthMin;
     setting["hidRemoteStealthMax"] = hidRemoteStealthMax;
     setting["hidRemoteClickerDelay"] = hidRemoteClickerDelay;
     setting["hidRemoteClickerButton"] = hidRemoteClickerButton;
     setting["hidRemotePttPreset"] = hidRemotePttPreset;
+    setting["hidRemoteShortsUp"] = hidRemoteShortsUp;
+    setting["hidRemoteShortsDown"] = hidRemoteShortsDown;
+    setting["kremotePortrait"] = kremotePortrait;
+    setting["kremoteButtonsSwapped"] = kremoteButtonsSwapped;
 
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
@@ -433,18 +445,56 @@ void KvxputerConfig::fromFile(bool checkFS) {
     } else {
         unitScrollInvert = false;
     }
+    if (!setting["pahubEnabled"].isNull()) {
+        pahubEnabled = setting["pahubEnabled"].as<bool>();
+    } else {
+        pahubEnabled = false;
+    }
+    if (!setting["pahubAddr"].isNull()) {
+        pahubAddr = setting["pahubAddr"].as<uint8_t>();
+    } else {
+        pahubAddr = 0x70;
+    }
+    if (!setting["pahubChannels"].isNull() && setting["pahubChannels"].is<JsonArray>()) {
+        JsonArray pahubCh = setting["pahubChannels"].as<JsonArray>();
+        for (int i = 0; i < 6; i++) {
+            pahubChannels[i] = i < (int)pahubCh.size() ? pahubCh[i].as<uint8_t>() : 0;
+        }
+    } else {
+        for (int i = 0; i < 6; i++) pahubChannels[i] = 0;
+    }
+    bool anyPahubChannel = false;
+    for (int i = 0; i < 6; i++) {
+        if (pahubChannels[i] != (uint8_t)PahubDevNone) {
+            anyPahubChannel = true;
+            break;
+        }
+    }
+    if (anyPahubChannel && !pahubEnabled) {
+        pahubEnabled = true;
+        count++;
+    }
 
     if (!setting["hidRemoteTransport"].isNull()) {
         hidRemoteTransport = setting["hidRemoteTransport"].as<int>();
     }
     if (!setting["hidRemoteBleName"].isNull()) {
         hidRemoteBleName = setting["hidRemoteBleName"].as<String>();
+        if (hidRemoteBleName == "kvxputer HID" || hidRemoteBleName == "kvxkeyboard HID") {
+            hidRemoteBleName = "Keyboard";
+        }
+    }
+    if (!setting["hidRemoteHostName"].isNull()) {
+        hidRemoteHostName = setting["hidRemoteHostName"].as<String>();
     }
     if (!setting["hidRemoteLastMode"].isNull()) {
         hidRemoteLastMode = setting["hidRemoteLastMode"].as<int>();
     }
     if (!setting["hidRemoteMouseSensitivity"].isNull()) {
         hidRemoteMouseSensitivity = setting["hidRemoteMouseSensitivity"].as<int>();
+    }
+    if (!setting["hidRemoteJoyInvertY"].isNull()) {
+        hidRemoteJoyInvertY = setting["hidRemoteJoyInvertY"].as<bool>();
     }
     if (!setting["hidRemoteJigglerInterval"].isNull()) {
         hidRemoteJigglerInterval = setting["hidRemoteJigglerInterval"].as<int>();
@@ -463,6 +513,20 @@ void KvxputerConfig::fromFile(bool checkFS) {
     }
     if (!setting["hidRemotePttPreset"].isNull()) {
         hidRemotePttPreset = setting["hidRemotePttPreset"].as<int>();
+    }
+    if (!setting["hidRemoteShortsUp"].isNull()) {
+        hidRemoteShortsUp = (uint8_t)setting["hidRemoteShortsUp"].as<int>();
+        if (hidRemoteShortsUp < 32) hidRemoteShortsUp = ';';
+    }
+    if (!setting["hidRemoteShortsDown"].isNull()) {
+        hidRemoteShortsDown = (uint8_t)setting["hidRemoteShortsDown"].as<int>();
+        if (hidRemoteShortsDown < 32) hidRemoteShortsDown = '.';
+    }
+    if (!setting["kremotePortrait"].isNull()) {
+        kremotePortrait = setting["kremotePortrait"].as<bool>();
+    }
+    if (!setting["kremoteButtonsSwapped"].isNull()) {
+        kremoteButtonsSwapped = setting["kremoteButtonsSwapped"].as<bool>();
     }
 
     if (!setting["disabledMenus"].isNull()) {
@@ -494,26 +558,26 @@ void KvxputerConfig::fromFile(bool checkFS) {
 }
 
 void KvxputerConfig::saveFile() {
-    FS *fs = &LittleFS;
     JsonDocument jsonDoc = toJson();
 
-    kvx::paths::ensureParentDirs(*fs, filepath);
-    // Open file for writing
-    File file = fs->open(filepath, FILE_WRITE);
-    if (!file) {
-        log_e("Failed to open config file");
+    auto writeConfig = [&](FS &fs) -> bool {
+        const char *path = kvx::paths::configPath(fs);
+        kvx::paths::ensureParentDirs(fs, path);
+        File file = fs.open(path, FILE_WRITE);
+        if (!file) {
+            log_e("Failed to open config file on %s", path);
+            return false;
+        }
+        bool ok = serializeJsonPretty(jsonDoc, file) >= 5;
         file.close();
-        return;
+        return ok;
     };
 
-    // Serialize JSON to file
-    serializeJsonPretty(jsonDoc, Serial);
-    if (serializeJsonPretty(jsonDoc, file) < 5) log_e("Failed to write config file");
-    else log_i("config file written successfully");
+    if (!writeConfig(LittleFS)) log_e("Failed to write config to LittleFS");
+    else log_i("config file written to LittleFS");
 
-    file.close();
-
-    if (setupSdCard()) copyToFs(LittleFS, SD, filepath, false);
+    if (sdcardMounted && !writeConfig(SD)) log_e("Failed to write config to SD");
+    else if (sdcardMounted) log_i("config file written to SD");
 }
 
 void KvxputerConfig::factoryReset() {
@@ -547,6 +611,7 @@ void KvxputerConfig::validateConfig() {
     validateEvilEndpointSsid();
     validateEvilPasswordMode();
     validateEvilGatewayIp();
+    validatePahub();
 }
 
 void KvxputerConfig::setUiColor(uint16_t primary, uint16_t *secondary, uint16_t *background) {
@@ -877,6 +942,56 @@ void KvxputerConfig::setUnitScrollInvert(bool value) {
     saveFile();
 }
 
+void KvxputerConfig::validatePahub() {
+    if (pahubAddr < 0x70 || pahubAddr > 0x77) pahubAddr = 0x70;
+    bool seen[(uint8_t)PahubDevRF433R + 1] = {};
+    for (int i = 0; i < 6; i++) {
+        uint8_t d = pahubChannels[i];
+        if (d > (uint8_t)PahubDevRF433R) {
+            pahubChannels[i] = (uint8_t)PahubDevNone;
+            continue;
+        }
+        if (d == (uint8_t)PahubDevNone) continue;
+        if (seen[d]) pahubChannels[i] = (uint8_t)PahubDevNone;
+        else seen[d] = true;
+    }
+}
+
+void KvxputerConfig::setPahubEnabled(bool value) {
+    pahubEnabled = value;
+    saveFile();
+    if (value) {
+        pahubReconnect();
+        pahubInitInputDevices();
+    }
+}
+
+void KvxputerConfig::setPahubAddr(uint8_t value) {
+    pahubAddr = value;
+    validatePahub();
+    saveFile();
+}
+
+bool KvxputerConfig::setPahubChannel(uint8_t ch, PahubDevice dev) {
+    if (ch >= 6) return false;
+    if (dev != PahubDevNone) {
+        for (int i = 0; i < 6; i++) {
+            if (i != (int)ch && pahubChannels[i] == (uint8_t)dev) return false;
+        }
+    }
+    PahubDevice prev = (PahubDevice)pahubChannels[ch];
+    pahubChannels[ch] = (uint8_t)dev;
+    if (dev == PahubDevScroll) unitScrollEnabled = true;
+    if (dev != PahubDevNone) pahubEnabled = true;
+    validatePahub();
+    saveFile();
+    if (dev == PahubDevScroll || dev == PahubDevJoystick2 || prev == PahubDevScroll ||
+        prev == PahubDevJoystick2) {
+        pahubInitInputDevices();
+    }
+    return true;
+}
+
 void KvxputerConfig::setHidRemoteTransport(int value) {
     hidRemoteTransport = value & 1;
     saveFile();
@@ -884,6 +999,11 @@ void KvxputerConfig::setHidRemoteTransport(int value) {
 
 void KvxputerConfig::setHidRemoteBleName(const String &value) {
     hidRemoteBleName = value.substring(0, 20);
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteHostName(const String &value) {
+    hidRemoteHostName = value.substring(0, 32);
     saveFile();
 }
 
@@ -898,6 +1018,11 @@ void KvxputerConfig::setHidRemoteMouseSensitivity(int value) {
     if (value < 1) value = 1;
     if (value > 10) value = 10;
     hidRemoteMouseSensitivity = value;
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteJoyInvertY(bool value) {
+    hidRemoteJoyInvertY = value;
     saveFile();
 }
 
@@ -939,6 +1064,24 @@ void KvxputerConfig::setHidRemotePttPreset(int value) {
     if (value < 0) value = 0;
     if (value > 4) value = 4;
     hidRemotePttPreset = value;
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteShortsKeys(uint8_t up, uint8_t down) {
+    if (up < 32) up = ';';
+    if (down < 32) down = '.';
+    hidRemoteShortsUp = up;
+    hidRemoteShortsDown = down;
+    saveFile();
+}
+
+void KvxputerConfig::setKremotePortrait(bool value) {
+    kremotePortrait = value;
+    saveFile();
+}
+
+void KvxputerConfig::setKremoteButtonsSwapped(bool value) {
+    kremoteButtonsSwapped = value;
     saveFile();
 }
 

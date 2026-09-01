@@ -8,6 +8,7 @@
 #include "root/storage/paths.h"
 #include "srix_tool.h"
 #include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "root/ui/settings.h"
@@ -27,13 +28,19 @@ SRIXTool::SRIXTool() {
 
 SRIXTool::~SRIXTool() {
     delete nfc;
-    releaseI2CBus();
+    nfc = nullptr;
+    delete _pahub;
+    _pahub = nullptr;
+    releaseI2CBusHold();
 }
 
 void SRIXTool::setup() {
     drawMainBorderWithTitle("SRIX TOOL");
     padprintln("");
     padprintln("Initializing I2C...");
+
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
 
     // Init I2C
     TwoWire *Wire = acquireI2CBus();
@@ -856,6 +863,9 @@ SRIXTool::SRIXTool(bool headless_mode) {
 
     memset(_dump, 0, sizeof(_dump));
     memset(_uid, 0, sizeof(_uid));
+
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
 
     SRIX_LOG(
         "[SRIX] I2C pins: SDA=%d, SCL=%d", kvxConfigPins.i2c_bus.sda, kvxConfigPins.i2c_bus.scl

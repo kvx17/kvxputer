@@ -1,19 +1,28 @@
 #include "root/app/powerSave.h"
 #include "root/ui/display.h"
 #include "root/ui/settings.h"
+#include <globals.h>
 
 /* Check if it's time to put the device to sleep */
 #define SCREEN_OFF_DELAY 5000
 
+static bool chargeBlocksPowerSave() {
+    // Charge arms chargeModeBright before runChargeLoop; honor both flags.
+    return chargeModeActive || chargeModeBright >= 0;
+}
+
 void fadeOutScreen(int startValue) {
     for (int brightValue = startValue; brightValue >= 0; brightValue -= 1) {
+        if (chargeBlocksPowerSave()) return;
         setBrightness(max(brightValue, 0), false);
         delay(5);
     }
+    if (chargeBlocksPowerSave()) return;
     turnOffDisplay();
 }
 
 void checkPowerSaveTime() {
+    if (chargeBlocksPowerSave()) return;
     if (kvxConfig.dimmerSet == 0) return;
 
     unsigned long elapsed = millis() - previousMillis;

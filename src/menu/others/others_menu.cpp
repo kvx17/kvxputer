@@ -2,14 +2,10 @@
 
 #include "root/ui/display.h"
 #include "root/app/utils.h"
-#include "menu/others/badusb_ble/ducky_typer.h"
 #include "root/scripting/bjs_interpreter/interpreter.h"
-#include "menu/others/clicker.h"
 #include "menu/others/ibutton.h"
 #include "menu/others/mic.h"
 #include "menu/others/qrcode_menu.h"
-#include "menu/others/u2f.h"
-#include "menu/ble/hid_remote/hid_remote.h"
 #if defined(EVIL_EXTENSIONS)
 #include "menu/others/llm_chat/llm_chat.h"
 #endif
@@ -22,10 +18,6 @@ void OthersMenu::optionsMenu() {
         {"Microphone",   [this]() { micMenu(); }      },
 #endif
 
-#if !defined(LITE_VERSION)
-        {"BadUSB & HID", [this]() { badUsbHidMenu(); }},
-#endif
-
 #ifndef LITE_VERSION
         {"iButton",      setup_ibutton                },
 #endif
@@ -36,25 +28,6 @@ void OthersMenu::optionsMenu() {
 
     addOptionToMainMenu();
     loopOptions(options, MENU_TYPE_SUBMENU, "Others");
-}
-
-void OthersMenu::badUsbHidMenu() {
-    options = {
-#ifndef LITE_VERSION
-        {"HID Remote",   [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_USB); }},
-        {"BadUSB",       [=]() { ducky_setup(hid_usb, false); }   },
-        {"USB Keyboard (legacy)", [=]() { ducky_keyboard(hid_usb, false); }},
-#endif
-
-#ifdef USB_as_HID
-        {"USB Clicker (legacy)",  clicker_setup                            },
-        {"USB U2F",      u2f_setup                                },
-#endif
-
-        {"Back",         [this]() { optionsMenu(); }              },
-    };
-
-    loopOptions(options, MENU_TYPE_SUBMENU, "BadUSB & HID");
 }
 
 void OthersMenu::micMenu() {

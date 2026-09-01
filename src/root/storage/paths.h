@@ -62,6 +62,7 @@ constexpr const char *RFID2                = "/support_files/rfid2";
 // Infrared
 constexpr const char *IR_PROFILES        = "/support_files/infrared/profiles";
 constexpr const char *IR_PROFILES_LEGACY   = "/BruceIR";
+constexpr const char *IR_REMOTES           = "/support_files/infrared/remotes";
 constexpr const char *IR_TVBG              = "/support_files/infrared/tvbg";
 constexpr const char *IR_ESL               = "/support_files/infrared/esl";
 

@@ -8,10 +8,10 @@
 
 bool unitScrollIsPresent();
 bool unitScrollGroveBusy(); // true when Scroll claimed PORT.A (RF SPI conflict)
-bool unitScrollBegin(bool quiet = true);
+bool unitScrollBegin(bool quiet);
 bool unitScrollReconnect();
-void unitScrollPoll();      // call from pollEncoder()
-void unitScrollApplyInput(); // OR pending events into Prev/Next/Sel/AnyKey
+void unitScrollPoll();
+void unitScrollApplyInput();
 
 String unitScrollStatusLabel();
 

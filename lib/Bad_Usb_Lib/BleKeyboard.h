@@ -47,18 +47,17 @@ private:
     uint32_t _delay_ms = 7;
     void delay_ms(uint64_t ms);
 
-    uint16_t vid = 0x05ac;
-    uint16_t pid = 0x820a;
-    uint16_t version = 0x0210;
-    // Appearance list as shown in the 2.6.3 seccion of the list below
-    // https://www.bluetooth.com/wp-content/uploads/Files/Specification/Assigned_Numbers.html
-    uint16_t appearance = 0x03C1;
+    uint16_t vid = 0x0000;
+    uint16_t pid = 0x0001;
+    uint16_t version = 0x0100;
+    // Generic HID appearance (not a vendor-branded keyboard)
+    uint16_t appearance = 0x03C0;
 
     const uint8_t *_asciimap;
 
 public:
     BleKeyboard(
-        String deviceName = "ESP32 Keyboard", String deviceManufacturer = "Espressif",
+        String deviceName = "Keyboard", String deviceManufacturer = "HID",
         uint8_t batteryLevel = 100
     );
     void begin(const uint8_t *layout = KeyboardLayout_en_US) override { begin(layout, HID_KEYBOARD); };
@@ -91,6 +90,7 @@ public:
     void set_vendor_id(uint16_t vid);
     void set_product_id(uint16_t pid);
     void set_version(uint16_t version);
+    uint8_t getSubscribedCount() { return m_subCount; }
 
 protected:
     bool _randUUID = false;
@@ -116,7 +116,6 @@ protected:
             NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo, uint16_t subValue
         ) override;
     };
-    uint8_t getSubscribedCount() { return m_subCount; }
 
 private:
     uint8_t m_subCount{0};

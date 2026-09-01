@@ -7,6 +7,9 @@
 #if defined(EVIL_EXTENSIONS)
 #include "menu/gps/wardriving_master/wardriving_master.h"
 #endif
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+#include "menu/lora/LoRaRF.h"
+#endif
 #include <math.h>
 
 void GpsMenu::optionsMenu() {
@@ -40,6 +43,9 @@ void GpsMenu::configMenu() {
     options = {
         {"Baudrate", setGpsBaudrateMenu                                 },
         {"GPS Pins", [=]() { setUARTPinsMenu(kvxConfigPins.gps_bus); }},
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+        {"Configure LoRa Cap", []() { configureLoraCap(); }            },
+#endif
         {"Back",     [this]() { optionsMenu(); }                        },
     };
 

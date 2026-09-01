@@ -120,13 +120,20 @@ bool wakeUpScreen() {
     if (isScreenOff) {
         isScreenOff = false;
         dimmer = false;
-        getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        // Charge owns the backlight; analogWrite from this task races LEDC.
+        if (!chargeModeActive) {
+            if (chargeModeBright >= 0) setBrightness((uint8_t)chargeModeBright, false);
+            else getBrightness();
+            vTaskDelay(pdMS_TO_TICKS(200));
+        }
         return true;
     } else if (dimmer) {
         dimmer = false;
-        getBrightness();
-        vTaskDelay(pdMS_TO_TICKS(200));
+        if (!chargeModeActive) {
+            if (chargeModeBright >= 0) setBrightness((uint8_t)chargeModeBright, false);
+            else getBrightness();
+            vTaskDelay(pdMS_TO_TICKS(200));
+        }
         return true;
     }
     return false;

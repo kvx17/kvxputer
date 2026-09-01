@@ -30,6 +30,8 @@
 #include <Arduino.h>
 #include <FS.h>
 
+class PahubChannelGuard;
+
 class SRIXTool {
 public:
     enum SRIX_State {
@@ -75,6 +77,7 @@ private:
     Arduino_PN532_SRIX *nfc;
     bool _has_hardware_pins = false;
 #endif
+    PahubChannelGuard *_pahub = nullptr;
 
     SRIX_State current_state;
     bool _tag_read = false;

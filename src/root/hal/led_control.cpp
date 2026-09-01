@@ -79,6 +79,9 @@ uint32_t alterOneColorChannel(uint32_t color, uint16_t newR, uint16_t newG, uint
 }
 
 TaskHandle_t ledEffectTaskHandle = NULL;
+static volatile bool ledEffectsPaused = false;
+
+void ledPauseEffects(bool pause) { ledEffectsPaused = pause; }
 
 void ledEffectTask(void *pvParameters) {
     short hueStep = 360 / LED_COUNT;
@@ -87,6 +90,10 @@ void ledEffectTask(void *pvParameters) {
     int frame = 0;
     uint64_t start_time = esp_timer_get_time() / 1000;
     while (1) {
+        if (ledEffectsPaused) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
         CRGB baseColor = isPreviewLed ? previewLedColor : kvxConfig.ledColor;
         int ledEffect = isPreviewLed ? previewLedEffect : kvxConfig.ledEffect;
         int ledEffectSpeed = isPreviewLed ? previewLedEffectSpeed : kvxConfig.ledEffectSpeed;

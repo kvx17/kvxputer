@@ -44,7 +44,11 @@ SX1262 *lora1262 = nullptr;
 volatile bool loraPacketReceived = false;
 volatile bool loraInterruptEnabled = true;
 enum class LoRaRadioVariant { SX1276, SX1262 };
+#if defined(HAS_LORA_CAP)
+LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1262;
+#else
 LoRaRadioVariant loraRadioVariant = LoRaRadioVariant::SX1276;
+#endif
 
 int getLoraIrqPin() {
 #ifdef LORA_IRQ
@@ -293,9 +297,94 @@ void downpress() {
     }
 }
 
-void selectRadioVariant(JsonDocument &doc) {
+static void fillLoraCapDefaults(JsonDocument &doc) {
+    doc["LoRa_Frequency"] = "868000000.00";
+    doc["LoRa_Name"] = "kvxputer";
+    doc["LoRa_Radio"] = "SX1262";
+}
+
+static void fillGenericLoraDefaults(JsonDocument &doc) {
+    doc["LoRa_Frequency"] = "434500000.00";
+    doc["LoRa_Name"] = "BruceTest";
+    doc["LoRa_Radio"] = "SX1276";
+}
+
+static bool saveLoraSettings(JsonDocument &doc) {
+    kvx::paths::ensureParentDirs(LittleFS, kvx::paths::LORA_SETTINGS);
+    File file = LittleFS.open(kvx::paths::LORA_SETTINGS, "w");
+    if (!file) return false;
+    serializeJson(doc, file);
+    file.close();
+    return true;
+}
+
+static bool loadLoraSettings(JsonDocument &doc) {
+    if (!LittleFS.exists(kvx::paths::LORA_SETTINGS)) return false;
+    File file = LittleFS.open(kvx::paths::LORA_SETTINGS, "r");
+    if (!file) return false;
+    deserializeJson(doc, file);
+    file.close();
+    return true;
+}
+
+void applyLoraCapPinDefaults() {
+#if defined(HAS_LORA_CAP)
+    kvxConfigPins.gps_bus.rx = (gpio_num_t)15;
+    kvxConfigPins.gps_bus.tx = (gpio_num_t)13;
+    kvxConfigPins.gpsBaudrate = 115200;
+#if LORA_SCK >= 0
+    kvxConfigPins.LoRa_bus.sck = (gpio_num_t)LORA_SCK;
+    kvxConfigPins.LoRa_bus.miso = (gpio_num_t)LORA_MISO;
+    kvxConfigPins.LoRa_bus.mosi = (gpio_num_t)LORA_MOSI;
+    kvxConfigPins.LoRa_bus.cs = (gpio_num_t)LORA_CS;
+    kvxConfigPins.LoRa_bus.io0 = (gpio_num_t)LORA_RST;
+    kvxConfigPins.LoRa_bus.io2 = (gpio_num_t)LORA_DIO0;
+    pinMode(kvxConfigPins.LoRa_bus.cs, OUTPUT);
+    digitalWrite(kvxConfigPins.LoRa_bus.cs, HIGH);
+#endif
+#endif
+}
+
+void ensureLoraSettings() {
+    if (LittleFS.exists(kvx::paths::LORA_SETTINGS)) return;
+    JsonDocument doc;
+#if defined(HAS_LORA_CAP)
+    fillLoraCapDefaults(doc);
+    Serial.println("LoRa Cap: created default settings (SX1262 @ 868 MHz)");
+#else
+    fillGenericLoraDefaults(doc);
+    Serial.println("creating lora settings .json file");
+#endif
+    saveLoraSettings(doc);
+}
+
+static void loadLoraRadioVariant(const JsonDocument &doc) {
+#if defined(HAS_LORA_CAP)
+    String stored = doc["LoRa_Radio"] | "SX1262";
+#else
     String stored = doc["LoRa_Radio"] | "SX1276";
-    if (stored.equalsIgnoreCase("SX1262")) { loraRadioVariant = LoRaRadioVariant::SX1262; }
+#endif
+    loraRadioVariant = stored.equalsIgnoreCase("SX1262") ? LoRaRadioVariant::SX1262 : LoRaRadioVariant::SX1276;
+}
+
+void configureLoraCap() {
+#if defined(HAS_LORA_CAP)
+    applyLoraCapPinDefaults();
+    JsonDocument doc;
+    fillLoraCapDefaults(doc);
+    saveLoraSettings(doc);
+    loadLoraRadioVariant(doc);
+    kvxConfigPins.saveFile();
+    displayInfo("LoRa Cap configured\nGPS 115200 RX15/TX13\nLoRa SX1262 @ 868 MHz", true);
+#else
+    displayError("LoRa Cap not supported", true);
+#endif
+}
+
+static void selectRadioVariantMenu() {
+    JsonDocument doc;
+    loadLoraSettings(doc);
+    loadLoraRadioVariant(doc);
     std::vector<Option> radioOptions = {
         {"SX1276", []() {}},
         {"SX1262", []() {}}
@@ -306,9 +395,38 @@ void selectRadioVariant(JsonDocument &doc) {
     if (selected >= 0) {
         loraRadioVariant = (selected == 1) ? LoRaRadioVariant::SX1262 : LoRaRadioVariant::SX1276;
         doc["LoRa_Radio"] = (loraRadioVariant == LoRaRadioVariant::SX1262) ? "SX1262" : "SX1276";
-        File cfg = LittleFS.open(kvx::paths::LORA_SETTINGS, "w");
-        serializeJson(doc, cfg);
-        cfg.close();
+        saveLoraSettings(doc);
+    }
+}
+
+static String loraCapStatusLine() {
+    JsonDocument doc;
+    if (!loadLoraSettings(doc)) return "Not configured";
+    String radio = doc["LoRa_Radio"] | "?";
+    double hz = doc["LoRa_Frequency"].as<String>().toDouble();
+    double mhz = (hz > 1000) ? hz / 1000000.0 : hz;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.3f MHz", mhz);
+    return radio + " @ " + buf;
+}
+
+void changeusername();
+void chfreq();
+
+void loraconf() {
+    while (true) {
+        std::vector<Option> localOptions = {
+            {loraCapStatusLine(), []() {}},
+            {"Radio Type",        []() { selectRadioVariantMenu(); }},
+            {"Frequency",         []() { chfreq(); }                },
+            {"Username",          []() { changeusername(); }         },
+#if defined(HAS_LORA_CAP)
+            {"Reset Cap Defaults", []() { configureLoraCap(); }},
+#endif
+            {"Back",              []() {}                          },
+        };
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "LoRa Cap");
+        if (selected == -1 || selected == (int)localOptions.size() - 1) return;
     }
 }
 
@@ -378,29 +496,20 @@ void mainloop() {
 }
 
 void lorachat() {
-    // set filesystem thing
     if (!LittleFS.exists("/chats.txt")) {
         File file = LittleFS.open("/chats.txt", "w");
         file.close();
         Serial.println("chat file created :)");
     }
-    if (!LittleFS.exists(kvx::paths::LORA_SETTINGS)) {
-        Serial.println("creating lora settings .json file");
-        JsonDocument doc;
-        File file = LittleFS.open(kvx::paths::LORA_SETTINGS, "w");
-        doc["LoRa_Frequency"] = "434500000.00";
-        doc["LoRa_Name"] = "BruceTest";
-        doc["LoRa_Radio"] = "SX1276";
-        serializeJson(doc, file);
-        file.close();
-    }
-    File file = LittleFS.open(kvx::paths::LORA_SETTINGS, "r");
+    ensureLoraSettings();
     JsonDocument doc;
-    deserializeJson(doc, file);
+    if (!loadLoraSettings(doc)) {
+        displayError("LoRa settings missing", true);
+        return;
+    }
     displayName = doc["LoRa_Name"].as<String>();
     double BAND = doc["LoRa_Frequency"].as<String>().toDouble();
-    file.close();
-    selectRadioVariant(doc);
+    loadLoraRadioVariant(doc);
     float bandMHz = (BAND > 1000) ? BAND / 1000000.0f : BAND;
     if (bandMHz <= 0) {
         displayError("Invalid LoRa frequency", true);
@@ -413,7 +522,7 @@ void lorachat() {
         "Pins: SCK:" + String(kvxConfigPins.LoRa_bus.sck) +
         " MISO:" + String(kvxConfigPins.LoRa_bus.miso) + " MOSI:" + String(kvxConfigPins.LoRa_bus.mosi) +
         " CS:" + String(kvxConfigPins.LoRa_bus.cs) + " RST:" + String(getLoraResetPin()) +
-        " IRQ:" + String(getLoraIrqPin()) + "BAND: " + String(bandMHz) +
+        " IRQ:" + String(getLoraIrqPin()) + " BUSY:" + String(getLoraBusyPin()) + " BAND: " + String(bandMHz) +
         "MHz Radio: " + ((loraRadioVariant == LoRaRadioVariant::SX1262) ? "SX1262" : "SX1276") +
         " DisplayName:  " + displayName
     );

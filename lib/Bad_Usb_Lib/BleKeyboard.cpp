@@ -219,8 +219,8 @@ static const uint8_t _hidReportDescriptor[] = {
 };
 
 BleKeyboard::BleKeyboard(String deviceName, String deviceManufacturer, uint8_t batteryLevel)
-    : hid(0), deviceName(String(deviceName).substring(0, 15)),
-      deviceManufacturer(String(deviceManufacturer).substring(0, 15)), batteryLevel(batteryLevel) {}
+    : hid(0), deviceName(String(deviceName).substring(0, 20)),
+      deviceManufacturer(String(deviceManufacturer).substring(0, 20)), batteryLevel(batteryLevel) {}
 
 void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
     appearance = showAs;
@@ -239,8 +239,8 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
     inputMediaKeys->setCallbacks(new CharacteristicCallbacks(this));
     inputMouse->setCallbacks(new CharacteristicCallbacks(this));
 
-    hid->setManufacturer("Espressif");
-    hid->setPnp(0x02, vid, pid, version);
+    hid->setManufacturer(deviceManufacturer.c_str());
+    hid->setPnp(0x01, vid, pid, version);
     hid->setHidInfo(0x00, 0x01);
 
     BLEDevice::setSecurityAuth(true, true, true);

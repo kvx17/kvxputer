@@ -12,6 +12,15 @@
 
 enum EvilPortalPasswordMode { FULL_PASSWORD = 0, FIRST_LAST_CHAR = 1, HIDE_PASSWORD = 2, SAVE_LENGTH = 3 };
 
+enum PahubDevice : uint8_t {
+    PahubDevNone = 0,
+    PahubDevRFID2 = 1,
+    PahubDevNFC = 2,
+    PahubDevScroll = 3,
+    PahubDevJoystick2 = 4,
+    PahubDevRF433R = 5,
+};
+
 class KvxputerConfig : public KvxputerTheme {
 public:
     struct WiFiCredential {
@@ -96,17 +105,30 @@ public:
     bool unitScrollEnabled = true;
     bool unitScrollInvert = false;
 
+    // Optional Unit PaHub v2.1 (Grove PORT.A I2C mux)
+    bool pahubEnabled = false;
+    uint8_t pahubAddr = 0x70;
+    uint8_t pahubChannels[6] = {};
+
     // HID Remote
     int hidRemoteTransport = 0; // 0=USB, 1=BLE
-    String hidRemoteBleName = "kvxputer HID";
+    String hidRemoteBleName = "Keyboard";
+    String hidRemoteHostName = "";
     int hidRemoteLastMode = 0;
     int hidRemoteMouseSensitivity = 5;
+    bool hidRemoteJoyInvertY = false;
     int hidRemoteJigglerInterval = 30;
     int hidRemoteStealthMin = 45;
     int hidRemoteStealthMax = 120;
     int hidRemoteClickerDelay = 100;
     int hidRemoteClickerButton = 0;
     int hidRemotePttPreset = 0;
+    uint8_t hidRemoteShortsUp = ';';
+    uint8_t hidRemoteShortsDown = '.';
+
+    // kvxputer universal remote (kremote)
+    bool kremotePortrait = false;
+    bool kremoteButtonsSwapped = false;
 
     std::vector<String> disabledMenus = {};
 
@@ -218,16 +240,27 @@ public:
     void setUnitScrollEnabled(bool value);
     void setUnitScrollInvert(bool value);
 
+    void setPahubEnabled(bool value);
+    void setPahubAddr(uint8_t value);
+    bool setPahubChannel(uint8_t ch, PahubDevice dev); // false if duplicate type
+    void validatePahub();
+
     void setHidRemoteTransport(int value);
     void setHidRemoteBleName(const String &value);
+    void setHidRemoteHostName(const String &value);
     void setHidRemoteLastMode(int value);
     void setHidRemoteMouseSensitivity(int value);
+    void setHidRemoteJoyInvertY(bool value);
     void setHidRemoteJigglerInterval(int value);
     void setHidRemoteStealthMin(int value);
     void setHidRemoteStealthMax(int value);
     void setHidRemoteClickerDelay(int value);
     void setHidRemoteClickerButton(int value);
     void setHidRemotePttPreset(int value);
+    void setHidRemoteShortsKeys(uint8_t up, uint8_t down);
+
+    void setKremotePortrait(bool value);
+    void setKremoteButtonsSwapped(bool value);
 
     void addDisabledMenu(String value);
     void removeDisabledMenu(String value);

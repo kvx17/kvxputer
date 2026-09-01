@@ -8,8 +8,8 @@
 
 #include "root/app/startup_app.h"
 
+#include "menu_registry.h"
 #include "menu/scripts/scripts_menu.h"
-#include "root/ui/settings.h" // clock
 #include "root/net/webInterface.h"
 #include "root/net/wifi_common.h"
 #include "root/scripting/bjs_interpreter/interpreter.h"
@@ -25,6 +25,13 @@
 #endif
 
 StartupApp::StartupApp() {
+    for (size_t i = 0; i < kMenuCount; i++) {
+        const MenuDescriptor &desc = kMenus[i];
+        if (!menuDescriptorAvailable(desc)) continue;
+        MenuItemInterface *item = desc.item;
+        _startupApps[String(desc.label)] = [item]() { item->optionsMenu(); };
+    }
+
 #ifndef LITE_VERSION
     _startupApps["Kvxgotchi"] = []() { kvxgotchi_start(); };
     _startupApps["Sniffer"] = []() { sniffer_setup(); };
@@ -32,7 +39,6 @@ StartupApp::StartupApp() {
     _startupApps["PN532 BLE"] = []() { Pn532ble(); };
     _startupApps["PN532 UART"] = []() { PN532KillerTools(); };
 #endif
-    _startupApps["Clock"] = []() { runClockLoop(); };
     _startupApps["Custom SubGHz"] = []() { sendCustomRF(); };
 #if defined(SOC_USB_OTG_SUPPORTED)
     _startupApps["Mass Storage"] = []() { MassStorage(); };

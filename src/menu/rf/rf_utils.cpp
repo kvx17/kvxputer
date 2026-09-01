@@ -1,5 +1,6 @@
 #include "rf_utils.h"
 #include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/settings.h"
 
@@ -335,6 +336,7 @@ bool initRfModule(String mode, float frequency) {
 
         } else if (mode == "rx") {
             // Rx Mode
+            pahubSelectRf433r();
             gsetRfRxPin(false);
             if (kvxConfigPins.SDCARD_bus.checkConflict(kvxConfigPins.rfRx)) sdcardSPI.end();
             gpio_reset_pin((gpio_num_t)kvxConfigPins.rfRx);
@@ -355,7 +357,10 @@ void deinitRfModule() {
         digitalWrite(kvxConfigPins.CC1101_bus.cs, HIGH);
         ioExpander.turnPinOnOff(IO_EXP_CC_RX, LOW);
         ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
-    } else digitalWrite(kvxConfigPins.rfTx, LED_OFF);
+    } else {
+        digitalWrite(kvxConfigPins.rfTx, LED_OFF);
+        pahubDeselectRf433r();
+    }
 }
 
 void initCC1101once(SPIClass *SSPI) {

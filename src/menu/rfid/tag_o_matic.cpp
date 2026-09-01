@@ -9,6 +9,7 @@
 #include "root/storage/paths.h"
 #include "tag_o_matic.h"
 #include "root/hal/bus_HAL.h"
+#include "root/hal/pahub.h"
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
@@ -58,7 +59,10 @@ TagOMatic::~TagOMatic() {
         _scanned_tags.clear();
     }
     delete _rfid; // Deallocate memory for _rfid object
-    releaseI2CBus();
+    _rfid = nullptr;
+    delete _pahub;
+    _pahub = nullptr;
+    releaseI2CBusHold();
 }
 
 void TagOMatic::set_rfid_module() {
@@ -80,6 +84,8 @@ void TagOMatic::set_rfid_module() {
 
 void TagOMatic::setup() {
     returnToMenu = false;
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
     set_rfid_module();
 
     if (!_rfid->begin()) {
@@ -738,6 +744,8 @@ void TagOMatic::save_scan_result() {
 TagOMatic::TagOMatic(bool headless_mode) {
     // Constructor for headless mode (without UI)
     // Does NOT call setup() and does NOT launch loop()
+    holdI2CBus();
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
     set_rfid_module();
     if (_rfid) { _rfid->begin(); }
 }
