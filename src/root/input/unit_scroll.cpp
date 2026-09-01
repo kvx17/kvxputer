@@ -4,6 +4,7 @@
 #include "root/hal/bus_HAL.h"
 #include "root/hal/pahub.h"
 #include <globals.h>
+#include <cstdio>
 
 #if defined(UNIT_SCROLL)
 #include <M5UnitScroll.h>
@@ -37,11 +38,15 @@ static bool busHeld = false;
 static int32_t detentAccumulator = 0;
 static bool pendingSel = false;
 static bool pendingEsc = false;
+static bool pendingPrev = false;
+static bool pendingNext = false;
 static bool btnDown = false;
 static bool longPressFired = false;
 static unsigned long btnDownMs = 0;
 static bool lastBtn = false;
 static uint8_t scrollIdlePolls = 0;
+static uint8_t i2cFailStreak = 0;
+static int16_t lastInc = 0;
 
 static uint8_t scrollSda() {
     if (kvxConfigPins.i2c_bus.sda >= 0) return (uint8_t)kvxConfigPins.i2c_bus.sda;
@@ -59,6 +64,16 @@ static uint8_t scrollScl() {
 #else
     return 1;
 #endif
+}
+
+static void fillConn(char *out, size_t n) {
+    if (!present) {
+        snprintf(out, n, "not found");
+        return;
+    }
+    int8_t ch = pahubChannelFor(PahubDevScroll);
+    if (pahubDeviceOnMux(PahubDevScroll)) snprintf(out, n, "PaHub ch%d", (int)ch);
+    else snprintf(out, n, "direct");
 }
 
 static void setIdleLed() {
@@ -80,9 +95,13 @@ static bool unitScrollProbe(bool quiet, bool allowDisabled) {
     detentAccumulator = 0;
     pendingSel = false;
     pendingEsc = false;
+    pendingPrev = false;
+    pendingNext = false;
     btnDown = false;
     longPressFired = false;
     lastBtn = false;
+    i2cFailStreak = 0;
+    lastInc = 0;
 
     if (!allowDisabled && !kvxConfig.unitScrollEnabled) {
         if (!quiet) Serial.println("[UnitScroll] disabled in config");
@@ -157,34 +176,38 @@ bool unitScrollGroveBusy() { return groveBusy; }
 void unitScrollPoll() {
     if (!present) return;
 
-    if (pahubDeviceOnMux(PahubDevScroll)) {
-        PahubTryGuard mux(PahubDevScroll);
-        if (!mux.ok()) return;
-    }
+    PahubTryGuard mux(PahubDevScroll);
+    if (!mux.ok()) return;
 
     if (!unitScroll.getDevStatus()) {
-        present = false;
-        groveBusy = false;
-        releaseScrollBus();
+        if (i2cFailStreak < 255) i2cFailStreak++;
+        if (i2cFailStreak > 25) {
+            present = false;
+            groveBusy = false;
+            releaseScrollBus();
+        }
         return;
     }
+    i2cFailStreak = 0;
 
     int16_t inc = unitScroll.getIncEncoderValue();
-    if (inc > 8 || inc < -8) {
-        unitScroll.resetEncoder();
-        inc = 0;
-    }
+    lastInc = inc;
+    // NAK / mux garbage is typically ±256 or 0x7FFF-class; a fast spin is a few detents.
+    if (inc > 32 || inc < -32) inc = 0;
     if (kvxConfig.unitScrollInvert) inc = (int16_t)(-inc);
     if (inc != 0) {
         scrollIdlePolls = 0;
         detentAccumulator += inc;
         const int step = UNIT_SCROLL_DETENTS_PER_STEP;
+        const bool horizontal = kvxConfig.unitScrollAxis != 0;
         while (detentAccumulator >= step) {
-            RotaryNetSteps--;
+            if (horizontal) pendingPrev = true;
+            else RotaryNetSteps--;
             detentAccumulator -= step;
         }
         while (detentAccumulator <= -step) {
-            RotaryNetSteps++;
+            if (horizontal) pendingNext = true;
+            else RotaryNetSteps++;
             detentAccumulator += step;
         }
     } else if (scrollIdlePolls < 255) {
@@ -227,6 +250,32 @@ void unitScrollApplyInput() {
         AnyKeyPress = true;
         pendingSel = false;
     }
+
+    if (pendingPrev) {
+        PrevPress = true;
+        AnyKeyPress = true;
+        pendingPrev = false;
+    }
+
+    if (pendingNext) {
+        NextPress = true;
+        AnyKeyPress = true;
+        pendingNext = false;
+    }
+}
+
+UnitScrollDebug unitScrollDebugSnapshot() {
+    UnitScrollDebug d;
+    d.present = present;
+    d.lastInc = lastInc;
+    d.detentAccumulator = detentAccumulator;
+    d.rotaryPending = RotaryNetSteps;
+    d.btnDown = btnDown;
+    d.holding = btnDown && longPressFired;
+    d.pendingSel = pendingSel;
+    d.pendingEsc = pendingEsc;
+    fillConn(d.conn, sizeof(d.conn));
+    return d;
 }
 
 String unitScrollStatusLabel() {
@@ -249,6 +298,7 @@ bool unitScrollBegin(bool) { return false; }
 bool unitScrollReconnect() { return false; }
 void unitScrollPoll() {}
 void unitScrollApplyInput() {}
+UnitScrollDebug unitScrollDebugSnapshot() { return {}; }
 String unitScrollStatusLabel() { return "Unit Scroll: N/A"; }
 
 #endif

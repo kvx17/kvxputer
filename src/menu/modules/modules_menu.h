@@ -18,6 +18,8 @@ public:
 private:
     void unitScrollMenu(void);
     void unitJoystick2Menu(void);
+    void unitScrollTestScreen(void);
+    void unitJoystick2TestScreen(void);
     void pahubMenu(void);
     void pahubChannelMenu(uint8_t ch);
     void pahubScanMenu(void);

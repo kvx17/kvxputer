@@ -104,6 +104,9 @@ public:
     // Optional Unit Scroll (Grove PORT.A)
     bool unitScrollEnabled = true;
     bool unitScrollInvert = false;
+    uint8_t unitScrollAxis = 0; // 0=vertical (RotaryNetSteps), 1=horizontal (Prev/Next)
+    bool unitJoyInvertX = false;
+    bool unitJoyInvertY = false;
 
     // Optional Unit PaHub v2.1 (Grove PORT.A I2C mux)
     bool pahubEnabled = false;
@@ -239,6 +242,9 @@ public:
 
     void setUnitScrollEnabled(bool value);
     void setUnitScrollInvert(bool value);
+    void setUnitScrollAxis(uint8_t value);
+    void setUnitJoyInvertX(bool value);
+    void setUnitJoyInvertY(bool value);
 
     void setPahubEnabled(bool value);
     void setPahubAddr(uint8_t value);

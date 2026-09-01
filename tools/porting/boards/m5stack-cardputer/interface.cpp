@@ -183,8 +183,6 @@ void pollEncoder(void) {
     pahubBeginGrovePoll();
     unitScrollPoll();
     unitJoystick2Poll();
-    unitScrollApplyInput();
-    unitJoystick2ApplyInput();
     pahubEndGrovePoll();
 }
 
@@ -214,6 +212,16 @@ void _setBrightness(uint8_t brightval) {
 ** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
 **********************************************************************/
 void InputHandler(void) {
+    // Apply encoder-task pending flags on every exit, including early returns.
+    // pollEncoder() only samples; merging here (after keyboard assignment, after
+    // taskInputHandler cleared the globals) is what makes tap/hold survive.
+    struct GroveMerge {
+        ~GroveMerge() {
+            unitScrollApplyInput();
+            unitJoystick2ApplyInput();
+        }
+    } groveMerge;
+
     static unsigned long tm = 0;
     static unsigned long nextRepeatTime = 0;
     static unsigned long prevRepeatTime = 0;
@@ -504,10 +512,6 @@ void InputHandler(void) {
             KeyStroke = key;
         } else KeyStroke.Clear();
     }
-
-    // Merge optional Unit Scroll / Joystick events with keyboard
-    unitScrollApplyInput();
-    unitJoystick2ApplyInput();
 }
 
 /*********************************************************************

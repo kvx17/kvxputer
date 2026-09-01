@@ -5,6 +5,7 @@
 #include "root/input/unit_joystick2.h"
 #include "root/config/configPins.h"
 #include <globals.h>
+#include <cstring>
 
 static void pahubMaybeSetRfid(PahubDevice dev) {
     RFIDModules cur = (RFIDModules)kvxConfigPins.rfidModule;
@@ -55,6 +56,106 @@ void ModulesMenu::optionsMenu() {
     }
 }
 
+static void waitGroveKeysIdle() {
+    unsigned long t0 = millis();
+    while (millis() - t0 < 400) {
+        check(SelPress);
+        check(EscPress);
+        check(AnyKeyPress);
+        check(PrevPress);
+        check(NextPress);
+#ifdef HAS_ENCODER
+        drainRotarySteps();
+#endif
+        delay(20);
+    }
+}
+
+void ModulesMenu::unitScrollTestScreen() {
+    waitGroveKeysIdle();
+    drawMainBorderWithTitle("Test Scroll");
+    const int lineH = 10;
+    const int y0 = BORDER_PAD_Y + FM * 8 + 2;
+    const int bodyH = tftHeight - y0 - 8;
+    while (!check(EscPress)) {
+        UnitScrollDebug d = unitScrollDebugSnapshot();
+#ifdef HAS_ENCODER
+        drainRotarySteps();
+#endif
+        tft.fillRect(6, y0, tftWidth - 12, bodyH, kvxConfig.bgColor);
+        tft.setTextSize(FP);
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        int y = y0;
+        tft.setCursor(10, y);
+        tft.printf("Mode %s", d.conn);
+        y += lineH;
+        tft.setCursor(10, y);
+        tft.printf("dInc %d  accum %ld", (int)d.lastInc, (long)d.detentAccumulator);
+        y += lineH;
+        tft.setCursor(10, y);
+        tft.printf("Rotary pending %ld", (long)d.rotaryPending);
+        y += lineH;
+        const char *btn = !d.btnDown ? "idle" : (d.holding ? "HOLD (Back)" : "down (tap=Enter)");
+        tft.setCursor(10, y);
+        tft.printf("Button %s", btn);
+        y += lineH;
+        tft.setCursor(10, y);
+        tft.printf("Axis %s", kvxConfig.unitScrollAxis ? "Horizontal" : "Vertical");
+        y += lineH + 2;
+        tft.setCursor(10, y);
+        tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+        tft.print("Hold = Back");
+        delay(50);
+    }
+    waitGroveKeysIdle();
+}
+
+void ModulesMenu::unitJoystick2TestScreen() {
+    waitGroveKeysIdle();
+    drawMainBorderWithTitle("Test Joystick");
+    const int lineH = 10;
+    const int y0 = BORDER_PAD_Y + FM * 8 + 2;
+    const int bodyH = tftHeight - y0 - 8;
+    const char *dirs[] = {"Up", "Down", "Left", "Right", "Enter", "Back"};
+    while (!check(EscPress)) {
+        UnitJoystick2Debug d = unitJoystick2DebugSnapshot();
+#ifdef HAS_ENCODER
+        drainRotarySteps();
+#endif
+        tft.fillRect(6, y0, tftWidth - 12, bodyH, kvxConfig.bgColor);
+        tft.setTextSize(FP);
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        int y = y0;
+        tft.setCursor(10, y);
+        tft.printf("Mode %s", d.conn);
+        y += lineH;
+        tft.setCursor(10, y);
+        tft.printf("X %u c%d n%+d", d.adcX, d.centerX, d.nx);
+        y += lineH;
+        tft.setCursor(10, y);
+        tft.printf("Y %u c%d n%+d %s", d.adcY, d.centerY, d.ny, d.inDead ? "DEAD" : "LIVE");
+        y += lineH;
+        tft.setCursor(10, y);
+        for (int i = 0; i < 6; i++) {
+            bool hi = d.action && strcmp(d.action, dirs[i]) == 0;
+            tft.setTextColor(hi ? kvxConfig.priColor : kvxConfig.secColor, kvxConfig.bgColor);
+            tft.print(dirs[i]);
+            tft.print(' ');
+        }
+        y += lineH;
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        tft.setCursor(10, y);
+        const char *btn = !d.btnDown ? "idle" : (d.holding ? "HOLD" : "down");
+        tft.printf("Btn %s", btn);
+        y += lineH + 2;
+        tft.setCursor(10, y);
+        tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+        tft.print("Hold = Back");
+        delay(50);
+    }
+    waitGroveKeysIdle();
+}
+
 void ModulesMenu::unitScrollMenu() {
     while (true) {
         String status = unitScrollStatusLabel();
@@ -74,6 +175,9 @@ void ModulesMenu::unitScrollMenu() {
              }},
             {String("Invert direction: ") + (kvxConfig.unitScrollInvert ? "ON" : "OFF"),
              []() { kvxConfig.setUnitScrollInvert(!kvxConfig.unitScrollInvert); }},
+            {String("Select Axis: ") + (kvxConfig.unitScrollAxis ? "Horizontal" : "Vertical"),
+             []() { kvxConfig.setUnitScrollAxis(kvxConfig.unitScrollAxis ? 0 : 1); }},
+            {"Test Scroll", [this]() { unitScrollTestScreen(); }},
             {"Back", []() {}},
         };
 
@@ -93,6 +197,11 @@ void ModulesMenu::unitJoystick2Menu() {
                  bool ok = unitJoystick2Reconnect();
                  displayInfo(ok ? "Joystick connected" : "Joystick not found", true);
              }},
+            {String("Invert X Axis: ") + (kvxConfig.unitJoyInvertX ? "ON" : "OFF"),
+             []() { kvxConfig.setUnitJoyInvertX(!kvxConfig.unitJoyInvertX); }},
+            {String("Invert Y Axis: ") + (kvxConfig.unitJoyInvertY ? "ON" : "OFF"),
+             []() { kvxConfig.setUnitJoyInvertY(!kvxConfig.unitJoyInvertY); }},
+            {"Test Joystick", [this]() { unitJoystick2TestScreen(); }},
             {"Back", []() {}},
         };
 

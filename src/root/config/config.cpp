@@ -77,6 +77,9 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["badUSBBLEShowOutput"] = badUSBBLEShowOutput;
     setting["unitScrollEnabled"] = unitScrollEnabled;
     setting["unitScrollInvert"] = unitScrollInvert;
+    setting["unitScrollAxis"] = unitScrollAxis;
+    setting["unitJoyInvertX"] = unitJoyInvertX;
+    setting["unitJoyInvertY"] = unitJoyInvertY;
     setting["pahubEnabled"] = pahubEnabled;
     setting["pahubAddr"] = pahubAddr;
     JsonArray pahubCh = setting["pahubChannels"].to<JsonArray>();
@@ -444,6 +447,21 @@ void KvxputerConfig::fromFile(bool checkFS) {
         unitScrollInvert = setting["unitScrollInvert"].as<bool>();
     } else {
         unitScrollInvert = false;
+    }
+    if (!setting["unitScrollAxis"].isNull()) {
+        unitScrollAxis = setting["unitScrollAxis"].as<uint8_t>() ? 1 : 0;
+    } else {
+        unitScrollAxis = 0;
+    }
+    if (!setting["unitJoyInvertX"].isNull()) {
+        unitJoyInvertX = setting["unitJoyInvertX"].as<bool>();
+    } else {
+        unitJoyInvertX = false;
+    }
+    if (!setting["unitJoyInvertY"].isNull()) {
+        unitJoyInvertY = setting["unitJoyInvertY"].as<bool>();
+    } else {
+        unitJoyInvertY = false;
     }
     if (!setting["pahubEnabled"].isNull()) {
         pahubEnabled = setting["pahubEnabled"].as<bool>();
@@ -939,6 +957,21 @@ void KvxputerConfig::setUnitScrollEnabled(bool value) {
 
 void KvxputerConfig::setUnitScrollInvert(bool value) {
     unitScrollInvert = value;
+    saveFile();
+}
+
+void KvxputerConfig::setUnitScrollAxis(uint8_t value) {
+    unitScrollAxis = value ? 1 : 0;
+    saveFile();
+}
+
+void KvxputerConfig::setUnitJoyInvertX(bool value) {
+    unitJoyInvertX = value;
+    saveFile();
+}
+
+void KvxputerConfig::setUnitJoyInvertY(bool value) {
+    unitJoyInvertY = value;
     saveFile();
 }
 

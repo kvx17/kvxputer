@@ -380,16 +380,16 @@ PahubTryGuard::PahubTryGuard(PahubDevice dev) {
     }
     if (pahubGrovePollActive()) {
         _selected = selectLocked(ch);
-        _ok = _selected;
+        _ok = true; // select fail → talk on the trunk (hub unplugged / leftover assignment)
         return;
     }
     if (!tryMutex()) {
-        _ok = false;
+        _ok = false; // RFID or another session holds the mux
         return;
     }
     _held = true;
     _selected = selectLocked(ch);
-    _ok = _selected;
+    _ok = true;
 }
 
 PahubTryGuard::~PahubTryGuard() {

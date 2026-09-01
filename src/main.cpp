@@ -466,7 +466,7 @@ void setup() {
     xTaskCreate(
         taskEncoderPoll, // Task function
         "EncoderPoll",   // Task Name
-        2048,            // Stack size
+        4096,            // Stack size (I2C + PaHub guards; 2048 overflowed)
         NULL,            // Task parameters
         3,               // Task priority (0 to 3), higher than loopTask's 2
         NULL             // Task handle (not used)

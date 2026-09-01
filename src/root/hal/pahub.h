@@ -67,8 +67,10 @@ private:
     bool _selected = false;
 };
 
-// Non-blocking poll lock for InputHandler (Scroll). If PaHub is off, ok() is true
-// with no mutex. If RFID holds the mux, ok() is false and the caller should skip.
+// Non-blocking poll lock for encoder-task Grove devices. If PaHub is off or the
+// device has no channel, ok() is true with no mutex. If RFID holds the mux, ok()
+// is false and the caller should skip. A failed channel select still sets ok()
+// so a leftover assignment can fall back to a direct PORT.A probe.
 class PahubTryGuard {
 public:
     explicit PahubTryGuard(PahubDevice dev);
