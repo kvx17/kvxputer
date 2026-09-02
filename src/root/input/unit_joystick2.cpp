@@ -20,15 +20,15 @@
 #endif
 
 #ifndef UNIT_JOY_NAV_THRESHOLD
-#define UNIT_JOY_NAV_THRESHOLD 10000
+#define UNIT_JOY_NAV_THRESHOLD 14000
 #endif
 
 #ifndef UNIT_JOY_NAV_DEAD
-#define UNIT_JOY_NAV_DEAD 4000
+#define UNIT_JOY_NAV_DEAD 5500
 #endif
 
 #ifndef UNIT_JOY_NAV_REPEAT_MS
-#define UNIT_JOY_NAV_REPEAT_MS 140
+#define UNIT_JOY_NAV_REPEAT_MS 200
 #endif
 
 static M5UnitJoystick2 joystick;
