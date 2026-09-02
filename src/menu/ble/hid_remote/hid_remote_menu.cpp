@@ -81,25 +81,38 @@ static void hidRemoteSettingsMenu() {
     }
 }
 
-static bool hidRemoteConnect(HidRemoteTransport transport) {
+static void hidRemoteDrawConnectScreen(HidRemoteTransport transport) {
+    const bool linked = gHidRemoteSession.isConnected();
     tft.fillScreen(0x0841);
-    hidRemoteDrawHeader(transport, false, "Connecting");
+    hidRemoteDrawHeader(transport, linked, linked ? nullptr : "Connecting");
     if (transport == HID_REMOTE_USB) {
-        hidRemoteDrawStatus("Plug in USB cable", "Waiting for host...");
+        hidRemoteDrawStatus("Plug in USB cable", linked ? "Connected" : "Waiting for host...");
     } else {
-        hidRemoteDrawStatus("Pair from host", kvxConfig.hidRemoteBleName.c_str());
+        hidRemoteDrawStatus(linked ? "Connected" : "Pair from host", kvxConfig.hidRemoteBleName.c_str());
     }
-    hidRemoteDrawFooter("ESC cancel");
+    hidRemoteDrawFooter("Ok settings  ESC cancel");
+}
+
+static bool hidRemoteConnect(HidRemoteTransport transport) {
+    hidRemoteDrawConnectScreen(transport);
 
     if (!gHidRemoteSession.begin(transport, static_cast<HidRemoteCapability>(HID_CAP_KEYBOARD | HID_CAP_MEDIA | HID_CAP_MOUSE))) {
         displayError("HID init failed", true);
         return false;
     }
-    if (!gHidRemoteSession.waitConnected()) {
-        gHidRemoteSession.end();
-        return false;
+
+    while (!check(EscPress)) {
+        if (check(SelPress)) {
+            hidRemoteSettingsMenu();
+            hidRemoteDrawConnectScreen(transport);
+            continue;
+        }
+        if (gHidRemoteSession.isConnected()) return true;
+        delay(50);
     }
-    return true;
+
+    gHidRemoteSession.end();
+    return false;
 }
 
 static int hidRemoteModePicker(int startIndex) {

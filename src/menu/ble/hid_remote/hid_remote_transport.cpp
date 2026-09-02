@@ -220,7 +220,7 @@ bool HidRemoteTransportSession::waitConnected(unsigned long timeoutMs) {
 #if defined(CONFIG_BT_ENABLED)
     unsigned long start = millis();
     while (!check(EscPress)) {
-        if (bleHid != nullptr && bleHid->isConnected() && bleHid->getSubscribedCount() > 0) {
+        if (bleHid != nullptr && bleHid->isConnected()) {
             BLEConnected = true;
             connected = true;
             refreshHostLabel();
