@@ -79,6 +79,10 @@ public:
     size_t write(const uint8_t *buffer, size_t size) override;
     void releaseAll(void) override;
     bool isConnected(void);
+    void clearConnected(void) {
+        connected = false;
+        m_subCount = 0;
+    }
     void setBatteryLevel(uint8_t level);
     void setName(const String &deviceName);
     void setDelay(uint32_t ms);

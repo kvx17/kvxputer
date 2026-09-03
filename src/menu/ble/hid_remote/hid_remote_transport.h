@@ -24,7 +24,19 @@ public:
     bool isConnected();
     void refreshHostLabel();
     const String &getHostLabel() const { return hostLabel; }
+    int getBondCount();
+    String getBondLabel(int index = 0);
+    String getConnectedAddress();
+    String displayNameForAddr(const String &addr) const;
+    void rememberConnectedHost();
+    bool ensureAdvertising();
+    bool advertiseOpen();
+    bool advertiseForHost(const String &addr, bool whitelistOnly = true);
+    bool advertiseForAnyBonded();
+    bool disconnectHost(bool readvertise = true);
+    bool forgetBond(const String &addr);
     bool forgetBonds();
+    bool switchToHost(const String &addr, unsigned long timeoutMs = 20000);
     bool reconnectNewHost();
 
     void pressKey(uint8_t key);

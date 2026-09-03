@@ -117,6 +117,8 @@ public:
     int hidRemoteTransport = 0; // 0=USB, 1=BLE
     String hidRemoteBleName = "Keyboard";
     String hidRemoteHostName = "";
+    String hidRemotePreferredHost = ""; // bonded BLE address; empty = any bonded
+    std::map<String, String> hidRemoteHostAliases = {}; // addr -> display name
     int hidRemoteLastMode = 0;
     int hidRemoteMouseSensitivity = 5;
     bool hidRemoteJoyInvertY = false;
@@ -254,6 +256,10 @@ public:
     void setHidRemoteTransport(int value);
     void setHidRemoteBleName(const String &value);
     void setHidRemoteHostName(const String &value);
+    void setHidRemotePreferredHost(const String &value);
+    void setHidRemoteHostAlias(const String &addr, const String &name);
+    void clearHidRemoteHostAlias(const String &addr);
+    String getHidRemoteHostAlias(const String &addr) const;
     void setHidRemoteLastMode(int value);
     void setHidRemoteMouseSensitivity(int value);
     void setHidRemoteJoyInvertY(bool value);

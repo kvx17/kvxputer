@@ -13,7 +13,7 @@ extern Keyboard_Class Keyboard;
 
 static const HidRemoteModeInfo kModeTable[HID_MODE_COUNT] = {
     {"Presenter",           HID_CAP_KEYBOARD},
-    {"Presenter Vertical",    HID_CAP_KEYBOARD},
+    {"Presenter Vertical",  HID_CAP_KEYBOARD},
     {"Keyboard",            HID_CAP_KEYBOARD},
     {"Media",               static_cast<HidRemoteCapability>(HID_CAP_KEYBOARD | HID_CAP_MEDIA)},
     {"Apple Music",         static_cast<HidRemoteCapability>(HID_CAP_KEYBOARD | HID_CAP_MEDIA)},
@@ -24,6 +24,7 @@ static const HidRemoteModeInfo kModeTable[HID_MODE_COUNT] = {
     {"Mouse Jiggler",       HID_CAP_MOUSE},
     {"Stealth Jiggler",     HID_CAP_MOUSE},
     {"Push-to-Talk",        HID_CAP_KEYBOARD},
+    {"System Shortcuts",    HID_CAP_KEYBOARD},
 };
 
 const HidRemoteModeInfo &hidRemoteModeInfo(HidRemoteMode mode) {
@@ -50,6 +51,58 @@ static void sendCombo(HidRemoteTransportSession &s, uint8_t mod1, uint8_t mod2, 
     s.keyboardHid->press(key);
     delay(30);
     s.keyboardHid->releaseAll();
+}
+
+static void sendCombo3(
+    HidRemoteTransportSession &s, uint8_t mod1, uint8_t mod2, uint8_t mod3, uint8_t key
+) {
+    if (s.keyboardHid == nullptr) return;
+    s.keyboardHid->press(mod1);
+    if (mod2) s.keyboardHid->press(mod2);
+    if (mod3) s.keyboardHid->press(mod3);
+    s.keyboardHid->press(key);
+    delay(30);
+    s.keyboardHid->releaseAll();
+}
+
+static void mirrorAppendTag(String &mirror, const char *tag) {
+    if (tag == nullptr || tag[0] == '\0') return;
+    mirror += tag;
+    if (mirror.length() > 240) mirror.remove(0, mirror.length() - 240);
+}
+
+static const char *keyboardFnLabel(int flashKey) {
+    switch (flashKey) {
+        case '1': return "[F1]";
+        case '2': return "[F2]";
+        case '3': return "[F3]";
+        case '4': return "[F4]";
+        case '5': return "[F5]";
+        case '6': return "[F6]";
+        case '7': return "[F7]";
+        case '8': return "[F8]";
+        case '9': return "[F9]";
+        case '0': return "[F10]";
+        case '-': return "[F11]";
+        case '=': return "[F12]";
+        case 'i': return "[Ins]";
+        case 'p': return "[PrtSc]";
+        case 'u': return "[Pause]";
+        case 'h': return "[Home]";
+        case 'e': return "[End]";
+        case '[': return "[PgUp]";
+        case ']': return "[PgDn]";
+        case '`': return "[Esc]";
+        case 't': return "[Alt+Tab]";
+        case 'w': return "[Win+Tab]";
+        case 'x': return "[Ctrl+Shift+Esc]";
+        case 'd': return "[Ctrl+Alt+Del]";
+        case 'n': return "[NumLk]";
+        case 's': return "[ScrLk]";
+        case 'm': return "[Menu]";
+        case 'l': return "[Del]";
+        default: return nullptr;
+    }
 }
 
 static void sendWinKey(HidRemoteTransportSession &s, uint8_t key) { sendCombo(s, KEY_LEFT_GUI, 0, key); }
@@ -85,10 +138,15 @@ static constexpr int kPresenterNext = 1;
 static constexpr int kPresenterF5 = 10;
 
 #if defined(HAS_KEYBOARD)
-static int presenterPollDirectKey() {
-    static char lastToken = 0;
-    static unsigned long lastFire = 0;
+static char presenterLastToken = 0;
+static unsigned long presenterLastFire = 0;
 
+static void presenterResetInputState() {
+    presenterLastToken = 0;
+    presenterLastFire = 0;
+}
+
+static int presenterPollDirectKey() {
     Keyboard.update();
     Keyboard_Class::KeysState status = Keyboard.keysState();
 
@@ -131,23 +189,45 @@ static int presenterPollDirectKey() {
     }
 
     if (action < 0) {
-        lastToken = 0;
+        presenterLastToken = 0;
         return -1;
     }
 
     unsigned long now = millis();
-    if (token != lastToken || now - lastFire >= 280) {
-        lastToken = token;
-        lastFire = now;
+    if (token != presenterLastToken || now - presenterLastFire >= 280) {
+        presenterLastToken = token;
+        presenterLastFire = now;
         return action;
     }
     return -1;
 }
 #endif
 
+static void presenterClearNavFlags() {
+    // Drop leftovers from menu navigation / Unit Scroll / Joystick drift
+    PrevPress = false;
+    NextPress = false;
+    UpPress = false;
+    DownPress = false;
+    SelPress = false;
+    AnyKeyPress = false;
+    PrevPagePress = false;
+    NextPagePress = false;
+#ifdef HAS_ENCODER
+    RotaryNetSteps = 0;
+#endif
+#if defined(HAS_KEYBOARD)
+    presenterResetInputState();
+    // Drain any queued KeyStroke from selecting the mode
+    (void)_getKeyPress();
+#endif
+}
+
 static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
     int flashId = -1;
     unsigned long flashUntil = 0;
+
+    presenterClearNavFlags();
 
     auto draw = [&]() {
         hidRemoteDrawHeader(s.transport, s.isConnected(), vertical ? "Presenter V" : "Presenter");
@@ -165,15 +245,16 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
 
         int sent = -1;
 #if defined(HAS_KEYBOARD)
+        // Cardputer has dedicated keys; ignore Prev/Next/Up/Down flags — Unit Scroll
+        // / Joystick drift maps those to "," / previous and looks like a stuck key.
         sent = presenterPollDirectKey();
+#else
+        if (check(UpPress)) sent = 0;
+        else if (check(DownPress)) sent = 1;
+        else if (check(PrevPress)) sent = 2;
+        else if (check(NextPress)) sent = 3;
+        else if (check(SelPress)) sent = kPresenterNext;
 #endif
-        if (sent < 0) {
-            if (check(UpPress)) sent = 0;
-            else if (check(DownPress)) sent = 1;
-            else if (check(PrevPress)) sent = 2;
-            else if (check(NextPress)) sent = 3;
-            else if (check(SelPress)) sent = kPresenterNext;
-        }
 
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
@@ -201,6 +282,10 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
                     else if (c == '5') sent = kPresenterF5;
                 }
             }
+#if defined(HAS_KEYBOARD)
+            // Optional: Ok / shoulder still advances when no other key
+            else if (check(SelPress)) sent = kPresenterNext;
+#endif
         }
 
         if (sent >= 0) {
@@ -349,10 +434,33 @@ static bool handleKeyboardFn(HidRemoteTransportSession &s, const keyStroke &key,
         case 'M': sendRawKey(s, KEY_MENU); break;
         case 'l':
         case 'L': sendRawKey(s, KEY_DELETE); break;
-        default: flashKey = 0; return true;
+        default: flashKey = 0; return false;
     }
     if (flashKey >= 'A' && flashKey <= 'Z') flashKey += 32;
     return true;
+}
+
+static void runSystemShortcutsMenu(HidRemoteTransportSession &s);
+
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
+extern bool UseTCA8418;
+extern bool fn_key_pressed;
+#endif
+
+// Level-based FN (KeyStroke.fn is pulse-cleared and false-edges while held).
+static bool pollFnHeld(const keyStroke &key) {
+    if (key.fn) return true;
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
+    if (UseTCA8418) return fn_key_pressed;
+    Keyboard.update();
+    return Keyboard.keysState().fn;
+#elif defined(HAS_KEYBOARD)
+    Keyboard.update();
+    return Keyboard.keysState().fn;
+#else
+    (void)key;
+    return false;
+#endif
 }
 
 static bool runKeyboard(HidRemoteTransportSession &s) {
@@ -367,6 +475,7 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
     String mirror;
     bool dirty = true;
     bool fnLayer = false;
+    bool prevFnHeld = false;
     int fnFlash = 0;
     unsigned long fnFlashUntil = 0;
 
@@ -374,14 +483,14 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
         hidRemoteDrawHeader(s.transport, s.isConnected(), fnLayer ? "Keyboard FN" : "Keyboard");
         if (fnLayer) {
             hidDrawKeyboardFnPad(fnFlash);
-            hidRemoteDrawFooter("FN layer  fn+Ok back");
+            hidRemoteDrawFooter("tap key  FN=hide  fn+Ok");
         } else {
             tft.fillRect(0, 27, tftWidth, tftHeight - 27 - 18, 0x0841);
             tft.setTextSize(FP);
             tft.setTextColor(0x07E0, 0x0841);
             tft.setCursor(6, 30);
             tft.println(mirror.length() > 0 ? mirror : "_");
-            hidRemoteDrawFooter("hold FN for F-keys  fn+Ok");
+            hidRemoteDrawFooter("FN overlay  Opt+Ok shortcuts");
         }
         dirty = false;
     };
@@ -398,33 +507,61 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
-        if (key.fn) {
-            if (!fnLayer) {
-                fnLayer = true;
-                dirty = true;
-            }
-            if (key.pressed && strokeChar(key) != 0) {
+        const bool fnHeld = pollFnHeld(key);
+        const bool fnEdge = fnHeld && !prevFnHeld;
+        prevFnHeld = fnHeld;
+
+        const char ch = strokeChar(key);
+        const bool hasChar = key.pressed && ch != 0;
+
+        // Sticky FN overlay: show until a key is used; FN rising edge toggles
+        if (fnLayer || fnHeld) {
+            if (hasChar) {
+                keyStroke fnKey = key;
+                fnKey.fn = true;
                 int flash = 0;
-                handleKeyboardFn(s, key, flash);
-                fnFlash = flash;
-                fnFlashUntil = millis() + 150;
+                if (handleKeyboardFn(s, fnKey, flash)) {
+                    const char *tag = keyboardFnLabel(flash);
+                    if (tag != nullptr) mirrorAppendTag(mirror, tag);
+                    else if ((uint8_t)ch == KEY_UP_ARROW) mirrorAppendTag(mirror, "[Up]");
+                    else if ((uint8_t)ch == KEY_DOWN_ARROW) mirrorAppendTag(mirror, "[Down]");
+                    else if ((uint8_t)ch == KEY_LEFT_ARROW) mirrorAppendTag(mirror, "[Left]");
+                    else if ((uint8_t)ch == KEY_RIGHT_ARROW) mirrorAppendTag(mirror, "[Right]");
+                    fnFlash = flash;
+                    fnFlashUntil = millis() + 120;
+                } else if (!fnHeld) {
+                    if (s.keyboardHid == nullptr) break;
+                    keyboardPressStroke(s, key, mirror);
+                    s.keyboardHid->releaseAll();
+                }
+                fnLayer = false;
                 dirty = true;
                 delay(60);
+                continue;
+            }
+
+            if (fnEdge) {
+                fnLayer = !fnLayer;
+                fnFlash = 0;
+                dirty = true;
             }
             delay(8);
             continue;
-        }
-
-        if (fnLayer) {
-            fnLayer = false;
-            fnFlash = 0;
-            dirty = true;
         }
 
         if (!key.pressed) {
             delay(5);
             continue;
         }
+
+        // Opt/Win + Ok opens system shortcuts without stealing Enter
+        if (key.enter && key.gui && !key.fn) {
+            runSystemShortcutsMenu(s);
+            dirty = true;
+            delay(120);
+            continue;
+        }
+
         if (s.keyboardHid == nullptr) break;
 
         keyboardPressStroke(s, key, mirror);
@@ -434,6 +571,87 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
     }
 
     s.releaseAll();
+    return true;
+}
+
+static void runSystemShortcutsMenu(HidRemoteTransportSession &s) {
+    struct Shortcut {
+        const char *label;
+        void (*send)(HidRemoteTransportSession &);
+    };
+
+    static const Shortcut kShortcuts[] = {
+        // Reused from Keyboard FN layer
+        {"Alt+Tab", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_ALT, 0, KEYTAB); }},
+        {"Win/Cmd+Tab", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_GUI, 0, KEYTAB); }},
+        {"Ctrl+Shift+Esc",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_ESC); }},
+        {"Ctrl+Alt+Del",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, KEY_LEFT_ALT, KEY_DELETE); }},
+        {"Alt+F4 close", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_ALT, 0, KEY_F4); }},
+        {"Ctrl+Alt+Shift+V",
+         [](HidRemoteTransportSession &x) {
+             sendCombo3(x, KEY_LEFT_CTRL, KEY_LEFT_ALT, KEY_LEFT_SHIFT, 'v');
+         }},
+        // Clipboard / edit
+        {"Ctrl+C copy", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'c'); }},
+        {"Ctrl+V paste", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'v'); }},
+        {"Ctrl+X cut", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'x'); }},
+        {"Ctrl+A select all", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'a'); }},
+        {"Ctrl+Z undo", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'z'); }},
+        {"Ctrl+Y redo", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'y'); }},
+        {"Ctrl+S save", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 's'); }},
+        {"Ctrl+F find", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'f'); }},
+        // Window / desktop
+        {"Win/Cmd+D desktop", [](HidRemoteTransportSession &x) { sendWinKey(x, 'd'); }},
+        {"Win/Cmd+L lock", [](HidRemoteTransportSession &x) { sendWinKey(x, 'l'); }},
+        {"Win/Cmd+E files", [](HidRemoteTransportSession &x) { sendWinKey(x, 'e'); }},
+        {"Win/Cmd+R run", [](HidRemoteTransportSession &x) { sendWinKey(x, 'r'); }},
+        {"Win/Cmd+V clipboard", [](HidRemoteTransportSession &x) { sendWinKey(x, 'v'); }},
+        {"Win/Cmd+Shift+S snip",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_GUI, KEY_LEFT_SHIFT, 's'); }},
+        {"Print Screen", [](HidRemoteTransportSession &x) { sendRawKey(x, KEY_PRINT_SCREEN); }},
+        {"Alt+PrtSc",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_ALT, 0, KEY_PRINT_SCREEN); }},
+        // Browser / tabs
+        {"Ctrl+T new tab", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 't'); }},
+        {"Ctrl+W close tab", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'w'); }},
+        {"Ctrl+Shift+T reopen",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, KEY_LEFT_SHIFT, 't'); }},
+        {"Ctrl+L address", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, 0, 'l'); }},
+        {"Alt+Left back",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_ALT, 0, KEY_LEFT_ARROW); }},
+        {"Alt+Right forward",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_ALT, 0, KEY_RIGHT_ARROW); }},
+        // Linux / Mac oriented
+        {"Ctrl+Alt+T terminal",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_CTRL, KEY_LEFT_ALT, 't'); }},
+        {"Cmd/Ctrl+Q quit", [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_GUI, 0, 'q'); }},
+        {"Cmd/Ctrl+Space spotlight",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_GUI, 0, ' '); }},
+        {"Cmd+Opt+Esc force quit",
+         [](HidRemoteTransportSession &x) { sendCombo(x, KEY_LEFT_GUI, KEY_LEFT_ALT, KEY_ESC); }},
+    };
+
+    int start = 0;
+    while (true) {
+        std::vector<Option> opts;
+        opts.reserve((sizeof(kShortcuts) / sizeof(kShortcuts[0])) + 1);
+        for (const auto &sc : kShortcuts) {
+            opts.push_back({String(sc.label), []() {}});
+        }
+        opts.push_back({"Back", []() {}});
+
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "System Shortcuts", start, false);
+        if (sel < 0 || sel >= (int)(sizeof(kShortcuts) / sizeof(kShortcuts[0]))) return;
+        start = sel;
+        kShortcuts[sel].send(s);
+        delay(80);
+    }
+}
+
+static bool runSystemShortcuts(HidRemoteTransportSession &s) {
+    runSystemShortcutsMenu(s);
     return true;
 }
 
@@ -956,6 +1174,7 @@ bool hidRemoteRunMode(HidRemoteMode mode, HidRemoteTransportSession &session) {
         case HID_MODE_JIGGLER: return runJiggler(session, false);
         case HID_MODE_JIGGLER_STEALTH: return runJiggler(session, true);
         case HID_MODE_PUSH_TO_TALK: return runPushToTalk(session);
+        case HID_MODE_SHORTCUTS: return runSystemShortcuts(session);
         default: return false;
     }
 }

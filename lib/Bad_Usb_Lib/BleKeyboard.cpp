@@ -267,17 +267,28 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
 }
 
 void BleKeyboard::end(void) {
-    int i = 0;
-    i = pServer->getConnectedCount();
-    if (i > 0) {
-        int j;
-        for (j = 0; j < i; j++) pServer->disconnect(pServer->getPeerInfo(i).getConnHandle());
+    if (pServer != nullptr) {
+        // Disconnect all peers using index 0 repeatedly (count shrinks as we disconnect)
+        while (pServer->getConnectedCount() > 0) {
+            pServer->disconnect(pServer->getPeerInfo(0).getConnHandle());
+            delay(40);
+        }
     }
-    delete hid;
-    hid = nullptr;
+    if (hid != nullptr) {
+        delete hid;
+        hid = nullptr;
+    }
 
-    BLEDevice::deinit(true);
+    if (BLEDevice::isInitialized()) {
+        BLEDevice::deinit(true);
+    }
     this->connected = false;
+    pServer = nullptr;
+    advertising = nullptr;
+    inputKeyboard = nullptr;
+    outputKeyboard = nullptr;
+    inputMediaKeys = nullptr;
+    inputMouse = nullptr;
 }
 
 bool BleKeyboard::isConnected(void) { return this->connected; }

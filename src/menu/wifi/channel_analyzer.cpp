@@ -17,8 +17,16 @@
 static const uint8_t CA_CHANNELS[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 static const int CA_NCH = sizeof(CA_CHANNELS) / sizeof(CA_CHANNELS[0]);
 
-// Load% at/above which a bar is drawn solid (busy) instead of dimmed.
-static const uint8_t CA_BUSY_THRESHOLD = 50;
+// EVA-01 themed palette (RGB565), cycled per channel bar.
+static const uint16_t CA_PALETTE[] = {
+    0x9818, // purple  (EVA-01 body)
+    0x07E0, // green   (EVA-01 accent)
+    0xFD20, // orange
+    0xF800, // red
+    0xFFE0, // yellow
+    0x780F, // deep violet (second purple)
+};
+static const int CA_NPAL = sizeof(CA_PALETTE) / sizeof(CA_PALETTE[0]);
 
 // Counters updated from the promiscuous RX callback for the *current* channel.
 static volatile uint32_t ca_bytes = 0;
@@ -69,56 +77,51 @@ static void
 ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t curCh, uint16_t dwell) {
     drawMainBorder(false);
 
-    const int x0 = 8;                           // left of bars
+    const int x0 = 8;
     const int top = 26;                         // below title
+    const int labelH = 10;                      // channel numbers under bars
     const int bottom = tftHeight - 2 * LH * FP; // leave room for footer
-    const int avail = bottom - top;
-    const int rowH = avail / CA_NCH;
-    const int labelW = 30; // "Ch11"
-    const int valW = 30;   // " 100%"
-    const int barX = x0 + labelW;
-    const int barW = tftWidth - barX - valW - 6;
+    const int baseline = bottom - labelH;       // bars grow up from here
+    const int plotH = baseline - top;
+    const int plotW = tftWidth - 2 * x0;
+    const int slot = plotW / CA_NCH;            // horizontal space per channel
+    const int barW = (slot * 2) / 3;            // bar narrower than its slot
+    const int barOff = (slot - barW) / 2;
 
     tft.setTextSize(FP);
+    tft.drawFastHLine(x0, baseline, plotW, kvxConfig.priColor); // axis
+
     for (int i = 0; i < CA_NCH; i++) {
         uint8_t ch = CA_CHANNELS[i];
-        int y = top + i * rowH;
+        int cellX = x0 + i * slot;
+        int bx = cellX + barOff;
         bool isCur = (ch == curCh);
+        uint16_t col = CA_PALETTE[i % CA_NPAL];
 
-        // label
-        tft.setTextColor(
-            isCur ? kvxConfig.bgColor : kvxConfig.priColor,
-            isCur ? kvxConfig.priColor : kvxConfig.bgColor
-        );
-        tft.drawString("Ch" + String(ch), x0, y, 1);
+        // clear this column so we can redraw without flicker
+        tft.fillRect(cellX, top, slot, plotH, kvxConfig.bgColor);
 
-        // bar frame
-        int bh = rowH - 3;
-        if (bh < 4) bh = 4;
-        tft.drawRect(barX, y, barW, bh, kvxConfig.priColor);
+        // vertical load bar (grows upward from baseline)
+        int bh = plotH * load[ch] / 100;
+        if (bh > 0) tft.fillRect(bx, baseline - bh, barW, bh, col);
 
-        // filled portion ~ load%
-        int fillW = (barW - 2) * load[ch] / 100;
+        // outline the channel currently being sampled
+        if (isCur) tft.drawRect(bx - 1, top, barW + 2, plotH, kvxConfig.secColor);
 
-        // solid above threshold, dimmed below
-        uint16_t c = (load[ch] >= CA_BUSY_THRESHOLD) ? kvxConfig.priColor : TFT_DARKGREY;
-        tft.fillRect(barX + 1, y + 1, fillW, bh - 2, c);
-        // clear remaining area
-        tft.fillRect(barX + 1 + fillW, y + 1, barW - 2 - fillW, bh - 2, kvxConfig.bgColor);
+        // peak-hold tick
+        int ph = plotH * peak[ch] / 100;
+        if (ph > 0) tft.drawFastHLine(bx, baseline - ph, barW, TFT_WHITE);
 
-        // peak-hold marker
-        int peakX = barX + 1 + (barW - 2) * peak[ch] / 100;
-        if (peakX > barX + 1) tft.drawFastVLine(peakX, y + 1, bh - 2, TFT_RED);
-
-        // value
-        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawString(String(load[ch]) + "%", barX + barW + 4, y, 1);
+        // channel number under the baseline
+        tft.setTextColor(isCur ? kvxConfig.secColor : kvxConfig.priColor, kvxConfig.bgColor);
+        tft.drawString(String(ch), bx, baseline + 2, 1);
     }
 
-    // footer: current channel detail + signal meter + dwell
+    // footer: current channel detail
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    String foot = "Ch" + String(curCh) + " " + String(load[curCh]) + "% pk" + String(peak[curCh]) + "% " +
-                  String(rssi[curCh]) + "dBm  dwell " + String(dwell) + "ms  ";
+    String foot = "Ch" + String(curCh) + " " + String(load[curCh]) + "% pk" +
+                  String(peak[curCh]) + "% " + String(rssi[curCh]) + "dBm dwell " +
+                  String(dwell) + "ms";
     tft.drawString(foot, x0, bottom, 1);
 }
 

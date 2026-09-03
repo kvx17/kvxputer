@@ -88,6 +88,9 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteTransport"] = hidRemoteTransport;
     setting["hidRemoteBleName"] = hidRemoteBleName;
     setting["hidRemoteHostName"] = hidRemoteHostName;
+    setting["hidRemotePreferredHost"] = hidRemotePreferredHost;
+    JsonObject _hidAliases = setting["hidRemoteHostAliases"].to<JsonObject>();
+    for (const auto &pair : hidRemoteHostAliases) { _hidAliases[pair.first] = pair.second; }
     setting["hidRemoteLastMode"] = hidRemoteLastMode;
     setting["hidRemoteMouseSensitivity"] = hidRemoteMouseSensitivity;
     setting["hidRemoteJoyInvertY"] = hidRemoteJoyInvertY;
@@ -504,6 +507,16 @@ void KvxputerConfig::fromFile(bool checkFS) {
     }
     if (!setting["hidRemoteHostName"].isNull()) {
         hidRemoteHostName = setting["hidRemoteHostName"].as<String>();
+    }
+    if (!setting["hidRemotePreferredHost"].isNull()) {
+        hidRemotePreferredHost = setting["hidRemotePreferredHost"].as<String>();
+    }
+    if (!setting["hidRemoteHostAliases"].isNull()) {
+        hidRemoteHostAliases.clear();
+        JsonObject aliases = setting["hidRemoteHostAliases"].as<JsonObject>();
+        for (JsonPair kv : aliases) {
+            hidRemoteHostAliases[String(kv.key().c_str())] = kv.value().as<String>();
+        }
     }
     if (!setting["hidRemoteLastMode"].isNull()) {
         hidRemoteLastMode = setting["hidRemoteLastMode"].as<int>();
@@ -1038,6 +1051,32 @@ void KvxputerConfig::setHidRemoteBleName(const String &value) {
 void KvxputerConfig::setHidRemoteHostName(const String &value) {
     hidRemoteHostName = value.substring(0, 32);
     saveFile();
+}
+
+void KvxputerConfig::setHidRemotePreferredHost(const String &value) {
+    hidRemotePreferredHost = value.substring(0, 32);
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteHostAlias(const String &addr, const String &name) {
+    if (addr.isEmpty()) return;
+    if (name.isEmpty()) {
+        hidRemoteHostAliases.erase(addr);
+    } else {
+        hidRemoteHostAliases[addr] = name.substring(0, 24);
+    }
+    saveFile();
+}
+
+void KvxputerConfig::clearHidRemoteHostAlias(const String &addr) {
+    hidRemoteHostAliases.erase(addr);
+    saveFile();
+}
+
+String KvxputerConfig::getHidRemoteHostAlias(const String &addr) const {
+    auto it = hidRemoteHostAliases.find(addr);
+    if (it == hidRemoteHostAliases.end()) return "";
+    return it->second;
 }
 
 void KvxputerConfig::setHidRemoteLastMode(int value) {
