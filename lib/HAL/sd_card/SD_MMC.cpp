@@ -385,9 +385,19 @@ size_t SDFS::numSectors() {
     return (totalBytes() / _card->csd.sector_size);
 }
 
-bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return (disk_read(_pdrv, buffer, sector, 1) == 0); }
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return readRAW(buffer, sector, 1); }
 
-bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return (disk_write(_pdrv, buffer, sector, 1) == 0); }
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return writeRAW(buffer, sector, 1); }
+
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector, uint32_t count) {
+    if (!_card || !buffer || count == 0) return false;
+    return (disk_read(_pdrv, buffer, sector, count) == 0);
+}
+
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector, uint32_t count) {
+    if (!_card || !buffer || count == 0) return false;
+    return (disk_write(_pdrv, buffer, sector, count) == 0);
+}
 
 SDFS SD = SDFS(FSImplPtr(new VFSImpl()));
 #endif /* SOC_SDMMC_HOST_SUPPORTED */

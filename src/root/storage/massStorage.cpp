@@ -1,9 +1,56 @@
 #include "root/storage/massStorage.h"
 #if defined(SOC_USB_OTG_SUPPORTED)
+#include "root/config/configPins.h"
+#include "root/hal/bus_HAL.h"
+#include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include <USB.h>
+#include <cstring>
+
 bool MassStorage::shouldStop = false;
 int32_t MassStorage::status = -1;
+
+namespace {
+
+// Cardputer mounts SD at 4 MHz for shared-bus safety; MSC can run faster on a dedicated SPI.
+constexpr uint32_t kMscSpiHz = 20000000UL;
+
+bool remountSdForMsc() {
+    if (kvxConfigPins.SDCARD_bus.sck < 0) return false;
+    uint8_t cs = (uint8_t)kvxConfigPins.SDCARD_bus.cs;
+
+    SD.end();
+    sdcardMounted = false;
+
+    SPIClass *bus = acquireSPIBus(
+        kvxConfigPins.SDCARD_bus.sck, kvxConfigPins.SDCARD_bus.miso, kvxConfigPins.SDCARD_bus.mosi
+    );
+
+    // Shared TFT/SD SPI: moderate clock so display redraws during MSC stay stable.
+    // Dedicated SD bus: push toward SPI SD practical max (~20 MHz).
+    if (bus != nullptr && bus != &sdcardSPI) {
+        if (SD.begin(cs, *bus, 10000000UL, "/sd", 2) || SD.begin(cs, *bus, 4000000UL, "/sd", 2)) {
+            sdcardMounted = true;
+            return true;
+        }
+        return false;
+    }
+
+    (void)sdcardSPI.begin(
+        (int8_t)kvxConfigPins.SDCARD_bus.sck,
+        (int8_t)kvxConfigPins.SDCARD_bus.miso,
+        (int8_t)kvxConfigPins.SDCARD_bus.mosi,
+        (int8_t)kvxConfigPins.SDCARD_bus.cs
+    );
+    if (SD.begin(cs, sdcardSPI, kMscSpiHz, "/sd", 2) ||
+        SD.begin(cs, sdcardSPI, 10000000UL, "/sd", 2)) {
+        sdcardMounted = true;
+        return true;
+    }
+    return setupSdCard(2);
+}
+
+} // namespace
 
 MassStorage::MassStorage() { setup(); }
 
@@ -13,6 +60,11 @@ MassStorage::~MassStorage() {
 
     // Hack to make USB back to flash mode
     USB.enableDFU();
+
+    // Restore normal SD mount after raw MSC access
+    SD.end();
+    sdcardMounted = false;
+    setupSdCard();
 }
 
 void MassStorage::setup() {
@@ -22,6 +74,13 @@ void MassStorage::setup() {
 
     if (!setupSdCard()) {
         displayError("SD card not found.");
+        delay(1000);
+        return;
+    }
+
+    // Higher SPI clock for MSC; fall back to the normal mount if it fails.
+    if (!remountSdForMsc()) {
+        displayError("SD remount failed.");
         delay(1000);
         return;
     }
@@ -59,10 +118,14 @@ void MassStorage::beginUsb() {
 void MassStorage::setupUsbCallback() {
     uint32_t secSize = SD.sectorSize();
     uint32_t numSectors = SD.numSectors();
+    if (secSize == 0 || numSectors == 0) {
+        displayError("SD geometry invalid");
+        return;
+    }
 
-    msc.vendorID("ESP32");
-    msc.productID("BRUCE");
-    msc.productRevision("1.0");
+    msc.vendorID("KVX");
+    msc.productID("kvxputer");
+    msc.productRevision("1.1");
 
     msc.onRead(usbReadCallback);
     msc.onWrite(usbWriteCallback);
@@ -85,39 +148,40 @@ void MassStorage::displayMessage(String message) {
 }
 
 int32_t usbWriteCallback(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize) {
-    // Verify freespace
-    uint64_t freeSpace = SD.totalBytes() - SD.usedBytes();
-    if (bufsize > freeSpace) {
-        return -1; // no space available
-    }
-
-    // Verify sector size
+    // Block device: host FS owns free space. Do NOT call SD.usedBytes()/totalBytes()
+    // here — those walk FAT and make Windows/macOS mounts crawl.
     const uint32_t secSize = SD.sectorSize();
-    if (secSize == 0) return -1; // disk error
+    if (secSize == 0 || buffer == nullptr || bufsize == 0) return -1;
 
-    // Write blocs
-    for (uint32_t x = 0; x < bufsize / secSize; ++x) {
-        uint8_t blkBuffer[secSize];
-        memcpy(blkBuffer, buffer + secSize * x, secSize);
-        if (!SD.writeRAW(blkBuffer, lba + x)) {
-            return -1; // write error
-        }
+    if (offset == 0 && (bufsize % secSize) == 0) {
+        if (!SD.writeRAW(buffer, lba, bufsize / secSize)) return -1;
+        return (int32_t)bufsize;
     }
-    return bufsize;
+
+    // Rare partial transfer: RMW within a sector.
+    uint8_t sector[512];
+    if (secSize > sizeof(sector) || offset + bufsize > secSize) return -1;
+    if (!SD.readRAW(sector, lba)) return -1;
+    memcpy(sector + offset, buffer, bufsize);
+    if (!SD.writeRAW(sector, lba)) return -1;
+    return (int32_t)bufsize;
 }
 
 int32_t usbReadCallback(uint32_t lba, uint32_t offset, void *buffer, uint32_t bufsize) {
-    // Verify sector size
     const uint32_t secSize = SD.sectorSize();
-    if (secSize == 0) return -1; // disk error
+    if (secSize == 0 || buffer == nullptr || bufsize == 0) return -1;
+    auto *out = reinterpret_cast<uint8_t *>(buffer);
 
-    // Read blocs
-    for (uint32_t x = 0; x < bufsize / secSize; ++x) {
-        if (!SD.readRAW(reinterpret_cast<uint8_t *>(buffer) + (x * secSize), lba + x)) {
-            return -1; // read error
-        }
+    if (offset == 0 && (bufsize % secSize) == 0) {
+        if (!SD.readRAW(out, lba, bufsize / secSize)) return -1;
+        return (int32_t)bufsize;
     }
-    return bufsize;
+
+    uint8_t sector[512];
+    if (secSize > sizeof(sector) || offset + bufsize > secSize) return -1;
+    if (!SD.readRAW(sector, lba)) return -1;
+    memcpy(out, sector + offset, bufsize);
+    return (int32_t)bufsize;
 }
 
 bool usbStartStopCallback(uint8_t power_condition, bool start, bool load_eject) {

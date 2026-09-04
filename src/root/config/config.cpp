@@ -89,6 +89,8 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteBleName"] = hidRemoteBleName;
     setting["hidRemoteHostName"] = hidRemoteHostName;
     setting["hidRemotePreferredHost"] = hidRemotePreferredHost;
+    JsonArray _hidSlots = setting["hidRemoteHostSlots"].to<JsonArray>();
+    for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) _hidSlots.add(hidRemoteHostSlots[i]);
     JsonObject _hidAliases = setting["hidRemoteHostAliases"].to<JsonObject>();
     for (const auto &pair : hidRemoteHostAliases) { _hidAliases[pair.first] = pair.second; }
     setting["hidRemoteLastMode"] = hidRemoteLastMode;
@@ -510,6 +512,12 @@ void KvxputerConfig::fromFile(bool checkFS) {
     }
     if (!setting["hidRemotePreferredHost"].isNull()) {
         hidRemotePreferredHost = setting["hidRemotePreferredHost"].as<String>();
+    }
+    if (!setting["hidRemoteHostSlots"].isNull()) {
+        JsonArray slots = setting["hidRemoteHostSlots"].as<JsonArray>();
+        for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) {
+            hidRemoteHostSlots[i] = (i < (int)slots.size()) ? slots[i].as<String>() : String("");
+        }
     }
     if (!setting["hidRemoteHostAliases"].isNull()) {
         hidRemoteHostAliases.clear();
@@ -1077,6 +1085,45 @@ String KvxputerConfig::getHidRemoteHostAlias(const String &addr) const {
     auto it = hidRemoteHostAliases.find(addr);
     if (it == hidRemoteHostAliases.end()) return "";
     return it->second;
+}
+
+String KvxputerConfig::getHidRemoteHostSlot(int index1to8) const {
+    if (index1to8 < 1 || index1to8 > HID_REMOTE_HOST_SLOT_COUNT) return "";
+    return hidRemoteHostSlots[index1to8 - 1];
+}
+
+void KvxputerConfig::setHidRemoteHostSlot(int index1to8, const String &addr) {
+    if (index1to8 < 1 || index1to8 > HID_REMOTE_HOST_SLOT_COUNT) return;
+    hidRemoteHostSlots[index1to8 - 1] = addr.substring(0, 32);
+    saveFile();
+}
+
+void KvxputerConfig::clearHidRemoteHostSlot(int index1to8) {
+    if (index1to8 < 1 || index1to8 > HID_REMOTE_HOST_SLOT_COUNT) return;
+    hidRemoteHostSlots[index1to8 - 1] = "";
+    saveFile();
+}
+
+void KvxputerConfig::clearAllHidRemoteHostSlots() {
+    for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) hidRemoteHostSlots[i] = "";
+    saveFile();
+}
+
+int KvxputerConfig::findHidRemoteHostSlotForAddr(const String &addr) const {
+    if (addr.isEmpty()) return 0;
+    for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) {
+        if (hidRemoteHostSlots[i].length() && hidRemoteHostSlots[i].equalsIgnoreCase(addr)) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+int KvxputerConfig::findEmptyHidRemoteHostSlot() const {
+    for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) {
+        if (hidRemoteHostSlots[i].isEmpty()) return i + 1;
+    }
+    return 0;
 }
 
 void KvxputerConfig::setHidRemoteLastMode(int value) {

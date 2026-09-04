@@ -79,6 +79,8 @@ public:
     uint64_t usedBytes();
     bool readRAW(uint8_t *buffer, uint32_t sector);
     bool writeRAW(uint8_t *buffer, uint32_t sector);
+    bool readRAW(uint8_t *buffer, uint32_t sector, uint32_t count);
+    bool writeRAW(uint8_t *buffer, uint32_t sector, uint32_t count);
 };
 
 } // namespace fs

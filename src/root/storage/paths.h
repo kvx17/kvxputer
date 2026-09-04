@@ -91,6 +91,10 @@ constexpr const char *BLE_CAPTURES         = "/support_files/ble/captures";
 constexpr const char *BLE_CAPTURES_LEGACY  = "/BruceSniffer";
 constexpr const char *BLE_AIRTAGS          = "/support_files/ble/airtags";
 constexpr const char *BLE_FINDMY_KEYS      = "/support_files/ble/FindMyEvil_keys.txt";
+constexpr const char *BLE_NAMES            = "/support_files/ble/names.txt";
+
+// Companion firmware images (SD; too large for LittleFS)
+constexpr const char *COMPANIONS           = "/support_files/companions";
 
 // Others / misc support
 constexpr const char *IBUTTON              = "/support_files/others/ibutton";

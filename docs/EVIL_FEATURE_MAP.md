@@ -21,7 +21,7 @@ Gated by `-DEVIL_EXTENSIONS=1` (on for `m5stack-cardputer`, off for lite).
 | 35–39 | SSH / scans | NetOps | P0 | reuse | first-class NetOps rows |
 | 40 | Web Crawler | NetOps | P1 | port | `netops/web_crawler/` |
 | 41 | PwnGrid Spam | WiFi | P1 | reuse | `pwnagotchi/` (`kvxgotchi_start`) |
-| 42 | Skimmer Detector | BLE | P2 | deferred | (BLE if ported later) |
+| 42 | Skimmer Detector | BLE | P1 | port | `ble/skimmer/` |
 | 43 | Mouse Jiggler | USB | P1 | reuse | HID Remote |
 | 44 | BadUSB | USB | P0 | reuse | `ducky_typer` |
 | 45 | Bluetooth Keyboard | BLE | P0 | reuse | HID Remote |
@@ -60,4 +60,4 @@ Gated by `-DEVIL_EXTENSIONS=1` (on for `m5stack-cardputer`, off for lite).
 | 87 | CSI Radar | WiFi | P2 | port | `wifi/csi_radar/` |
 | 88 | Settings | Config | P0 | reuse | `config_menu.cpp` |
 
-Slave firmware and host utilities stay in `resources/Evil-M5Project-main/` (not compiled into Cardputer firmware).
+Slave / companion firmware is tracked under [`tools/companions/`](../tools/companions/) (not compiled into Cardputer firmware). Copy `.bin` files to SD `/support_files/companions/`. `resources/` is optional development reference only.

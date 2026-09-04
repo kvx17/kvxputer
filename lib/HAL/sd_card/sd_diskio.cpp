@@ -655,11 +655,21 @@ DRESULT ff_sd_ioctl(uint8_t pdrv, uint8_t cmd, void *buff) {
 }
 
 bool sd_read_raw(uint8_t pdrv, uint8_t *buffer, DWORD sector) {
-  return ff_sd_read(pdrv, buffer, sector, 1) == ESP_OK;
+  return sd_read_sectors(pdrv, buffer, sector, 1);
 }
 
 bool sd_write_raw(uint8_t pdrv, uint8_t *buffer, DWORD sector) {
-  return ff_sd_write(pdrv, buffer, sector, 1) == ESP_OK;
+  return sd_write_sectors(pdrv, buffer, sector, 1);
+}
+
+bool sd_read_sectors(uint8_t pdrv, uint8_t *buffer, uint32_t sector, uint32_t count) {
+  if (!buffer || count == 0) return false;
+  return ff_sd_read(pdrv, buffer, sector, count) == RES_OK;
+}
+
+bool sd_write_sectors(uint8_t pdrv, uint8_t *buffer, uint32_t sector, uint32_t count) {
+  if (!buffer || count == 0) return false;
+  return ff_sd_write(pdrv, buffer, sector, count) == RES_OK;
 }
 
 /*

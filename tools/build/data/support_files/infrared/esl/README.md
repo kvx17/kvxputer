@@ -1,1 +1,1 @@
-Copy ESL bitmaps from resources/Evil-M5Project-main/SD-Card-File/esl/ onto the SD card.
+Put ESL bitmaps and presets on SD at `/support_files/infrared/esl/` (see `tools/sd_pack/`). Firmware never reads `resources/`.

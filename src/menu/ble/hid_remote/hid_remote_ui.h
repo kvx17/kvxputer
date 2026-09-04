@@ -44,3 +44,6 @@ void hidDrawPttPad(bool talking);
 
 // Partial clear of content area (below header, above footer)
 void hidClearContentArea();
+
+// Host slot status: 0 empty(red), 1 remembered(orange), 2 connected(green)
+void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected);

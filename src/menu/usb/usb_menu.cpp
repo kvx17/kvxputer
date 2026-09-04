@@ -1,6 +1,7 @@
 #include "usb_menu.h"
 #include "root/ui/display.h"
 #include "root/app/utils.h"
+#include "root/storage/massStorage.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
 #include "menu/others/clicker.h"
 #include "menu/others/u2f.h"
@@ -16,6 +17,9 @@ void UsbMenu::optionsMenu() {
         {"USB Clicker (legacy)",  clicker_setup                                 },
         {"USB U2F",               u2f_setup                                     },
 #endif
+#endif
+#if defined(SOC_USB_OTG_SUPPORTED)
+        {"Mass Storage",          [=]() { MassStorage(); }                      },
 #endif
     };
     addOptionToMainMenu();

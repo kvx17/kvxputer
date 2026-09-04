@@ -5,7 +5,8 @@ This project forks and extends Bruce firmware for M5Stack Cardputer ADV,
 with optional M5 Unit Scroll support and ports of Evil-Cardputer–unique tools.
 
 The active firmware tree is at the repository root (platformio.ini, src/, boards/).
-The resources/ directory holds demo/reference sources only and is not compiled.
+The resources/ directory is an optional local reference and is not compiled.
+Companion ESP sketches live in tools/companions/.
 
 Bruce firmware
 --------------

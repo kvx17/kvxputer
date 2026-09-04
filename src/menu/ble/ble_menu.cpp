@@ -14,6 +14,7 @@
 #include "menu/ble/name_flood/name_flood.h"
 #include "menu/ble/wall_of_airtag/wall_of_airtag.h"
 #include "menu/ble/findmy/findmy.h"
+#include "menu/ble/skimmer/skimmer.h"
 #endif
 #include "menu/ble/hid_remote/hid_remote.h"
 #include <globals.h>
@@ -53,6 +54,7 @@ void BleMenu::optionsMenu() {
     options.push_back({"BLE Name Flood", nameFloodMenu});
     options.push_back({"Wall Of Airtag", wallOfAirtagMenu});
     options.push_back({"FindMyEvil", findMyMenu});
+    options.push_back({"Skimmer Detector", skimmerMenu});
 #endif
     addOptionToMainMenu();
 

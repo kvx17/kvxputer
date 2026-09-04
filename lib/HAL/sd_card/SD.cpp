@@ -105,9 +105,19 @@ uint64_t SDFS::usedBytes() {
     return size;
 }
 
-bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return sd_read_raw(_pdrv, buffer, sector); }
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector) { return readRAW(buffer, sector, 1); }
 
-bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return sd_write_raw(_pdrv, buffer, sector); }
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector) { return writeRAW(buffer, sector, 1); }
+
+bool SDFS::readRAW(uint8_t *buffer, uint32_t sector, uint32_t count) {
+    if (_pdrv == 0xFF || !buffer || count == 0) return false;
+    return sd_read_sectors(_pdrv, buffer, sector, count);
+}
+
+bool SDFS::writeRAW(uint8_t *buffer, uint32_t sector, uint32_t count) {
+    if (_pdrv == 0xFF || !buffer || count == 0) return false;
+    return sd_write_sectors(_pdrv, buffer, sector, count);
+}
 
 SDFS SD = SDFS(FSImplPtr(new VFSImpl()));
 #endif

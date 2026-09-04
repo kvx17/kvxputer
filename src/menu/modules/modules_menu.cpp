@@ -4,6 +4,8 @@
 #include "root/input/unit_scroll.h"
 #include "root/input/unit_joystick2.h"
 #include "root/config/configPins.h"
+#include "root/storage/paths.h"
+#include "root/storage/sd_functions.h"
 #include <globals.h>
 #include <cstring>
 
@@ -48,12 +50,46 @@ void ModulesMenu::optionsMenu() {
             {"Unit Joystick", [this]() { unitJoystick2Menu(); }},
 #endif
             {"PaHub", [this]() { pahubMenu(); }},
+            {"Companion bins", [this]() { companionBinsMenu(); }},
             {"Main Menu", []() {}},
         };
 
         int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Modules");
         if (selected == -1 || selected == (int)localOptions.size() - 1) return;
     }
+}
+
+void ModulesMenu::companionBinsMenu() {
+    FS *fs = nullptr;
+    if (!getFsStorage(fs) || !fs) {
+        displayError("No storage", true);
+        return;
+    }
+    kvx::paths::ensureDir(*fs, kvx::paths::COMPANIONS);
+    File root = fs->open(kvx::paths::COMPANIONS);
+    if (!root || !root.isDirectory()) {
+        displayError(String("Create\n") + kvx::paths::COMPANIONS, true);
+        return;
+    }
+    std::vector<Option> opts;
+    File f;
+    while ((f = root.openNextFile())) {
+        String n = f.name();
+        size_t sz = f.size();
+        f.close();
+        if (!n.endsWith(".bin")) continue;
+        String label = n.substring(n.lastIndexOf('/') + 1) + " " + String((unsigned)sz);
+        opts.push_back({label.c_str(), [n, sz]() {
+                            displayInfo(n + "\n" + String((unsigned)sz) + " bytes\nFlash from PC:\npio companion-*", true);
+                        }});
+    }
+    root.close();
+    if (opts.empty()) {
+        displayInfo(String("No .bin in\n") + kvx::paths::COMPANIONS + "\nSee tools/sd_pack", true);
+        return;
+    }
+    opts.push_back({"Back", []() {}});
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Companion bins");
 }
 
 static void waitGroveKeysIdle() {

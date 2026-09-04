@@ -223,13 +223,15 @@ trimmed or adapted. Each retains its original author's license.
 ## Evil-M5Project / Evil-Cardputer (kvxputer ports)
 
 - Upstream: <https://github.com/7h30th3r0n3/Evil-M5project>
-- Reference demo: `resources/Evil-Cardputer-v1-5-4.ino` (not compiled)
+- Reference demo: `resources/Evil-Cardputer-v1-5-4.ino` (not compiled; optional)
+- Companion sketches: `tools/companions/` (separate PIO envs)
 - License: see copyright header in the upstream / reference `.ino` (permissive grant)
 - Copyright (c) 7h30th3r0n3 and contributors
 - Used by: optional Evil-unique addon modules under `src/menu/<domain>/<addon>/`
   (WiFi, NetOps, BLE, GPS, Infrared, Others), gated by `-DEVIL_EXTENSIONS=1`.
   Bruce implementations are preferred where features overlap (Evil Portal, Karma,
-  WiFi attacks, BadUSB, HID Remote, Files, etc.).
+  WiFi attacks, BadUSB, HID Remote, Files, etc.). Runtime files use SD/LittleFS
+  (`kvx::paths`), never `resources/`.
 
 ## M5Stack Unit Scroll
 

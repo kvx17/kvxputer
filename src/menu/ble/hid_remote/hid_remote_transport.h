@@ -27,8 +27,11 @@ public:
     int getBondCount();
     String getBondLabel(int index = 0);
     String getConnectedAddress();
+    bool isConnectedToAddr(const String &addr);
     String displayNameForAddr(const String &addr) const;
+    bool isKnownHostAddress(const String &addr) const;
     void rememberConnectedHost();
+    void syncHostSlotsWithBonds();
     bool ensureAdvertising();
     bool advertiseOpen();
     bool advertiseForHost(const String &addr, bool whitelistOnly = true);
@@ -36,7 +39,14 @@ public:
     bool disconnectHost(bool readvertise = true);
     bool forgetBond(const String &addr);
     bool forgetBonds();
+    // expectedAddr empty = accept only a new (not remembered) host
+    // excludeAddr = always reject this peer (e.g. previous host when switching slots)
+    bool waitConnectedExpected(
+        const String &expectedAddr, unsigned long timeoutMs = 0, const String &excludeAddr = String("")
+    );
     bool switchToHost(const String &addr, unsigned long timeoutMs = 20000);
+    bool switchToSlot(int slot1to8, unsigned long timeoutMs = 20000);
+    bool pairIntoSlot(int slot1to8, unsigned long timeoutMs = 0);
     bool reconnectNewHost();
 
     void pressKey(uint8_t key);

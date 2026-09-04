@@ -1,6 +1,7 @@
 #include "hid_remote_ui.h"
 #include "hid_remote_transport.h"
 #include "root/input/mykeyboard.h"
+#include "root/config/config.h"
 #include "root/config/configPins.h"
 #include "root/ui/theme.h"
 #include <cstring>
@@ -464,6 +465,55 @@ void hidDrawPttPad(bool talking) {
     tft.drawCentreString(talking ? "TALKING" : "MUTED", cx, cy + 22, 1);
     tft.setTextColor(KVX_ORANGE, KVX_BG);
     tft.drawCentreString("Hold Space", cx, cy + 34, 1);
+}
+
+void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected) {
+    // Content-only refresh (no full fillScreen) to avoid flicker while idle.
+    hidRemoteDrawHeader(transport, connected, "Host slots");
+
+    int top = 0;
+    int bottom = 0;
+    hidContentBounds(top, bottom);
+    tft.fillRect(0, top, tftWidth, bottom - top, KVX_BG);
+
+    const int slotCount = KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT;
+    const int cols = 2;
+    const int rows = (slotCount + cols - 1) / cols;
+    const int gap = 4;
+    const int padX = 6;
+    const int areaH = bottom - top;
+    const int rowH = (areaH - gap * (rows - 1)) / rows;
+    const int colW = (tftWidth - padX * 2 - gap) / cols;
+
+    for (int i = 0; i < slotCount; i++) {
+        const int col = i % cols;
+        const int row = i / cols;
+        const int x = padX + col * (colW + gap);
+        const int y = top + row * (rowH + gap);
+        const int slot = i + 1;
+        String addr = kvxConfig.getHidRemoteHostSlot(slot);
+
+        uint16_t border = 0xF800; // red = empty
+        String label = String(slot) + " —";
+        if (addr.length()) {
+            const bool isLive = connected && gHidRemoteSession.isConnectedToAddr(addr);
+            border = isLive ? KVX_GREEN : KVX_ORANGE;
+            label = String(slot) + " " + gHidRemoteSession.displayNameForAddr(addr);
+        }
+
+        tft.fillRoundRect(x, y, colW, rowH, 3, 0x1082);
+        tft.drawRoundRect(x, y, colW, rowH, 3, border);
+        tft.fillCircle(x + 8, y + rowH / 2, 3, border);
+
+        tft.setTextSize(1);
+        tft.setTextColor(border, 0x1082);
+        int maxChars = (colW - 18) / 6;
+        if (maxChars < 4) maxChars = 4;
+        String shown = label.substring(0, maxChars);
+        tft.drawString(shown, x + 14, y + (rowH - 8) / 2);
+    }
+
+    hidRemoteDrawFooter("1-8 select  Ok continue  ESC exit");
 }
 
 int hidRemotePickFromList(const char *title, const std::vector<String> &labels, int startIndex) {

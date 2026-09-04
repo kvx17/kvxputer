@@ -114,10 +114,12 @@ public:
     uint8_t pahubChannels[6] = {};
 
     // HID Remote
+    static const int HID_REMOTE_HOST_SLOT_COUNT = 8;
     int hidRemoteTransport = 0; // 0=USB, 1=BLE
     String hidRemoteBleName = "Keyboard";
     String hidRemoteHostName = "";
     String hidRemotePreferredHost = ""; // bonded BLE address; empty = any bonded
+    String hidRemoteHostSlots[HID_REMOTE_HOST_SLOT_COUNT]; // 1-based UI maps to index 0..7
     std::map<String, String> hidRemoteHostAliases = {}; // addr -> display name
     int hidRemoteLastMode = 0;
     int hidRemoteMouseSensitivity = 5;
@@ -260,6 +262,12 @@ public:
     void setHidRemoteHostAlias(const String &addr, const String &name);
     void clearHidRemoteHostAlias(const String &addr);
     String getHidRemoteHostAlias(const String &addr) const;
+    String getHidRemoteHostSlot(int index1to8) const;
+    void setHidRemoteHostSlot(int index1to8, const String &addr);
+    void clearHidRemoteHostSlot(int index1to8);
+    void clearAllHidRemoteHostSlots();
+    int findHidRemoteHostSlotForAddr(const String &addr) const; // 1..8 or 0
+    int findEmptyHidRemoteHostSlot() const;                     // 1..8 or 0
     void setHidRemoteLastMode(int value);
     void setHidRemoteMouseSensitivity(int value);
     void setHidRemoteJoyInvertY(bool value);

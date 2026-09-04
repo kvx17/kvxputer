@@ -140,53 +140,58 @@ static constexpr int kPresenterF5 = 10;
 #if defined(HAS_KEYBOARD)
 static char presenterLastToken = 0;
 static unsigned long presenterLastFire = 0;
+static uint32_t presenterHeldMask = 0;
 
 static void presenterResetInputState() {
     presenterLastToken = 0;
     presenterLastFire = 0;
+    presenterHeldMask = 0;
 }
 
+// Rising-edge only — level polling was spamming "," when a matrix/key state stuck.
 static int presenterPollDirectKey() {
     Keyboard.update();
     Keyboard_Class::KeysState status = Keyboard.keysState();
 
     char token = 0;
     int action = -1;
+    uint32_t nowHeld = 0;
+
+    auto consider = [&](char ch, int act, int bit) {
+        if (!Keyboard.isKeyPressed(ch)) return;
+        nowHeld |= (1u << bit);
+        if (!(presenterHeldMask & (1u << bit))) {
+            token = ch;
+            action = act;
+        }
+    };
 
     if (status.fn) {
-        if (Keyboard.isKeyPressed(';')) {
-            token = ';';
-            action = 0;
-        } else if (Keyboard.isKeyPressed('.')) {
-            token = '.';
-            action = 1;
-        } else if (Keyboard.isKeyPressed(',')) {
-            token = ',';
-            action = 2;
-        } else if (Keyboard.isKeyPressed('/')) {
-            token = '/';
-            action = 3;
-        }
+        consider(';', 0, 0);
+        consider('.', 1, 1);
+        consider(',', 2, 2);
+        consider('/', 3, 3);
     } else if (status.enter) {
-        token = '\n';
-        action = kPresenterNext;
+        nowHeld |= (1u << 4);
+        if (!(presenterHeldMask & (1u << 4))) {
+            token = '\n';
+            action = kPresenterNext;
+        }
     } else {
         struct Map {
             char ch;
             int act;
+            int bit;
         };
         static const Map kMap[] = {
-            {';', 0},  {'.', 1},  {',', 2},  {'/', 3},  {' ', 4},  {'[', 5},  {']', 6},
-            {'h', 7},  {'H', 7},  {'e', 8},  {'E', 8},  {'p', 9},  {'P', 9},  {'5', kPresenterF5},
+            {';', 0, 5},  {'.', 1, 6},  {',', 2, 7},  {'/', 3, 8},  {' ', 4, 9},
+            {'[', 5, 10}, {']', 6, 11}, {'h', 7, 12}, {'H', 7, 12}, {'e', 8, 13},
+            {'E', 8, 13}, {'p', 9, 14}, {'P', 9, 14}, {'5', kPresenterF5, 15},
         };
-        for (const auto &m : kMap) {
-            if (Keyboard.isKeyPressed(m.ch)) {
-                token = m.ch;
-                action = m.act;
-                break;
-            }
-        }
+        for (const auto &m : kMap) consider(m.ch, m.act, m.bit);
     }
+
+    presenterHeldMask = nowHeld;
 
     if (action < 0) {
         presenterLastToken = 0;
@@ -194,7 +199,8 @@ static int presenterPollDirectKey() {
     }
 
     unsigned long now = millis();
-    if (token != presenterLastToken || now - presenterLastFire >= 280) {
+    // No auto-repeat: one event per press
+    if (token != presenterLastToken || now - presenterLastFire >= 50) {
         presenterLastToken = token;
         presenterLastFire = now;
         return action;
@@ -220,6 +226,7 @@ static void presenterClearNavFlags() {
     presenterResetInputState();
     // Drain any queued KeyStroke from selecting the mode
     (void)_getKeyPress();
+    (void)_getKeyPress();
 #endif
 }
 
@@ -243,10 +250,17 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
             draw();
         }
 
+        // Keep Unit Scroll / Joystick from leaving sticky PrevPress (maps to ",")
+        PrevPress = false;
+        NextPress = false;
+        UpPress = false;
+        DownPress = false;
+        PrevPagePress = false;
+        NextPagePress = false;
+
         int sent = -1;
 #if defined(HAS_KEYBOARD)
-        // Cardputer has dedicated keys; ignore Prev/Next/Up/Down flags — Unit Scroll
-        // / Joystick drift maps those to "," / previous and looks like a stuck key.
+        // Cardputer: rising-edge key poll only (no Prev/Next flags)
         sent = presenterPollDirectKey();
 #else
         if (check(UpPress)) sent = 0;
@@ -283,7 +297,6 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
                 }
             }
 #if defined(HAS_KEYBOARD)
-            // Optional: Ok / shoulder still advances when no other key
             else if (check(SelPress)) sent = kPresenterNext;
 #endif
         }

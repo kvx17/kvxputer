@@ -1,14 +1,27 @@
 # Local reference material (`resources/`)
 
-The `resources/` directory is **gitignored**. It holds inspiration and demo material only — nothing here is compiled into kvxputer firmware.
+The `resources/` directory is **gitignored**. It is a **development-only** snapshot for comparing ports. Firmware never compiles it, includes it, or opens it at runtime.
 
-Keep these files locally for porting and comparison:
+A clone without `resources/` must still **build and run**.
 
 | Path | Purpose |
 |------|---------|
-| `resources/Evil-Cardputer-v1-5-4.ino` | Evil-Cardputer v1.5.4 snapshot |
-| `resources/sd_files/` | Example SD/LittleFS assets (themes, portals, IR, scripts) |
+| `resources/Evil-Cardputer-v1-5-4.ino` | Evil-Cardputer v1.5.4 — compare while porting |
+| `resources/Evil-M5Project-main/` | Other-device sketches and slave `.ino` (optional local copy) |
+| `resources/sd_files/` | Example SD content (themes, IR libraries) |
 
-If `resources/` is missing after clone, create it and add your own copies of the reference files.
+If `resources/` is missing after clone, firmware is unchanged. Companion sketches live in tracked [`tools/companions/`](../tools/companions/). Runtime files use [`kvx::paths`](../src/root/storage/paths.h) on SD or LittleFS — never `resources/`.
 
-Active firmware lives under `src/`, `tools/porting/boards/`, `tools/build/data/`, and `platformio.ini`.
+## Storage
+
+| Store | Size (Cardputer ADV) | Use |
+|-------|----------------------|-----|
+| App flash | ~4.9 MB | Firmware (`m5stack-cardputer`) |
+| LittleFS | 3 MB | Small factory seed via `pio run -e m5stack-cardputer -t uploadfs` ([`tools/build/data/`](../tools/build/data/)) |
+| SD card | user | Large wordlists, ESL bitmaps, IR libraries, [companion `.bin`](../tools/sd_pack/README.md) |
+
+[`getFsStorage()`](../src/root/storage/sd_functions.cpp) prefers a mounted SD card, then LittleFS. Missing optional files must show an error, not crash.
+
+Copy [`tools/sd_pack/support_files/`](../tools/sd_pack/README.md) to the card root as `/support_files/`.
+
+Active firmware: `src/`, `tools/porting/boards/`, `tools/build/data/`, `tools/companions/`, `platformio.ini`.

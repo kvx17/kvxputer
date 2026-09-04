@@ -131,6 +131,8 @@ Inside apps, navigation uses the same keys; back returns to the channel grid.
 | `tools/build/embedded_resources/` | WebUI assets baked into firmware |
 | `platformio.ini`, `tools/porting/boards/`, `lib/` | Build and board porting |
 | `docs/` | Architecture, feature maps, HID/IR guides |
+| `tools/sd_pack/` | Copy-to-SD assets and companion `.bin` |
+| `tools/companions/` | Optional extra-ESP sketches (not Cardputer firmware) |
 | `resources/` | Gitignored reference material only — not compiled |
 
 ---
@@ -139,6 +141,9 @@ Inside apps, navigation uses the same keys; back returns to the channel grid.
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Feature map](docs/EVIL_FEATURE_MAP.md)
+- [Reference / storage](docs/REFERENCE.md)
+- [SD pack](tools/sd_pack/README.md)
+- [Companion firmware](tools/companions/README.md)
 - [WiFi / raw frames](docs/WIFI_P0_AND_RAW_FRAMES.md)
 - [kvxkeyboard HID](docs/HID_REMOTE.md)
 - [HID / BadUSB](docs/HID_BADUSB.md)

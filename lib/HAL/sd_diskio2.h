@@ -30,5 +30,7 @@ uint32_t sdcard_num_sectors(uint8_t pdrv);
 uint32_t sdcard_sector_size(uint8_t pdrv);
 bool sd_read_raw(uint8_t pdrv, uint8_t *buffer, uint32_t sector);
 bool sd_write_raw(uint8_t pdrv, uint8_t *buffer, uint32_t sector);
+bool sd_read_sectors(uint8_t pdrv, uint8_t *buffer, uint32_t sector, uint32_t count);
+bool sd_write_sectors(uint8_t pdrv, uint8_t *buffer, uint32_t sector, uint32_t count);
 
 #endif /* _SD_DISKIO_H_ */

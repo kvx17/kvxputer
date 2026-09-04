@@ -23,6 +23,7 @@ private:
     void pahubMenu(void);
     void pahubChannelMenu(uint8_t ch);
     void pahubScanMenu(void);
+    void companionBinsMenu(void);
 };
 
 #endif

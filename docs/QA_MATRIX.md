@@ -22,9 +22,16 @@ Source domains: `src/menu/<id>/` — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | `menu/wifi` → Evil Portal / Wifi Atks | P0 WiFi path works |
 | `menu/wifi` → Probes / Handshakes / Wall Of Flipper / Dead Drop / Open Wifi / Aircrack / CSI Radar / C5 Serial | Addon menus open (`EVIL_EXTENSIONS`) |
 | `menu/netops` carousel tile | Present after WiFi; Bruce rows + P1/P2 addon menus |
-| `menu/ble` → kvxkeyboard HID + Name Flood / AirTag / FindMy | HID works; addons open |
+| `menu/ble` → kvxkeyboard HID + Name Flood / AirTag / FindMy / Skimmer | HID works; addons open |
+| `menu/wifi` → C5 Serial | UART host; optional companion `.bin` list |
+| `menu/infrared` → TagTinker ESL | PP4 ping/LED/page-flip; assets on SD `IR_ESL` |
+| `menu/wifi` → CSI Radar | RSSI hop / STA CSI / ESP-NOW |
+| `menu/netops` → SkyJack / LDAP / Autodiscover / CIW / Hijack | Addon logic runs (`EVIL_EXTENSIONS`) |
+| `menu/others` → LLM Chat | HTTP stream; UART if `HAS_LLM_MODULE` |
+| Modules → Companion bins | Lists `/support_files/companions/*.bin` or explains SD pack |
+| SD missing | Optional assets error; firmware still runs |
+| SD present with `tools/sd_pack` | Wordlists, CIW JSON, companion bins resolve |
 | `menu/gps` → Wardriving → Wardriving Master | Addon under existing Wardriving submenu |
-| `menu/infrared` → TagTinker ESL | Addon listed with other IR tools |
 | `menu/infrared` → kvxputer universal remote | Menu opens; Learn/Use/Delete/Button Map/Settings/About |
 | Universal remote learn all 12 | Saves `kremote_<name>.ir` under `/support_files/infrared/remotes/` |
 | Universal remote skip mid-learn | Esc early-save keeps accepted slots; Right skips a button |
@@ -34,9 +41,7 @@ Source domains: `src/menu/<id>/` — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | Universal remote Portrait | Pad rotates; exits restore previous rotation |
 | Universal remote Custom IR | `kremote_*.ir` opens in Custom IR / Flipper-compatible |
 | Lite env + universal remote | `m5stack-cardputer-lite` still links kvxputer universal remote |
-| `menu/others` → LLM Chat | Hardware-missing message unless `HAS_LLM_MODULE` |
-| SD missing | SD error handling (no hard-lock) |
-| Flash size | Full `m5stack-cardputer`; use `m5stack-cardputer-lite` if oversize |
+| Flash size | Full build ~4.2 MB app image on 8 MB (fits `custom_8Mb`); lite if oversize |
 | Legacy SD paths | First boot migrates `/Bruce*` → `/support_files/*` |
 
 ## Lite env

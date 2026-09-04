@@ -32,7 +32,7 @@ kvxputer separates concerns into three roots on both the **device filesystem** a
     └── gps/
 ```
 
-Firmware uses a three-root on-device layout. Reference/inspiration files live in gitignored `resources/` — see [REFERENCE.md](REFERENCE.md).
+Firmware uses a three-root on-device layout. Optional development reference lives in gitignored `resources/` — see [REFERENCE.md](REFERENCE.md). Large assets and companion `.bin` files go on SD (`tools/sd_pack/`); companion source is in `tools/companions/`.
 
 ## Source layout
 
