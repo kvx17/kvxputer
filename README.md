@@ -1,6 +1,6 @@
 # kvxputer
 
-Firmware for the M5Stack **Cardputer** and **Cardputer ADV** — a pocket toolkit for wireless research, network analysis, and hardware experimentation.
+Firmware for the M5Stack **Cardputer** and **Cardputer ADV** — a pocket toolkit for wireless research, network analysis, and hardware experimentation. A secondary PlatformIO env also builds for **M5StickS3** (same branch, hardware-limited).
 
 kvxputer started with ideas from [Bruce](https://github.com/BruceDevices/Firmware) and [Evil-Cardputer](https://github.com/7h30th3r0n3/Evil-M5project). The architecture, UI, module layout, and feature set have diverged far enough that it stands on its own. What remains is a new firmware with its own identity, not a maintained fork.
 
@@ -17,13 +17,14 @@ Built for people who carry a Cardputer into labs, classrooms, and authorized ass
 - **Universal remote** — learn/replay IR profiles (Flipper `.ir`) with [kremote](docs/KREMOTE.md)
 - **Optional Grove gear** — [Unit Scroll](https://docs.m5stack.com/en/unit/UNIT-Scroll) and [Unit PaHub v2.1](https://docs.m5stack.com/en/unit/Unit-PaHub%20v2.1) on PORT.A
 - **Lite build** — smaller flash footprint when you do not need every module
+- **StickS3** — same firmware tree via `m5stack-sticks3` (2 buttons, no keyboard; see below)
 
 ---
 
 ## Requirements
 
 - [PlatformIO](https://platformio.org/) (`pio` on PATH)
-- M5Stack Cardputer or Cardputer ADV
+- M5Stack Cardputer or Cardputer ADV (primary), or M5StickS3 (secondary)
 - USB data cable
 - Linux: membership in `uucp` / `dialout` for serial upload
 
@@ -42,13 +43,20 @@ Lite (fewer features, smaller image):
 pio run -e m5stack-cardputer-lite
 ```
 
+M5StickS3 (button nav, no keyboard; Evil extensions on when flash allows):
+
+```bash
+pio run -e m5stack-sticks3
+```
+
 A successful build writes a merged flash image at the project root:
 
 ```text
 kvxputer-m5stack-cardputer.bin
+kvxputer-m5stack-sticks3.bin
 ```
 
-The raw app image also lives at `.pio/build/m5stack-cardputer/firmware.bin` (offset `0x10000` if flashing manually). Prefer the merged `kvxputer-*.bin` at offset `0x0`.
+The raw app image also lives at `.pio/build/<env>/firmware.bin` (offset `0x10000` if flashing manually). Prefer the merged `kvxputer-*.bin` at offset `0x0`.
 
 Seed LittleFS after build when you want factory profiles and portals on device:
 
@@ -71,11 +79,22 @@ pio device list
 pio run -e m5stack-cardputer -t upload --upload-port /dev/ttyACM0
 ```
 
+StickS3:
+
+```bash
+pio run -e m5stack-sticks3 -t upload
+```
+
 **esptool + merged bin**
 
 ```bash
 pio pkg exec -p tool-esptoolpy -- esptool --chip esp32s3 \
   --port /dev/ttyACM0 write_flash 0x0 kvxputer-m5stack-cardputer.bin
+```
+
+```bash
+pio pkg exec -p tool-esptoolpy -- esptool --chip esp32s3 \
+  --port /dev/ttyACM0 write_flash 0x0 kvxputer-m5stack-sticks3.bin
 ```
 
 If upload fails, hold the shoulder button (GPIO0) while plugging USB, then retry.
@@ -88,6 +107,18 @@ pio device monitor -e m5stack-cardputer
 
 ---
 
+## M5StickS3 notes
+
+Same branch and shared `src/` as Cardputer; board HAL and flags live under `tools/porting/boards/m5stack-sticks3/`.
+
+| | Cardputer | StickS3 |
+|---|-----------|---------|
+| Input | Full keyboard (+ optional Unit Scroll) | Side: tap = next item, hold = previous (scroll order). Main: tap = OK, hold = back |
+| USB / BLE HID | Yes | Yes (button / on-screen entry; no number-key host slots) |
+| IR | TX + Grove | TX/RX onboard; EXT 5V enabled in Infrared menu |
+| Flash artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-sticks3.bin` |
+
+Cardputer ADV extras (TCA8418 keyboard path, LoRa Cap, Unit Scroll/PaHub defaults) stay off on StickS3.
 ## Using the device
 
 ### Main menu

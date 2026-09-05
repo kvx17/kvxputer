@@ -10,11 +10,16 @@
 #if defined(EVIL_EXTENSIONS)
     #include "menu/infrared/tagtinker/tagtinker.h"
 #endif
+#if defined(ARDUINO_M5STICK_S3)
+#include <M5Unified.h>
+void _setup_codec_speaker(bool enable);
+#endif
 
 void IRMenu::optionsMenu() {
 #if defined(ARDUINO_M5STICK_S3)
     bool prevPower = M5.Power.getExtOutput();
-    M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT
+    M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT (Grove/Hat/IR)
+    _setup_codec_speaker(false); // mute amp during IR (avoids RX noise)
 #endif
     options = {
         {"kvxputer universal remote", kremoteMenu},

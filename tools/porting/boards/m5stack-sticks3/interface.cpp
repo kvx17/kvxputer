@@ -8,48 +8,10 @@
 #define TFT_BRIGHT_Bits 8
 #define TFT_BRIGHT_FREQ 5000
 
-constexpr uint32_t kDwDoublePressWindowMs = 250;
-constexpr uint32_t kDwLongPressMs = 600;
-constexpr uint32_t kDwDebounceMs = 8;
+// Side (DW): tap = Down (scroll next), hold = Up (scroll prev)
+// Main (SEL): tap = OK/Sel, hold = Back/Esc
+constexpr uint32_t kBtnLongPressMs = 600;
 
-static volatile uint32_t dw_last_isr_ms = 0;
-static volatile uint32_t dw_press_ms = 0;
-static volatile uint32_t dw_first_release_ms = 0;
-static volatile bool dw_is_down = false;
-static volatile bool dw_waiting = false;
-static volatile bool dw_double_ready = false;
-static volatile bool dw_long_seen = false;
-
-void IRAM_ATTR isr_dw_btn() {
-    uint32_t now = millis();
-    if (now - dw_last_isr_ms < kDwDebounceMs) return;
-    dw_last_isr_ms = now;
-    bool pressed = (digitalRead(DW_BTN) == BTN_ACT);
-    if (pressed) {
-        dw_is_down = true;
-        dw_press_ms = now;
-        return;
-    }
-
-    dw_is_down = false;
-    if (dw_long_seen) {
-        dw_long_seen = false;
-        dw_waiting = false;
-        return;
-    }
-
-    if ((now - dw_press_ms) < kDwLongPressMs) {
-        if (dw_waiting && (now - dw_first_release_ms) <= kDwDoublePressWindowMs) {
-            dw_double_ready = true;
-            dw_waiting = false;
-        } else {
-            dw_waiting = true;
-            dw_first_release_ms = now;
-        }
-    } else {
-        dw_waiting = false;
-    }
-}
 /***************************************************************************************
 ** Function name: _setup_gpio()
 ** Location: main.cpp
@@ -88,7 +50,6 @@ void _setup_gpio() {
     pinMode(46, OUTPUT);
     digitalWrite(46, LOW); // Infrared LED Off
 
-    attachInterrupt(DW_BTN, isr_dw_btn, CHANGE);
     pinMode(TFT_BL, OUTPUT);
     kvxConfig.colorInverted = 0;
 }
@@ -140,54 +101,73 @@ int getBattery() {
 
 /*********************************************************************
 ** Function: InputHandler
-** Handles the variables PrevPress, NextPress, SelPress, AnyKeyPress and EscPress
+** Side (DW): tap = DownPress, hold = UpPress (scroll order like Unit Scroll).
+** Main (SEL): tap = Sel, hold = Esc.
+** Use Up/Down — not Next/Prev — so the channel grid walks 1→2→3… (column-major)
+** instead of jumping sideways 1→3→5.
 **********************************************************************/
 void InputHandler(void) {
-    static unsigned long tm = 0;
+    static bool selWasDown = false;
+    static bool dwWasDown = false;
+    static unsigned long selDownAt = 0;
+    static unsigned long dwDownAt = 0;
+    static bool selLongFired = false;
     static bool dwLongFired = false;
+    static unsigned long tm = 0;
+
     unsigned long now = millis();
-    if (now - tm < 200 && !LongPress) return;
+    if (now - tm < 180 && !LongPress) return;
 
-    bool selPressed = (digitalRead(SEL_BTN) == BTN_ACT);
-    bool dwPressed = dw_is_down;
-    bool dwWaiting = dw_waiting;
-    bool dwDoubleReady = dw_double_ready;
-    unsigned long dwPressStart = dw_press_ms;
-    unsigned long dwFirstRelease = dw_first_release_ms;
+    bool selDown = (digitalRead(SEL_BTN) == BTN_ACT);
+    bool dwDown = (digitalRead(DW_BTN) == BTN_ACT);
 
-    bool dwNextReady = dwWaiting && !dwPressed && (now - dwFirstRelease) > kDwDoublePressWindowMs;
+    if (!(selDown || dwDown || selWasDown || dwWasDown)) return;
 
-    if (!(selPressed || dwPressed || dwDoubleReady || dwNextReady)) return;
+    // Returns true if the press should perform a menu action (false = woke screen only).
+    auto actAfterWake = [&]() -> bool {
+        if (wakeUpScreen()) return false;
+        AnyKeyPress = true;
+        return true;
+    };
 
-    if (!wakeUpScreen()) AnyKeyPress = true;
-    else return;
-
-    if (selPressed) {
-        SelPress = true;
-        tm = now;
+    // --- Side button: tap Down, hold Up ---
+    if (dwDown && !dwWasDown) {
+        dwWasDown = true;
+        dwDownAt = now;
+        dwLongFired = false;
     }
-    if (dwPressed) {
-        if (!dwLongFired && (now - dwPressStart) > kDwLongPressMs) {
-            EscPress = true;
-            dwLongFired = true;
-            dw_waiting = false;
-            dw_double_ready = false;
-            dw_long_seen = true;
+    if (dwDown && dwWasDown && !dwLongFired && (now - dwDownAt) >= kBtnLongPressMs) {
+        dwLongFired = true;
+        tm = now;
+        if (actAfterWake()) UpPress = true;
+    }
+    if (!dwDown && dwWasDown) {
+        if (!dwLongFired && (now - dwDownAt) < kBtnLongPressMs) {
             tm = now;
+            if (actAfterWake()) DownPress = true;
         }
-    } else if (dwLongFired) {
+        dwWasDown = false;
         dwLongFired = false;
     }
 
-    if (dwDoubleReady) {
-        PrevPress = true;
-        dw_double_ready = false;
-        dw_waiting = false;
+    // --- Main button: tap Sel (OK), hold Esc (back) ---
+    if (selDown && !selWasDown) {
+        selWasDown = true;
+        selDownAt = now;
+        selLongFired = false;
+    }
+    if (selDown && selWasDown && !selLongFired && (now - selDownAt) >= kBtnLongPressMs) {
+        selLongFired = true;
         tm = now;
-    } else if (dwNextReady) {
-        NextPress = true;
-        dw_waiting = false;
-        tm = now;
+        if (actAfterWake()) EscPress = true;
+    }
+    if (!selDown && selWasDown) {
+        if (!selLongFired && (now - selDownAt) < kBtnLongPressMs) {
+            tm = now;
+            if (actAfterWake()) SelPress = true;
+        }
+        selWasDown = false;
+        selLongFired = false;
     }
 }
 

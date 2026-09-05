@@ -44,6 +44,20 @@ Source domains: `src/menu/<id>/` — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | Flash size | Full build ~4.2 MB app image on 8 MB (fits `custom_8Mb`); lite if oversize |
 | Legacy SD paths | First boot migrates `/Bruce*` → `/support_files/*` |
 
+## M5StickS3 (`m5stack-sticks3`)
+
+Same branch as Cardputer; feature limits are board HAL + flags (no keyboard, 2 buttons). Merged artifact: `kvxputer-m5stack-sticks3.bin`.
+
+| Scenario | Expect |
+|----------|--------|
+| Boot | Channel menu scrolls 1→2→3…; side tap=next / hold=prev; main tap=OK / hold=back |
+| Infrared enter/exit | EXT 5V on while in IR menu; speaker amp muted for RX; restored EXT on exit |
+| USB HID | `USB_as_HID`; kvxkeyboard modes usable without physical keyboard |
+| BLE HID | Pair/connect via buttons; host-slot number keys N/A |
+| WiFi / NetOps / BLE Evil | Menus present when `EVIL_EXTENSIONS=1` (default on StickS3) |
+| Hat SPI (SD / CC1101 / NRF24) | Per `tools/porting/boards/m5stack-sticks3/connections.md` |
+| Cardputer regression | `pio run -e m5stack-cardputer` still succeeds after StickS3 shared-src changes |
+
 ## Lite env
 
 `tools/porting/boards/m5stack-cardputer/m5stack-cardputer.ini` sibling env `m5stack-cardputer-lite` disables `EVIL_EXTENSIONS` and enables `LITE_VERSION` when flash is tight.

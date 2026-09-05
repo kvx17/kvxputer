@@ -367,7 +367,9 @@ static void keyboardPressStroke(HidRemoteTransportSession &s, const keyStroke &k
             mirror += "[Tab]";
         } else {
             uint8_t hidKey = (uint8_t)k;
+#if defined(KEY_OPT)
             if (hidKey == KEY_OPT) hidKey = KEY_LEFT_GUI;
+#endif
             s.keyboardHid->press(hidKey);
             if (hidKey >= KEY_LEFT_CTRL && hidKey <= KEY_LEFT_GUI) {
                 if (hidKey == KEY_LEFT_GUI) mirror += "[Win]";
@@ -380,11 +382,19 @@ static void keyboardPressStroke(HidRemoteTransportSession &s, const keyStroke &k
     }
 
     for (uint8_t mk : key.modifier_keys) {
+#if defined(KEY_OPT)
         uint8_t hidKey = mk == KEY_OPT ? KEY_LEFT_GUI : mk;
+#else
+        uint8_t hidKey = mk;
+#endif
         s.keyboardHid->press(hidKey);
     }
     for (uint8_t hk : key.hid_keys) {
+#if defined(KEY_OPT)
         uint8_t hidKey = hk == KEY_OPT ? KEY_LEFT_GUI : hk;
+#else
+        uint8_t hidKey = hk;
+#endif
         s.keyboardHid->press(hidKey);
     }
 }
@@ -883,12 +893,14 @@ static bool runMouse(HidRemoteTransportSession &s) {
             joyBtnHeld = false;
         }
 
+#ifdef HAS_ENCODER
         int steps = drainRotarySteps();
         if (steps != 0) {
             s.mouseMove(0, 0, (int8_t)(steps > 0 ? 1 : -1));
             flashId = 6;
             moved = true;
         }
+#endif
 
         if (moved) {
             flashUntil = millis() + 100;
