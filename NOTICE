@@ -1,0 +1,38 @@
+kvxputer — Cardputer ADV firmware
+=================================
+
+This project forks and extends Bruce firmware for M5Stack Cardputer ADV,
+with optional M5 Unit Scroll support and ports of Evil-Cardputer–unique tools.
+
+The active firmware tree is at the repository root (platformio.ini, src/, boards/).
+The resources/ directory is an optional local reference and is not compiled.
+Companion ESP sketches live in tools/companions/.
+
+Bruce firmware
+--------------
+Copyright (C) BruceDevices / Bruce contributors
+Upstream: https://github.com/BruceDevices/Firmware
+License: GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)
+See: LICENSE and THIRD_PARTY.md
+
+Evil-M5Project / Evil-Cardputer
+-------------------------------
+Copyright (c) 7h30th3r0n3 and contributors
+Upstream: https://github.com/7h30th3r0n3/Evil-M5project
+Reference snapshot: resources/Evil-Cardputer-v1-5-4.ino
+License: see copyright header in the .ino (permissive / MIT-style grant)
+
+Ported Evil-derived modules under src/menu/<domain>/<addon>/ retain upstream
+copyright notices in their source headers. Combined distribution of this
+firmware is under AGPL-3.0-or-later because it is based on Bruce.
+
+M5Stack Unit Scroll
+-------------------
+Hardware docs: https://docs.m5stack.com/en/unit/UNIT-Scroll
+Library: https://github.com/m5stack/M5Unit-Scroll (MIT)
+
+M5Stack Unit Joystick2
+----------------------
+Hardware docs: https://docs.m5stack.com/en/unit/Unit-JoyStick2
+Library: https://github.com/m5stack/M5Unit-Joystick2 (MIT)
+

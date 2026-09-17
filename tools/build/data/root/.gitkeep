@@ -1,0 +1,4 @@
+# kvxputer data partition layout (LittleFS seed)
+#
+# root/           system assets baked into /root on device
+# support_files/  factory profiles and templates under /support_files
