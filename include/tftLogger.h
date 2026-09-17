@@ -92,6 +92,9 @@ public:
     void setLogging(bool _log = true);
     bool inline getLogging(void) { return logging; };
 
+    bool beginFrame();
+    void endFrame();
+
     // Disables tft writings on the display,
     // Commands wont be passed to the display if isSleeping==true
     // display will still be logged, in order to keep WebUI Navigator working

@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 void drawKvxTopBar(const char *leftLabel) {
+    TftFrame frame;
     const uint16_t bg = KVX_DEFAULT_BGCOLOR;
     const uint16_t purple = DEFAULT_PRICOLOR;
     const uint16_t green = DEFAULT_SECCOLOR;
@@ -87,6 +88,7 @@ static void drawKvxSubmenuRow(
 }
 
 void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title) {
+    TftFrame frame;
     const uint16_t bg = KVX_DEFAULT_BGCOLOR;
 
     const int lineH = FM * LH + 4;

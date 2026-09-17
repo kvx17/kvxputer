@@ -802,6 +802,7 @@ Opt_Coord drawOptions(
     // drawStatusBar();
 
     int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
+    TftFrame frame;
     tft.drawPixel(0, 0, kvxConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
@@ -977,6 +978,7 @@ void drawStatusBar() {
 }
 
 void drawMainBorder(bool clear) {
+    TftFrame frame;
     if (clear) {
         tft.drawPixel(0, 0, 0);
         tft.fillScreen(kvxConfig.bgColor);
@@ -994,6 +996,7 @@ void drawMainBorder(bool clear) {
 }
 
 void drawMainBorderWithTitle(const String &title, bool clear) {
+    TftFrame frame;
     drawMainBorder(clear);
     printTitle(title);
 }
@@ -1090,6 +1093,7 @@ Opt_Coord listFiles(int index, std::vector<FileList> fileList, const char *title
     const uint16_t green = DEFAULT_SECCOLOR;
 
     if (title == nullptr || title[0] == '\0') title = "Files";
+    TftFrame frame;
     tft.fillRect(0, KVX_TOPBAR_H + 1, tftWidth, tftHeight - KVX_TOPBAR_H - 1, bg);
     drawKvxTopBar(title);
 

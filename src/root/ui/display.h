@@ -15,6 +15,14 @@
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
 
+// Draw offscreen (M5Canvas / TFT_eSprite) then blit once. Nested frames share one buffer.
+struct TftFrame {
+    TftFrame() { tft.beginFrame(); }
+    ~TftFrame() { tft.endFrame(); }
+    TftFrame(const TftFrame &) = delete;
+    TftFrame &operator=(const TftFrame &) = delete;
+};
+
 void panelSleep(bool on);
 void turnOffDisplay();
 bool wakeUpScreen();

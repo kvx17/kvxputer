@@ -68,6 +68,7 @@ static void drawChannelTile(int x, int y, int w, int h, bool selected, MenuItemI
 }
 
 static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items) {
+    TftFrame frame;
     const int count = (int)items.size();
     if (count == 0) return;
 

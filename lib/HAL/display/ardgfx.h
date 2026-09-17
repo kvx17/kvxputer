@@ -353,6 +353,9 @@ public:
     int16_t fontHeight(int16_t font = 1) const;
     Arduino_GFX *native();
 
+    bool beginFrame() { return false; }
+    void endFrame(bool present = true) { (void)present; }
+
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {
         if (!_gfx || !data) return;

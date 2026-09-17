@@ -22,6 +22,7 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - **Grove ecosystem** — Scroll, Joystick, PaHub, RFID, RF, IR, GPS, and more on PORT.A
 - **Lite / StickS3 builds** — smaller flash or button-only navigation when needed
 
+
 <img src="docs/menu.gif" alt="kvxputer channel menu" width="360" />
 
 ---

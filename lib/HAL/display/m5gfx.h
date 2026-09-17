@@ -79,8 +79,8 @@ public:
 
     size_t write(uint8_t c);
     size_t write(const uint8_t *buffer, size_t size);
-    template <typename T> size_t print(const T &val) { return M5.Display.print(val); }
-    template <typename T> size_t println(const T &val) { return M5.Display.println(val); }
+    template <typename T> size_t print(const T &val) { return drawDst().print(val); }
+    template <typename T> size_t println(const T &val) { return drawDst().println(val); }
     size_t println();
 
     size_t printf(const char *fmt, ...);
@@ -97,6 +97,9 @@ public:
     int16_t fontHeight(int16_t font = 1) const;
     lgfx::LGFX_Device *native();
 
+    bool beginFrame();
+    void endFrame(bool present = true);
+
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {
         if (!data) return;
@@ -104,7 +107,7 @@ private:
             for (int32_t col = 0; col < w; ++col) {
                 uint16_t color = data[row * w + col];
                 if (_swapBytes) color = static_cast<uint16_t>((color >> 8) | (color << 8));
-                M5.Display.drawPixel(x + col, y + row, color);
+                drawDst().drawPixel(x + col, y + row, color);
             }
         }
     }
@@ -120,6 +123,14 @@ private:
     uint8_t _textDatum = 0;
     uint8_t _textFont = 1;
     uint8_t _rotation = 0;
+
+    lgfx::LGFXBase &drawDst();
+    bool ensureCanvas();
+    void syncCanvasState();
+
+    M5Canvas *_fb = nullptr;
+    bool _buffering = false;
+    uint8_t _frameDepth = 0;
 };
 
 class tft_sprite : private lgfx::LGFX_Sprite {
