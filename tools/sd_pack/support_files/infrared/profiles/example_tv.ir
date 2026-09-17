@@ -1,0 +1,6 @@
+# Placeholder IR profile — replace with real .ir captures on device.
+name: Example TV
+type: parsed
+protocol: NEC
+address: 0x00
+command: 0x45

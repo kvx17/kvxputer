@@ -1,0 +1,57 @@
+---
+name: kvxputer PR build
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - "**.yml"
+      - "**.h"
+      - "**.cpp"
+      - "**.py"
+      - "**.html"
+      - "**.css"
+      - "**.js"
+      - "**.ini"
+      - "**.json"
+      - "**.csv"
+  workflow_dispatch:
+
+jobs:
+  compile:
+    name: Build m5stack-cardputer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-multilib libc6-dev-i386
+
+      - name: Install PlatformIO
+        run: pip install platformio esptool intelhex
+
+      - name: Build firmware
+        run: platformio run -e m5stack-cardputer
+
+      - name: Path lint
+        run: ./scripts/check_no_bruce_paths.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvxputer-m5stack-cardputer
+          path: kvxputer-m5stack-cardputer.bin
+          retention-days: 5
+          if-no-files-found: error
