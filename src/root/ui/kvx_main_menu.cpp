@@ -9,20 +9,10 @@
 #include "root/app/app_catalog.h"
 #include <globals.h>
 
-static const uint16_t KVX_PURPLE = DEFAULT_PRICOLOR;
-static const uint16_t KVX_GREEN = DEFAULT_SECCOLOR;
-static const uint16_t KVX_BG = KVX_DEFAULT_BGCOLOR;
-
 static constexpr int KVX_COLS = 3;
 static constexpr int KVX_ROWS = 2;
 static constexpr int KVX_SLOTS = KVX_COLS * KVX_ROWS;
 static constexpr int KVX_FOOTER_H = 26;
-
-void kvxApplyThemeDefaults() {
-    kvxConfig.priColor = KVX_PURPLE;
-    kvxConfig.secColor = KVX_GREEN;
-    kvxConfig.bgColor = KVX_BG;
-}
 
 // Column-major layout:
 //   0  2  4
@@ -57,11 +47,14 @@ static void drawArrow(int x, int y, bool right, uint16_t color) {
 }
 
 static void drawChannelTile(int x, int y, int w, int h, bool selected, MenuItemInterface *item, float scale) {
-    uint16_t fill = selected ? KVX_PURPLE : KVX_PURPLE_DARK;
-    uint16_t border = selected ? KVX_GREEN : KVX_PURPLE;
+    const uint16_t pri = kvxConfig.priColor;
+    const uint16_t sec = kvxConfig.secColor;
+    const uint16_t dark = getColorVariation(pri, 10, -1);
+    uint16_t fill = selected ? pri : dark;
+    uint16_t border = selected ? sec : pri;
     tft.fillRoundRect(x, y, w, h, 6, fill);
     tft.drawRoundRect(x, y, w, h, 6, border);
-    if (selected) tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 5, KVX_GREEN);
+    if (selected) tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 5, sec);
 
     if (!item) return;
     item->drawIconAt(scale, x + w / 2, y + h / 2, w - 6, h - 6, fill);
@@ -92,9 +85,9 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
     float scale = (float)tftWidth / 240.0f;
     if (kvxConfigPins.rotation & 0b01) scale = (float)tftHeight / 135.0f;
 
-    tft.fillScreen(KVX_BG);
+    tft.fillScreen(kvxConfig.bgColor);
     drawKvxTopBar("kvxputer");
-    tft.fillRect(0, top, tftWidth, gridH + 4, KVX_BG);
+    tft.fillRect(0, top, tftWidth, gridH + 4, kvxConfig.bgColor);
 
     for (int slot = 0; slot < KVX_SLOTS; slot++) {
         int row = slot % KVX_ROWS;
@@ -106,19 +99,19 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
         MenuItemInterface *item = (itemIdx < count) ? items[itemIdx] : nullptr;
         if (item) drawChannelTile(x, y, cellW, cellH, selected, item, scale * 0.5f);
         else {
-            tft.fillRoundRect(x, y, cellW, cellH, 6, KVX_BG);
-            tft.drawRoundRect(x, y, cellW, cellH, 6, KVX_PURPLE_DARK);
+            tft.fillRoundRect(x, y, cellW, cellH, 6, kvxConfig.bgColor);
+            tft.drawRoundRect(x, y, cellW, cellH, 6, getColorVariation(kvxConfig.priColor, 10, -1));
         }
     }
 
     int midY = top + gridH / 2 - 7;
-    if (hasPrev) drawArrow(marginX, midY, false, KVX_GREEN);
-    if (hasNext) drawArrow(tftWidth - marginX - 10, midY, true, KVX_GREEN);
+    if (hasPrev) drawArrow(marginX, midY, false, kvxConfig.secColor);
+    if (hasNext) drawArrow(tftWidth - marginX - 10, midY, true, kvxConfig.secColor);
 
     String label = items[globalIndex]->getName();
-    tft.fillRect(0, tftHeight - KVX_FOOTER_H, tftWidth, KVX_FOOTER_H, KVX_GREEN);
+    tft.fillRect(0, tftHeight - KVX_FOOTER_H, tftWidth, KVX_FOOTER_H, kvxConfig.secColor);
     tft.setTextSize(FM);
-    tft.setTextColor(KVX_PURPLE, KVX_GREEN);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
     tft.drawCentreString(label, tftWidth / 2, tftHeight - KVX_FOOTER_H + 6, 1);
 
     drawKvxTopBar("kvxputer");

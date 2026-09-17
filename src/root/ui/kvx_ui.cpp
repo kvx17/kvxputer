@@ -5,9 +5,9 @@
 
 void drawKvxTopBar(const char *leftLabel) {
     TftFrame frame;
-    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
-    const uint16_t purple = DEFAULT_PRICOLOR;
-    const uint16_t green = DEFAULT_SECCOLOR;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t purple = kvxConfig.priColor;
+    const uint16_t green = kvxConfig.secColor;
 
     tft.fillRect(0, 0, tftWidth, KVX_TOPBAR_H, bg);
     tft.drawLine(0, KVX_TOPBAR_H, tftWidth, KVX_TOPBAR_H, purple);
@@ -69,9 +69,9 @@ void kvxInvalidateSubmenuCache() {
 static void drawKvxSubmenuRow(
     int i, int index, int scroll, int startY, int lineH, int nchars, std::vector<Option> &options
 ) {
-    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
-    const uint16_t purple = DEFAULT_PRICOLOR;
-    const uint16_t green = DEFAULT_SECCOLOR;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t purple = kvxConfig.priColor;
+    const uint16_t green = kvxConfig.secColor;
 
     int y = startY + (i - scroll) * lineH;
     tft.fillRect(0, y, tftWidth, lineH, bg);
@@ -89,7 +89,7 @@ static void drawKvxSubmenuRow(
 
 void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title) {
     TftFrame frame;
-    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
+    const uint16_t bg = kvxConfig.bgColor;
 
     const int lineH = FM * LH + 4;
     const int startY = KVX_TOPBAR_H + 4;

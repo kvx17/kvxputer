@@ -6,7 +6,7 @@
 class OthersMenu : public MenuItemInterface {
 
 public:
-    OthersMenu() : MenuItemInterface("Others") {}
+    OthersMenu() : MenuItemInterface("Tools") {}
 
     void micMenu();
     void optionsMenu(void);

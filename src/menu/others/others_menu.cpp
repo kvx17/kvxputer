@@ -27,7 +27,7 @@ void OthersMenu::optionsMenu() {
     };
 
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Others");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Tools");
 }
 
 void OthersMenu::micMenu() {

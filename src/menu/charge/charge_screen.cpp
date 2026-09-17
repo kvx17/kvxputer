@@ -153,23 +153,25 @@ static void drawChargeBar(int x, int y, int w, int h, int percent, uint16_t col,
 }
 
 #ifdef HAS_RGB_LED
-static CRGB chargePctLedColor(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
-    if (percent < 25) return CRGB::Red;
-    if (percent < 50) return CRGB(255, 140, 0); // orange
-    if (percent < 75) return CRGB::Yellow;
-    if (percent < 90) return CRGB::Green;
-    return CRGB(0x96, 0x00, 0x64); // purple
-}
+static constexpr uint8_t CHARGE_SLEEP_LED_BRIGHT = 12;
 
-static void chargeLedUpdate(const ChargeInfo &info, bool ledOn) {
+static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) {
     ledPauseEffects(true);
     if (!ledOn) {
-        setLedColor(CRGB::Black);
+        ledShowApp(0, 0, 0, 0);
         return;
     }
-    CRGB base = chargePctLedColor(info.percent);
+    uint8_t bright = screenOff ? CHARGE_SLEEP_LED_BRIGHT
+                               : (kvxConfig.ledBright > 0 ? (uint8_t)(255 * kvxConfig.ledBright / 100) : 128);
+    CRGB base = batteryStatusLedColor(info.percent);
+    if (info.percent <= 5 && ((millis() / 500) % 2 == 0)) {
+        ledShowApp(0, 0, 0, bright);
+        return;
+    }
+    if (screenOff) {
+        ledShowApp(base.r, base.g, base.b, CHARGE_SLEEP_LED_BRIGHT);
+        return;
+    }
     float phase = (sinf(millis() / 1400.0f * PI) + 1.0f) * 0.5f;
     uint8_t scale = (info.state == CHARGE_CHARGING || info.state == CHARGE_FULL)
                         ? (uint8_t)(140 + phase * 115)
@@ -178,16 +180,15 @@ static void chargeLedUpdate(const ChargeInfo &info, bool ledOn) {
     c.r = (uint8_t)((uint16_t)c.r * scale / 255);
     c.g = (uint8_t)((uint16_t)c.g * scale / 255);
     c.b = (uint8_t)((uint16_t)c.b * scale / 255);
-    setLedColor(c);
+    ledShowApp(c.r, c.g, c.b, bright);
 }
 #endif
 
 static void chargeGoIdleOff(bool *ledOn) {
 #ifdef HAS_RGB_LED
     ledPauseEffects(true);
-    setLedColor(CRGB::Black);
 #endif
-    if (ledOn) *ledOn = false;
+    (void)ledOn;
     chargeUserSleep = true;
     isScreenOff = true;
     dimmer = false;
@@ -297,7 +298,7 @@ void runChargeLoop() {
         const bool ignoreDown = millis() < ignoreDownUntil;
 
         // G0 tap (InputHandler) sets chargeUserSleep — join after grace only.
-        // Keep LED charge color on for G0 blank; Down/S turn LED off explicitly.
+        // Sleep blanks the panel; LED stays dim unless L toggled it off.
         if (!screenOff && pastGrace && chargeUserSleep) {
             screenOff = true;
             isScreenOff = true;
@@ -315,9 +316,8 @@ void runChargeLoop() {
             else if (check(SelPress)) wake = true;
             else if (check(UpPress) || check(PrevPress)) wake = true;
             else if (!ignoreDown && check(DownPress)) {
-                // Down while blank: ensure LED stays/turns off (display stays off).
+                // Down while blank: keep the panel off (LED stays unless L toggled it).
                 check(NextPress);
-                ledOn = false;
                 resetHeldNavKeys();
                 ignoreDownUntil = millis() + 600;
             }
@@ -340,7 +340,7 @@ void runChargeLoop() {
 
             ChargeInfo idleInfo = readChargeInfo();
 #ifdef HAS_RGB_LED
-            chargeLedUpdate(idleInfo, ledOn);
+            chargeLedUpdate(idleInfo, ledOn, true);
 #endif
             if (wake) {
                 chargeWakeDisplay(chargeBright, &ledOn);
@@ -388,7 +388,7 @@ void runChargeLoop() {
         }
 #endif
 
-        // Down tap: blank display + LED off, stay off until Up/Esc/S/G0 wake.
+        // Down tap: blank display, stay off until Up/Esc/S/G0 wake.
         if (pastGrace && !ignoreDown && check(DownPress)) {
             check(NextPress); // '.' also pulses Next on Cardputer
             chargeGoIdleOff(&ledOn);
@@ -421,7 +421,7 @@ void runChargeLoop() {
 
         ChargeInfo info = readChargeInfo();
 #ifdef HAS_RGB_LED
-        chargeLedUpdate(info, ledOn);
+        chargeLedUpdate(info, ledOn, false);
 #endif
         if (info.state == CHARGE_FULL && prevState != CHARGE_FULL) {
             fullHold = true;

@@ -190,7 +190,6 @@ void hidDrawPresenterPad(bool portrait, int flashId) {
     int minGap = bw / 2 + pW / 2 + 2;
     if (gap < minGap) gap = minGap;
 
-    (void)portrait;
     const int ux = cx, uy = cy - gap;
     const int lx = cx - gap, ly = cy;
     const int dx = cx, dy = cy + gap;
@@ -212,10 +211,17 @@ void hidDrawPresenterPad(bool portrait, int flashId) {
         tft.drawCentreString(keyHint, bx + bw / 2, by + bh - 10, 1);
     };
 
-    btn(0, ux, uy, 0, ";");
-    btn(1, dx, dy, 1, ".");
-    btn(2, lx, ly, 2, ",");
-    btn(3, rx, ry, 3, "/");
+    if (portrait) {
+        btn(0, ux, uy, 0, "/");
+        btn(1, dx, dy, 1, ",");
+        btn(2, lx, ly, 2, ";");
+        btn(3, rx, ry, 3, ".");
+    } else {
+        btn(0, ux, uy, 0, ";");
+        btn(1, dx, dy, 1, ".");
+        btn(2, lx, ly, 2, ",");
+        btn(3, rx, ry, 3, "/");
+    }
 
     int pbx = cx - pW / 2;
     int pby = cy - pH / 2;

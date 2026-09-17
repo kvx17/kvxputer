@@ -796,7 +796,7 @@ void KvxputerConfig::setLedEffect(int value) {
 }
 
 void KvxputerConfig::validateLedEffectValue() {
-    if (ledEffect < 0 || ledEffect > 9) ledEffect = 0;
+    if (ledEffect < 0 || ledEffect > 10) ledEffect = 0;
 }
 
 void KvxputerConfig::setLedEffectSpeed(int value) {

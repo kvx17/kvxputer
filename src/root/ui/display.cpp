@@ -1088,9 +1088,9 @@ void drawWireguardStatus(int x, int y) {
 ***************************************************************************************/
 Opt_Coord listFiles(int index, std::vector<FileList> fileList, const char *title) {
     Opt_Coord coord;
-    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
-    const uint16_t purple = DEFAULT_PRICOLOR;
-    const uint16_t green = DEFAULT_SECCOLOR;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t purple = kvxConfig.priColor;
+    const uint16_t green = kvxConfig.secColor;
 
     if (title == nullptr || title[0] == '\0') title = "Files";
     TftFrame frame;

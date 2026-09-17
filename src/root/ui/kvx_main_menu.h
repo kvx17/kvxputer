@@ -7,6 +7,4 @@
 // Wii-style 2×3 channel grid (6 icons per page).
 int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex = 0);
 
-void kvxApplyThemeDefaults();
-
 #endif

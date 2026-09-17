@@ -3,6 +3,7 @@
 #include "root/ui/display.h"
 #include "root/app/utils.h"
 #include <globals.h>
+#include <interface.h>
 #ifdef HAS_RGB_LED
 #define FASTLED_RMT_BUILTIN_DRIVER 1  // Use the ESP32 RMT built-in driver
 #define FASTLED_RMT_MAX_CHANNELS 1    // Maximum number of RMT channels
@@ -76,6 +77,34 @@ uint32_t alterOneColorChannel(uint32_t color, uint16_t newR, uint16_t newG, uint
     if (newB != 256) b = newB;
 
     return ((r << 16) | (g << 8) | b);
+}
+
+static uint8_t lerpU8(uint8_t a, uint8_t b, int t, int span) {
+    if (span <= 0) return b;
+    if (t <= 0) return a;
+    if (t >= span) return b;
+    return (uint8_t)(((int)a * (span - t) + (int)b * t) / span);
+}
+
+static CRGB lerpRgb(CRGB a, CRGB b, int t, int span) {
+    return CRGB(lerpU8(a.r, b.r, t, span), lerpU8(a.g, b.g, t, span), lerpU8(a.b, b.b, t, span));
+}
+
+CRGB batteryStatusLedColor(int percent) {
+    if (percent < 0) percent = 0;
+    if (percent > 100) percent = 100;
+    const CRGB red(255, 0, 0);
+    const CRGB orange(255, 140, 0);
+    const CRGB yellow(255, 255, 0);
+    const CRGB ygreen(80, 255, 0);
+    const CRGB green(0, 255, 0);
+    const CRGB purple(0x96, 0x00, 0x64);
+    if (percent <= 15) return red;
+    if (percent <= 50) return lerpRgb(red, orange, percent - 15, 35);
+    if (percent <= 62) return lerpRgb(orange, yellow, percent - 50, 12);
+    if (percent <= 75) return lerpRgb(yellow, ygreen, percent - 62, 13);
+    if (percent <= 90) return lerpRgb(ygreen, green, percent - 75, 15);
+    return lerpRgb(green, purple, percent - 90, 10);
 }
 
 TaskHandle_t ledEffectTaskHandle = NULL;
@@ -263,6 +292,21 @@ void ledEffectTask(void *pvParameters) {
 #ifdef HAS_ENCODER_LED
             }
 #endif
+
+        } else if (ledEffect == LED_EFFECT_BATTERY_STATUS) {
+            static int cachedPct = 100;
+            static unsigned long lastBatMs = 0;
+            unsigned long nowMs = millis();
+            if (lastBatMs == 0 || nowMs - lastBatMs >= 1000) {
+                lastBatMs = nowMs;
+                int p = getBattery();
+                if (p < 0) p = 0;
+                if (p > 100) p = 100;
+                cachedPct = p;
+            }
+            CRGB c = batteryStatusLedColor(cachedPct);
+            if (cachedPct <= 5 && ((nowMs / 500) % 2 == 0)) c = CRGB::Black;
+            fill_solid(leds, LED_COUNT, c);
 
 #if LED_COUNT > 1
         } else if (ledEffect == LED_EFFECT_CHASE || ledEffect == LED_EFFECT_CHASE_TAIL) {
@@ -692,6 +736,13 @@ void setLedEffectConfig() {
              kvxConfig.ledEffect == LED_EFFECT_COLOR_CYCLE,
              [](void *pointer, bool shouldRender) {
                  setLedEffect(LED_EFFECT_COLOR_CYCLE);
+                 return false;
+             }},
+            {"Battery Status",
+             [=]() { applyEffect(LED_EFFECT_BATTERY_STATUS); },
+             kvxConfig.ledEffect == LED_EFFECT_BATTERY_STATUS,
+             [](void *pointer, bool shouldRender) {
+                 setLedEffect(LED_EFFECT_BATTERY_STATUS);
                  return false;
              }},
 #if LED_COUNT > 1
