@@ -464,7 +464,7 @@ async function fetchSystemInfo() {
   Dialog.loading.show("Fetching system info...");
   let req = await requestGet("/systeminfo");
   let info = JSON.parse(req);
-  $(".bruce-version").textContent = info.BRUCE_VERSION;
+  $(".kvxputer-version").textContent = info.KVXPUTER_VERSION;
   $(".free-space .free-sd span").innerHTML =
     `${info.SD.used} / ${info.SD.total}`;
   $(".free-space .free-fs span").innerHTML =

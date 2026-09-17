@@ -8,6 +8,7 @@
 #include <Adafruit_TCA8418.h>
 #include <Keyboard.h>
 #include <Wire.h>
+#include <cstring>
 #include <interface.h>
 #include <globals.h>
 #if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
@@ -44,6 +45,9 @@ static unsigned long navNextRepeatTime = 0;
 static unsigned long navPrevRepeatTime = 0;
 static unsigned long navUpRepeatTime = 0;
 static unsigned long navDownRepeatTime = 0;
+// Printable keys currently held on TCA8418 (press/release tracked). Needed for
+// tap-vs-hold UX — KeyStroke is only a press pulse on ADV.
+static bool tcaCharHeld[128] = {};
 
 void resetHeldNavKeys(void) {
     navHoldSel = false;
@@ -68,6 +72,29 @@ void resetHeldNavKeys(void) {
     EscPress = false;
     AnyKeyPress = false;
     KeyStroke.Clear();
+    memset(tcaCharHeld, 0, sizeof(tcaCharHeld));
+}
+
+bool isCardputerKeyHeld(char c) {
+    if (UseTCA8418) {
+        const unsigned char uc = (unsigned char)c;
+        if (uc < 128 && tcaCharHeld[uc]) return true;
+        // Digits / letters may arrive shifted; also check opposite case.
+        if (c >= 'a' && c <= 'z') {
+            const unsigned char up = (unsigned char)(c - 'a' + 'A');
+            return tcaCharHeld[up];
+        }
+        if (c >= 'A' && c <= 'Z') {
+            const unsigned char lo = (unsigned char)(c - 'A' + 'a');
+            return tcaCharHeld[lo];
+        }
+        return false;
+    }
+    Keyboard.update();
+    if (Keyboard.isKeyPressed(c)) return true;
+    if (c >= 'a' && c <= 'z' && Keyboard.isKeyPressed(c - 'a' + 'A')) return true;
+    if (c >= 'A' && c <= 'Z' && Keyboard.isKeyPressed(c - 'A' + 'a')) return true;
+    return false;
 }
 
 int handleSpecialKeys(uint8_t row, uint8_t col, bool pressed);
@@ -357,6 +384,9 @@ void InputHandler(void) {
                 if (!pressed) { KeyStroke.Clear(); }
 
                 char keyVal = getKeyChar(row, col);
+                if (keyVal >= 32 && keyVal < 127) {
+                    tcaCharHeld[(unsigned char)keyVal] = pressed;
+                }
 
                 if (keyVal == KEY_BACKSPACE && col == 13) {
                     navHoldDel = pressed;

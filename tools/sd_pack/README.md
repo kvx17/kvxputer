@@ -15,7 +15,7 @@ Copy the **contents** of this folder onto a Cardputer microSD root so runtime as
   rfid/                sample .rfid dumps
   media/               audio + images
   others/              misc helpers
-/root/themes/          UI themes
+/root/themes/          UI themes (factory boot GIF is firmware-embedded, not here)
 /menu/scripts/         BadUSB / interpreter samples
 ```
 

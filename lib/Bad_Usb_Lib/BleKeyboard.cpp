@@ -285,6 +285,7 @@ void BleKeyboard::end(void) {
         BLEDevice::deinit(true);
     }
     this->connected = false;
+    this->m_subCount = 0;
     pServer = nullptr;
     advertising = nullptr;
     inputKeyboard = nullptr;
@@ -349,7 +350,7 @@ void BleKeyboard::sendReport(MediaKeyReport *keys) {
 }
 
 void BleKeyboard::sendMouseReport(int8_t x, int8_t y, int8_t wheel) {
-    if (!this->isConnected() || inputMouse == nullptr) return;
+    if (!this->isConnected() || this->getSubscribedCount() == 0 || inputMouse == nullptr) return;
     uint8_t report[4] = {_mouseButtons, (uint8_t)x, (uint8_t)y, (uint8_t)wheel};
     inputMouse->setValue(report, sizeof(report));
     bleKbNotifyRetry(inputMouse, report, sizeof(report));
@@ -524,15 +525,23 @@ void BleKeyboard::ServerCallbacks::onConnect(NimBLEServer *pServer, NimBLEConnIn
 }
 void BleKeyboard::ServerCallbacks::onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) {
     parent->connected = false;
+    parent->m_subCount = 0;
     Serial.println("BRUCE KEYBOARD: lib disconnected");
 }
 void BleKeyboard::ServerCallbacks::onAuthenticationComplete(NimBLEConnInfo &connInfo) {
     if (connInfo.isEncrypted()) {
         Serial.println("BRUCE KEYBOARD: Paired successfully.");
         parent->connected = true;
+        // Bonded reconnects often restore CCCDs without a fresh onSubscribe.
+        // Seed so sendReport is not stuck with sub=0 while the host is usable.
+        if (parent->m_subCount == 0) {
+            parent->m_subCount = 1;
+            Serial.println("BRUCE KEYBOARD: Seeded subscribe count after auth.");
+        }
     } else {
         Serial.println("BRUCE KEYBOARD: Pairing failed");
         parent->connected = false;
+        parent->m_subCount = 0;
     }
 }
 

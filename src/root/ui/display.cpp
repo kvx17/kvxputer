@@ -911,7 +911,7 @@ void drawStatusBar() {
         tft.print(timeStr);
     } else {
         setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
-        tft.print("kvxputer v.0.1");
+        tft.print(String("kvxputer v") + KVXPUTER_VERSION);
     }
 
     int iconCount = 0;
@@ -1496,7 +1496,6 @@ void Gif::GIFDraw(GIFDRAW *pDraw) {
     GifPosition *position = (GifPosition *)(pDraw->pUser);
 
     iWidth = pDraw->iWidth;
-    if (iWidth > tftWidth) iWidth = tftWidth;
     usPalette = pDraw->pPalette;
     y = pDraw->iY + pDraw->y; // current line
 
@@ -1507,6 +1506,62 @@ void Gif::GIFDraw(GIFDRAW *pDraw) {
         }
         pDraw->ucHasTransparency = 0;
     }
+
+    if (position && position->destW > 0 && position->srcW > 0 && position->srcH > 0) {
+        const int destW = position->destW;
+        const int destH = position->destH;
+        const int srcW = position->srcW;
+        const int srcH = position->srcH;
+        int y0 = y * destH / srcH + position->y;
+        int y1 = (y + 1) * destH / srcH + position->y;
+        if (y0 < 0) y0 = 0;
+        if (y1 > tftHeight) y1 = tftHeight;
+        if (y1 <= y0) return;
+
+        int dx0 = pDraw->iX * destW / srcW + position->x;
+        int dx1 = (pDraw->iX + iWidth) * destW / srcW + position->x;
+        if (dx0 < 0) dx0 = 0;
+        if (dx1 > tftWidth) dx1 = tftWidth;
+        if (dx1 <= dx0) return;
+
+        tft.drawPixel(0, 0, 0);
+        if (!pDraw->ucHasTransparency) {
+            const int outW = dx1 - dx0;
+            for (int dx = dx0; dx < dx1; dx++) {
+                int sx = (dx - position->x) * srcW / destW - pDraw->iX;
+                if (sx < 0) sx = 0;
+                if (sx >= iWidth) sx = iWidth - 1;
+                usTemp[dx - dx0] = usPalette[s[sx]];
+            }
+            for (int dy = y0; dy < y1; dy++) { tft.pushImage(dx0, dy, outW, 1, usTemp); }
+        } else {
+            const uint8_t ucTransparent = pDraw->ucTransparent;
+            for (int dy = y0; dy < y1; dy++) {
+                int runStart = -1;
+                int runLen = 0;
+                for (int dx = dx0; dx < dx1; dx++) {
+                    int sx = (dx - position->x) * srcW / destW - pDraw->iX;
+                    if (sx < 0) sx = 0;
+                    if (sx >= iWidth) sx = iWidth - 1;
+                    uint8_t c = s[sx];
+                    if (c == ucTransparent) {
+                        if (runLen) {
+                            tft.pushImage(runStart, dy, runLen, 1, usTemp);
+                            runLen = 0;
+                            runStart = -1;
+                        }
+                    } else {
+                        if (runStart < 0) runStart = dx;
+                        usTemp[runLen++] = usPalette[c];
+                    }
+                }
+                if (runLen) tft.pushImage(runStart, dy, runLen, 1, usTemp);
+            }
+        }
+        return;
+    }
+
+    if (iWidth > tftWidth) iWidth = tftWidth;
     // Apply the new pixels to the main image
     if (pDraw->ucHasTransparency) { // if transparency used
         uint8_t *pEnd, c, ucTransparent = pDraw->ucTransparent;
@@ -1569,6 +1624,18 @@ bool Gif::openGIF(FS *fs, const char *filename) {
     return false;
 }
 
+bool Gif::openGIF(const uint8_t *data, int size) {
+    if (data == nullptr || size <= 0) return false;
+
+    gif = new AnimatedGIF();
+    gif->begin(BIG_ENDIAN_PIXELS);
+    // openFLASH reads from PROGMEM/.rodata; the boot GIF is linked into flash.
+    if (gif->openFLASH(const_cast<uint8_t *>(data), size, GIFDraw)) { return true; }
+
+    log_e("GIF opening error: %d\n", gif->getLastError());
+    return false;
+}
+
 // Play a single frame
 // returns:
 // 2 = skipped waiting for another frame
@@ -1583,42 +1650,86 @@ int Gif::playFrame(int x, int y, bool bSync) {
     return gif->playFrame(bSync, nullptr, &gifPosition);
 }
 
+void Gif::setScaleTo(int destW, int destH) {
+    gifPosition.destW = destW;
+    gifPosition.destH = destH;
+    gifPosition.srcW = getCanvasWidth();
+    gifPosition.srcH = getCanvasHeight();
+}
+
 int Gif::getLastError() { return gif->getLastError(); }
 
 /*
  * playDurationMs:
  *  -1 : Play the GIF in an infinite loop
- *  0  : Play the GIF once
+ *  0  : Play the GIF once (one full cycle — even if the file is marked to loop)
  * >0  : Play the GIF for the specified duration in milliseconds
  *       (e.g., 1000 = play for 1 second)
+ *
+ * AnimatedGIF seeks back to the start when it hits EOF, so a looping GIF never
+ * naturally returns 0 from playFrame. For play-once we cap by frame count from
+ * getInfo() so boot/splash does not hang on the animation.
  */
-bool showGif(
-    FS *fs, const char *filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus
+static bool playGifAnimation(
+    Gif &gif, int x, int y, bool center, int playDurationMs, bool resetButtonStatus, bool fullscreen
 ) {
-    if (!fs->exists(filename)) return false;
-
-    Gif gif;
-    bool success = gif.openGIF(fs, filename);
-    if (!success) { return false; }
-
-    if (center) {
+    if (fullscreen) {
+        gif.setScaleTo(tftWidth, tftHeight);
+        x = 0;
+        y = 0;
+    } else if (center) {
         x = x + (tftWidth - gif.getCanvasWidth()) / 2;
         y = y + (tftHeight - gif.getCanvasHeight()) / 2;
     }
 
+    int frameLimit = 0;
+    if (playDurationMs == 0) {
+        GIFINFO info = {};
+        if (gif.getInfo(&info) && info.iFrameCount > 0) frameLimit = info.iFrameCount;
+        gif.reset();
+    }
+
     int result = 0;
+    int framesPlayed = 0;
     long timeStart = millis();
     do {
         result = gif.playFrame(x, y);
-        if (result == -1) log_e("GIF playFrame error: %d\n", gif.getLastError());
+        if (result == -1) {
+            log_e("GIF playFrame error: %d\n", gif.getLastError());
+            break;
+        }
+        if (result >= 0) framesPlayed++;
 
         if (check(AnyKeyPress, resetButtonStatus)) break;
 
         if (playDurationMs > 0 && (millis() - timeStart) > playDurationMs) break;
-        if (playDurationMs == 0 && result == 0) break;
+        if (playDurationMs == 0) {
+            if (frameLimit > 0 && framesPlayed >= frameLimit) break;
+            if (result == 0) break;
+        }
     } while (result >= 0);
 
     return true;
+}
+
+bool showGif(
+    FS *fs, const char *filename, int x, int y, bool center, int playDurationMs, bool resetButtonStatus,
+    bool fullscreen
+) {
+    if (!fs->exists(filename)) return false;
+
+    Gif gif;
+    if (!gif.openGIF(fs, filename)) return false;
+    return playGifAnimation(gif, x, y, center, playDurationMs, resetButtonStatus, fullscreen);
+}
+
+bool showGif(
+    const uint8_t *data, size_t data_size, int x, int y, bool center, int playDurationMs,
+    bool resetButtonStatus, bool fullscreen
+) {
+    Gif gif;
+    if (!gif.openGIF(data, (int)data_size)) return false;
+    return playGifAnimation(gif, x, y, center, playDurationMs, resetButtonStatus, fullscreen);
 }
 #endif
 /***************************************************************************************

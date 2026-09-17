@@ -464,7 +464,7 @@ static const JSPropDef js_device[] = {
     JS_CFUNC_DEF("getName", 0, native_getDeviceName),
     JS_CFUNC_DEF("getBoard", 0, native_getBoard),
     JS_CFUNC_DEF("getModel", 0, native_getBoard),
-    JS_CFUNC_DEF("getBruceVersion", 0, native_getBruceVersion),
+    JS_CFUNC_DEF("getKvxputerVersion", 0, native_getKvxputerVersion),
     JS_CFUNC_DEF("getBatteryCharge", 0, native_getBattery),
     JS_CFUNC_DEF("getBatteryDetailed", 0, native_getBatteryDetailed),
     JS_CFUNC_DEF("getFreeHeapSize", 0, native_getFreeHeapSize),

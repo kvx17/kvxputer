@@ -1387,6 +1387,11 @@ void __attribute__((weak)) resetHeldNavKeys(void) {
     AnyKeyPress = false;
 }
 
+bool __attribute__((weak)) isCardputerKeyHeld(char c) {
+    (void)c;
+    return false;
+}
+
 void goToDeepSleep() {
 #if DEEPSLEEP_WAKEUP_PIN >= 0
 

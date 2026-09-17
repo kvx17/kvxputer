@@ -200,7 +200,7 @@ void Pn532ble::loadNdefEmulateMenu() {
     String prefix = "";
 
     options = {
-        {"Visit Bruce", [&]() { prefix = "https://bruce.computer"; }},
+        {"Visit kvxputer", [&]() { prefix = "https://github.com/kvx17/kvxputer"; }},
         {"Open Url",    [&]() { prefix = "https://"; }              },
         {"Phone Call",  [&]() { prefix = "tel:"; }                  },
         {"Send Email",  [&]() { prefix = "mailto:"; }               },

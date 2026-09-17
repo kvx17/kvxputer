@@ -176,7 +176,7 @@ void GPSTracker::add_initial_file_data(File file) {
     file.println("  <metadata>");
     file.println("    <name>Bruce GPS Tracker</name>");
     file.println("    <desc>GPS Tracker using Bruce Firmware</desc>");
-    file.println("    <link href=\"https://bruce.computer\">");
+    file.println("    <link href=\"https://github.com/kvx17/kvxputer\">");
     file.println("      <text>Bruce Website</text>");
     file.println("    </link>");
     file.println("  </metadata>");

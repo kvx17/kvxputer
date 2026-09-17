@@ -16,12 +16,12 @@ If `resources/` is missing after clone, firmware is unchanged. Companion sketche
 
 | Store | Size (Cardputer ADV) | Use |
 |-------|----------------------|-----|
-| App flash | ~4.9 MB | Firmware (`m5stack-cardputer`) |
-| LittleFS | 3 MB | Small factory seed via `pio run -e m5stack-cardputer -t uploadfs` ([`tools/build/data/`](../tools/build/data/)) |
+| App flash | ~6.1 MB | Firmware (`m5stack-cardputer`), including the factory boot GIF |
+| LittleFS | 2 MB | Small factory seed via `pio run -e m5stack-cardputer -t uploadfs` ([`tools/build/data/`](../tools/build/data/)) |
 | SD card | user | Large wordlists, ESL bitmaps, IR libraries, [companion `.bin`](../tools/sd_pack/README.md) |
 
 [`getFsStorage()`](../src/root/storage/sd_functions.cpp) prefers a mounted SD card, then LittleFS. Missing optional files must show an error, not crash.
 
 Copy the contents of [`tools/sd_pack/`](../tools/sd_pack/README.md) to the card root (`/support_files/`, `/root/themes/`, `/menu/scripts/`).
 
-Active firmware: `src/`, `tools/porting/boards/`, `tools/build/data/`, `tools/companions/`, `platformio.ini`.
+Active firmware: `src/`, `tools/porting/boards/`, `tools/build/data/`, `tools/build/embedded_resources/`, `tools/companions/`, `platformio.ini`.

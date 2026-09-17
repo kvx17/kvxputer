@@ -44,18 +44,18 @@ Legacy Bruce entries (`BLE Keyboard`, `Media Cmds`, `Presenter mode`, `USB Keybo
 - Default new-host name: template only for newly paired hosts that have no name yet
 - BLE device name (default **kvxKeyboard**)
 - Forget BLE pairings (drops bonds and clears host slots; advertising stops until you pick a slot)
-- Disconnect / **Host slots…** (same 1–8 selector as startup) / Connect to new device at the top of Settings
-- **BLE Hosts…** — numbered slots 1–8; connect/switch, rename, disconnect, forget one host, or pair into an empty slot
+- Disconnect / **Host slots…** (same 1–6 selector as startup) / Connect to new device at the top of Settings
+- **BLE Hosts…** — numbered slots 1–6; connect/switch, rename, disconnect, forget one host, or pair into an empty slot
 - **Keyboard LED: On/Off** — HID status LED on the Cardputer RGB (does not change global LED brightness)
 - Mouse sensitivity, jiggler intervals, clicker delay/button, PTT preset
 
-Settings persist in `kvxConfig` (`/conf.json`), including `hidRemoteHostSlots[8]` and `hidRemoteLedEnabled`.
+Settings persist in `kvxConfig` (`/conf.json`), including `hidRemoteHostSlots[6]` and `hidRemoteLedEnabled`.
 
 Mouse mode also reads **M5 Unit Joystick2** on Grove PORT.A (I2C 0x63) when present: stick moves the cursor, click is left button, hold is right click. Press **D** to invert up/down (persists). Keyboard arrows still work.
 
 ## Multi-host slots (BLE)
 
-Stable **host slots 1–8** map to keyboard keys `1`–`8` (independent of NimBLE bond list order).
+Stable **host slots 1–6** map to keyboard keys `1`–`6` (independent of NimBLE bond list order).
 
 **Startup (Bluetooth launch)** shows a slot screen:
 
@@ -65,10 +65,9 @@ Stable **host slots 1–8** map to keyboard keys `1`–`8` (independent of NimBL
 | Orange | Slot has a saved address (remembered) but not connected |
 | Red | Empty slot |
 
-- Press **1–8**: filled slot → disconnect and wait **only for that** bonded host; empty → open discoverable advertising and pair a **new** host into that slot. Other remembered hosts that sneak in are dropped with a quiet gap so they cannot steal the link.
-- **Hold 1–8 for 3 s**: open that host's options (Connect/switch, Rename, Disconnect, Forget) without leaving the slot screen.
+- Press **1–6**: filled slot → **tap** to connect (wait **only for that** bonded host); **hold 2 s** for that host’s options (Connect/switch, Rename, Disconnect, Forget). Empty slot → open discoverable advertising and pair a **new** host into that slot. Other remembered hosts that sneak in are dropped with a quiet gap so they cannot steal the link.
 - **S**: open HID Settings (wipe pairings, LED, rename hosts). ESC returns to the slot screen.
-- **Ok/Enter**: if already connected, continue to modes; otherwise reconnect the preferred/first filled slot (same exclusive-host wait as `1`–`8`)
+- **Ok/Enter**: if already connected, continue to modes; otherwise reconnect the preferred/first filled slot (same exclusive-host wait as `1`–`6`)
 - **ESC**: leave the app
 
 The slot screen is **not connectable** until you pick a slot. That stops every remembered phone from racing in.
@@ -89,6 +88,7 @@ While kvxkeyboard is open it owns the RGB LED (firmware purple/green is paused):
 |-------|-----|
 | Waiting to switch a remembered host | Slow blue blink |
 | Pairing a new host into an empty slot | Faster blue blink |
+| Host contacting / securing (GAP up, not HID-ready yet) | Fast cyan blink |
 | Connected | Dim solid blue (~20% of global LED brightness) |
 | Link lost / wait expired | Solid red |
 | Wrong host rejected | Short red flash, then blue blink |
@@ -107,7 +107,7 @@ Practical workflow:
 
 1. On the slot screen (or **BLE Hosts**), press an empty slot number and pair from the phone/PC.
 2. Pair a second host into another empty slot without forgetting the first. Other phones may still *try* to reconnect; they are dropped and must not win. You do **not** need those clients to Forget the keyboard.
-3. Switch with keys **1–8** or **Connect / switch** in Settings. Only that host is allowed.
+3. Switch with keys **1–6** or **Connect / switch** in Settings. Only that host is allowed.
 4. On the host, open Bluetooth and tap the keyboard if it does not auto-reconnect. That reconnect should stay up.
 5. Use Forget only when retiring a device.
 
@@ -115,11 +115,11 @@ Practical workflow:
 
 - **USB**: Keyboard and mouse modes use separate TinyUSB HID devices; mode switch may re-init USB. USB launch skips the host-slot screen.
 - **BLE**: Single `BleCompositeHid` session stays connected while switching modes.
-- **Idle / filled slot**: the slot screen stays non-connectable until you pick a slot. Switching to a remembered host uses **low-duty directed advertising** to that bond (ESP32-S3 LE Privacy 1.2 / directed ADV), then **whitelist-only** undirected ADV as a fallback. Open discoverable ADV is **not** used for filled-slot switches — that is what let a bonded phone (iOS) race in and starve Linux/BlueZ. Any peer that is not the selected host is still disconnected in software. The mode picker does not advertise.
+- **Idle / filled slot**: the slot screen stays non-connectable until you pick a slot. Switching to a remembered host uses **open undirected HID advertising** (BlueZ needs this) and accepts only that host in software. Wrong bonded hosts (e.g. iOS) are disconnected immediately with a quiet gap so Linux can finish reconnect. If Linux already has a GAP link to the selected host, the firmware **keeps** that link instead of dropping it (dropping caused connect/disconnect loops). Directed / whitelist-only ADV is kept as a helper API but is not the exclusive-switch path. The mode picker does not advertise.
 - **Bonds**: advertising is stopped and the filter list cleared before any unpair — editing bonds while advertising aborts the NimBLE host.
 - **New-pair**: Open pairing rebuilds a full HID advertisement (flags, appearance `0x03C0`, HID UUID `0x1812`, name + scan response). Known hosts that connect anyway are disconnected with a short advertising pause so a new host can get in.
 - **Client OS notes**: After picking a slot, if the host does not auto-link within a few seconds, open Bluetooth settings and tap **kvxKeyboard** (common on Windows/Linux; sometimes Android). iOS usually auto-reconnects — and will be rejected while you are waiting for another slot.
-- **Bond limit**: Cardputer builds allow 8 stored bonds (`CONFIG_BT_NIMBLE_MAX_BONDS`). HID keeps one active link at a time. Duplicate slot entries for the same bond are collapsed automatically.
+- **Bond / slot limit**: Cardputer builds allow 8 stored NimBLE bonds (`CONFIG_BT_NIMBLE_MAX_BONDS`). kvxkeyboard uses **6 host slots** so other BLE tools keep bond headroom. HID keeps one active link at a time (ESP32-S3 can multi-connect in hardware; this app does not). Duplicate slot entries for the same bond are collapsed automatically. Legacy configs with 8 slots migrate extras into empty 1–6 on load.
 
 ## Files
 

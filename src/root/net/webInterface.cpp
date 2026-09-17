@@ -471,8 +471,8 @@ void configureWebServer() {
                 sizeof(response_body),
                 "{\"%s\":\"%s\",\"SD\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"},"
                 "\"LittleFS\":{\"%s\":\"%s\",\"%s\":\"%s\",\"%s\":\"%s\"}}",
-                "BRUCE_VERSION",
-                BRUCE_VERSION,
+                "KVXPUTER_VERSION",
+                KVXPUTER_VERSION,
                 "free",
                 humanReadableSize(SDTotalBytes - SDUsedBytes).c_str(),
                 "used",

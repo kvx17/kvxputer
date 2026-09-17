@@ -515,7 +515,7 @@ void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected) {
         tft.drawString(shown, x + 14, y + (rowH - 8) / 2);
     }
 
-    hidRemoteDrawFooter("1-8 select  S settings  Ok continue  ESC exit");
+    hidRemoteDrawFooter("1-6 tap=connect  hold 2s=options  S  Ok  ESC");
 }
 
 int hidRemotePickFromList(const char *title, const std::vector<String> &labels, int startIndex) {
@@ -641,6 +641,16 @@ void hidRemoteLedTick() {
                 hidLedOn = !hidLedOn;
             }
             hidLedPaint(0, 0, hidLedOn ? 255 : 0, false);
+            break;
+        }
+        case HID_REMOTE_LED_HANDSHAKE: {
+            // Cyan fast blink: host is on the air, link not HID-ready yet.
+            const unsigned long period = 180;
+            if (now - hidLedLastToggle >= period) {
+                hidLedLastToggle = now;
+                hidLedOn = !hidLedOn;
+            }
+            hidLedPaint(0, hidLedOn ? 200 : 0, hidLedOn ? 255 : 40, false);
             break;
         }
         case HID_REMOTE_LED_CONNECTED:

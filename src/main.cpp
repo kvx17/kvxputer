@@ -185,6 +185,9 @@ volatile int tftHeight = VECTOR_DISPLAY_DEFAULT_WIDTH;
 #include "root/net/wifi_common.h"
 #include "root/scripting/bjs_interpreter/interpreter.h" // for JavaScript interpreter
 #include "root/storage/paths.h"
+#ifdef HAS_EMBEDDED_BOOTIMAGE
+#include "bootimage.h"
+#endif
 #include "menu/others/audio.h"                // for playAudioFile
 #include "menu/rf/rf_utils.h"                 // for initCC1101once
 #include <Wire.h>
@@ -268,15 +271,18 @@ void begin_tft() {
 
 /*********************************************************************
  **  Function: boot_screen
- **  Draw boot screen
+ **  Draw boot screen (fallback when no boot GIF / theme image)
  *********************************************************************/
 void boot_screen() {
     tft.fillScreen(kvxConfig.bgColor);
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+    // Phosphor green + bitmap font 1 — terminal look (no FreeMono on Cardputer build).
+    const uint16_t green = DEFAULT_SECCOLOR;
+    tft.setTextColor(green, kvxConfig.bgColor);
     tft.setTextSize(FG);
-    tft.drawCentreString("kvxputer", tftWidth / 2, tftHeight / 2 - 14, 1);
+    tft.drawCentreString("> kvxputer", tftWidth / 2, tftHeight / 2 - 14, 1);
     tft.setTextSize(FM);
-    tft.drawCentreString("v.0.1", tftWidth / 2, tftHeight / 2 + 8, 1);
+    String ver = String("v") + KVXPUTER_VERSION;
+    tft.drawCentreString(ver, tftWidth / 2, tftHeight / 2 + 10, 1);
 }
 
 /*********************************************************************
@@ -284,19 +290,43 @@ void boot_screen() {
  **  kvxputer splash
  *********************************************************************/
 void boot_screen_anim() {
-    boot_screen();
-    unsigned long start = millis();
-    unsigned long lastFlash = 0;
-    bool purple = true;
+    tft.fillScreen(kvxConfig.bgColor);
     ledSetStatus(LED_STATUS_BOOT);
-    while (millis() - start < 2000) {
-        if (millis() - lastFlash >= 180) {
-            lastFlash = millis();
-            ledBootTick(purple);
-            purple = !purple;
+
+    bool played = false;
+#if !defined(LITE_VERSION)
+    // Custom theme splash, if the active theme ships a boot_img.
+    if (kvxConfig.theme.boot_img) {
+        played = drawImg(
+            *kvxConfig.themeFS(),
+            kvxConfig.getThemeItemImg(kvxConfig.theme.paths.boot_img),
+            0,
+            0,
+            true,
+            kvxConfig.theme.gifDuration
+        );
+    }
+#ifdef HAS_EMBEDDED_BOOTIMAGE
+    // Factory animation is linked into the firmware image — no SD or LittleFS copy.
+    if (!played) {
+        played = showGif(bootimage_gif, bootimage_gif_len(), 0, 0, false, 0, true, true);
+    }
+#endif
+#endif
+    if (!played) {
+        boot_screen();
+        unsigned long start = millis();
+        unsigned long lastFlash = 0;
+        bool purple = true;
+        while (millis() - start < 2000) {
+            if (millis() - lastFlash >= 180) {
+                lastFlash = millis();
+                ledBootTick(purple);
+                purple = !purple;
+            }
+            if (check(AnyKeyPress)) break;
+            delay(10);
         }
-        if (check(AnyKeyPress)) break;
-        delay(10);
     }
     ledSetStatus(LED_STATUS_IDLE);
     tft.fillScreen(kvxConfig.bgColor);
@@ -419,9 +449,14 @@ void setup() {
     tft.init();
     tft.setRotation(kvxConfigPins.rotation);
     tft.fillScreen(TFT_BLACK);
-    // kvxConfig is not read yet.. just to show something on screen due to long boot time
-    tft.setTextColor(TFT_PURPLE, TFT_BLACK);
-    tft.drawCentreString("kvxputer", tft.width() / 2, tft.height() / 2, 1);
+    // Early splash before config/FS — green CLI style + compile-time version.
+    const uint16_t green = DEFAULT_SECCOLOR;
+    tft.setTextColor(green, TFT_BLACK);
+    tft.setTextSize(2);
+    tft.drawCentreString("> kvxputer", tft.width() / 2, tft.height() / 2 - 10, 1);
+    tft.setTextSize(1);
+    String ver = String("v") + KVXPUTER_VERSION;
+    tft.drawCentreString(ver, tft.width() / 2, tft.height() / 2 + 12, 1);
     RAM_LOG("first-display-elem"); // first element drawn on screen
 #else
     tft.begin();

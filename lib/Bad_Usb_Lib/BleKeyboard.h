@@ -95,6 +95,12 @@ public:
     void set_product_id(uint16_t pid);
     void set_version(uint16_t version);
     uint8_t getSubscribedCount() { return m_subCount; }
+    // Bonded reconnects sometimes encrypt without onSubscribe / auth callbacks.
+    // Seed so sendReport and session-ready checks are not stuck at sub=0.
+    void ensureNotifyReady() {
+        connected = true;
+        if (m_subCount == 0) m_subCount = 1;
+    }
 
 protected:
     bool _randUUID = false;

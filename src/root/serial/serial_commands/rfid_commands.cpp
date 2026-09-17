@@ -276,7 +276,7 @@ uint32_t rfidNdefCallback(cmd *c) {
         value += cmd.getArgument(i).getValue();
     }
     type.toLowerCase();
-    if (value.length() == 0) value = (type == "text") ? "Bruce" : "https://bruce.computer";
+    if (value.length() == 0) value = (type == "text") ? "kvxputer" : "https://github.com/kvx17/kvxputer";
 
     if (!_ensureRfid()) return false;
 

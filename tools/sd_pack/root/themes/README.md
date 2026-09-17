@@ -12,6 +12,8 @@ Themes are supposed to change the UI experience of the User by allowing you to c
 ## Images
 Bruce accepts **.bmp** **.jpg** **.gif** and **.png** (not available on LITE_VERSION) to be used in the Main menu, but the bigger they are, greater will be the time to draw them on screen, **please, try to keep them small**.
 
+The factory boot animation (`bootimage.gif`) is compiled into firmware. You do not need to copy it onto the SD card. A theme `boot_img` still overrides it when present.
+
 The recommended height of the images is:
 
 | Device | Display size | Height |

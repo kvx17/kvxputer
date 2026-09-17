@@ -105,8 +105,8 @@ uint32_t freeCallback(cmd *c) {
 }
 
 uint32_t infoCallback(cmd *c) {
-    serialDevice->print("Bruce v");
-    serialDevice->println(BRUCE_VERSION);
+    serialDevice->print("kvxputer v");
+    serialDevice->println(KVXPUTER_VERSION);
     serialDevice->println(GIT_COMMIT_HASH);
     serialDevice->print("SDK: ");
     serialDevice->println(ESP.getSdkVersion());
@@ -133,8 +133,8 @@ uint32_t infoCallback(cmd *c) {
 }
 
 uint32_t helpCallback(cmd *c) {
-    serialDevice->print("Bruce v");
-    serialDevice->print(BRUCE_VERSION);
+    serialDevice->print("kvxputer v");
+    serialDevice->print(KVXPUTER_VERSION);
     serialDevice->print("\nThese shell commands are defined internally.\n");
 
     serialDevice->println("\nWiFi Commands:");

@@ -358,8 +358,14 @@ static bool bleHidLinkReady() {
     NimBLEServer *server = NimBLEDevice::getServer();
     if (server == nullptr || server->getConnectedCount() == 0) return false;
     NimBLEConnInfo info = server->getPeerInfo(0);
-    if (info.isEncrypted() || info.isBonded()) return true;
-    return gHidRemoteSession.bleHid != nullptr && gHidRemoteSession.bleHid->getSubscribedCount() > 0;
+    // Typing requires notify subscriptions; encryption alone is not enough.
+    const bool secured = info.isEncrypted() || info.isBonded();
+    if (secured && gHidRemoteSession.bleHid != nullptr) {
+        gHidRemoteSession.bleHid->ensureNotifyReady();
+    }
+    const bool subscribed =
+        gHidRemoteSession.bleHid != nullptr && gHidRemoteSession.bleHid->getSubscribedCount() > 0;
+    return secured && subscribed;
 }
 
 static bool buildHidAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = false) {
@@ -421,9 +427,11 @@ bool HidRemoteTransportSession::waitConnectedExpected(
     unsigned long quietUntil = 0;
     unsigned long quietMs = 2000;
     unsigned long peerSeenAt = 0;
-    unsigned long phaseStart = millis();
-    bool openPhase = false;
+    unsigned long lastSecKick = 0;
+    unsigned long lastStatusLog = 0;
+    unsigned long lastUiPaint = 0;
     bool resumeAfterQuiet = false;
+    int lastUiPhase = -1;
     // Resolve exclude / expected to bond indices up front — more reliable than address
     // strings across iOS/Android RPA and Windows/Linux public addresses.
     const int excludeBond = excludeAddr.length() ? bondIndexForStoredAddr(excludeAddr) : -1;
@@ -489,31 +497,11 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         }
         if (!exclusiveHost) return;
 
-        // Exclusive reconnect must NEVER use open undirected ADV while another
-        // bonded central (iOS) exists — phones race in and starve Linux/BlueZ.
-        //
-        // ESP32-S3 link controller supports low-duty directed advertising and
-        // LE Privacy 1.2 (datasheet §4.3.3.2). Directed ADV addresses InitA at
-        // the selected bond only, so other bonded hosts cannot complete a link
-        // at the controller. Whitelist undirected is the fallback when directed
-        // cannot start (no bond / stack reject).
-        const unsigned long phaseLen = 12000;
-        if ((millis() - phaseStart) > phaseLen) {
-            openPhase = !openPhase;
-            phaseStart = millis();
-        }
-
-        if (!openPhase) {
-            if (advertiseDirectedForHost(expectedAddr)) return;
-            // Directed failed (no bond address) — try filter-accept list next.
-            openPhase = true;
-            phaseStart = millis();
-        }
-        if (advertiseForHost(expectedAddr, true)) return;
-
-        // Stay dark rather than opening ADV to every bonded phone.
-        HID_SLOT_LOG("resumeAdv quiet — no directed/wl for '%s'", expectedAddr.c_str());
-        advertiseStop();
+        // BlueZ/Linux needs normal undirected HID advertising to finish reconnect.
+        // Directed ADV and filter-accept-list both caused connect/drop loops on Linux
+        // while a bonded phone was nearby. Keep other hosts out in software below
+        // (immediate reject + long quiet), not by starving BlueZ of open ADV.
+        advertiseReconnect();
     };
 
     auto rejectPeer = [&](const char *why) {
@@ -543,24 +531,47 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         hidRemoteLedSet(HID_REMOTE_LED_REJECT);
         disconnectHost(false);
         peerSeenAt = 0;
-        // Stay dark long enough that iOS backs off and the selected host can connect.
-        unsigned long gap = wasExcluded ? (quietMs + 1500) : quietMs;
-        if (gap < 3000) gap = 3000;
+        lastSecKick = 0;
+        lastUiPhase = -1;
+        // Wrong host (usually iOS): brief quiet so the intended host can win the
+        // next open window without starving BlueZ for 10s+.
+        unsigned long gap = wasExcluded ? 4500 : quietMs;
+        if (gap < 2000) gap = 2000;
         if (gap > 6000) gap = 6000;
         quietUntil = millis() + gap;
         resumeAfterQuiet = true;
-        if (quietMs < 5000) {
+        if (quietMs < 4000) {
             quietMs += 500;
-            if (quietMs > 5000) quietMs = 5000;
+            if (quietMs > 4000) quietMs = 4000;
         }
-        // Resume on directed ADV so the rejected host cannot re-enter.
-        openPhase = false;
-        phaseStart = millis();
         lastAdvKick = millis();
         lastAdvRefresh = millis();
     };
 
+    auto paintWaitUi = [&](int phase, const char *line1) {
+        // 0=adv, 1=gap peer, 2=securing, 3=hid ready
+        if (phase == lastUiPhase && (millis() - lastUiPaint) < 800) return;
+        lastUiPhase = phase;
+        lastUiPaint = millis();
+        const char *line2 = nullptr;
+        if (exclusiveHost && expectedAddr.length()) {
+            // Keep host label on screen while phase text changes.
+            static String hostLabelCache;
+            hostLabelCache = gHidRemoteSession.displayNameForAddr(expectedAddr);
+            line2 = hostLabelCache.c_str();
+        }
+        hidRemoteDrawStatus(line1, line2);
+        if (phase <= 0) {
+            hidRemoteLedSet(acceptNewOnly ? HID_REMOTE_LED_PAIRING : HID_REMOTE_LED_CONNECTING);
+        } else if (phase < 3) {
+            hidRemoteLedSet(HID_REMOTE_LED_HANDSHAKE);
+        } else {
+            hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
+        }
+    };
+
     hidRemoteLedSet(acceptNewOnly ? HID_REMOTE_LED_PAIRING : HID_REMOTE_LED_CONNECTING);
+    paintWaitUi(0, acceptNewOnly ? "Pair new host only" : "Waiting for host...");
     HID_SLOT_LOG(
         "wait expect='%s' new=%d any=%d excl=%d exclude='%s' expectBond=%d excludeBond=%d prior=%d",
         expectedAddr.c_str(),
@@ -586,13 +597,59 @@ bool HidRemoteTransportSession::waitConnectedExpected(
 
         if (gapLinks > 0) {
             if (peerSeenAt == 0) peerSeenAt = millis();
+            NimBLEConnInfo info = server->getPeerInfo(0);
+            const bool secured = info.isEncrypted() || info.isBonded();
+            // BlueZ reconnect often encrypts without auth/subscribe callbacks.
+            if (secured && gHidRemoteSession.bleHid != nullptr) {
+                gHidRemoteSession.bleHid->ensureNotifyReady();
+            }
             const bool hidReady = bleHidLinkReady();
             bool knownWrong = false;
             bool knownRight = false;
             const int liveBond = bondIndexForConnection();
+            const int liveSlot = findSlotMatchingConnection();
+            const unsigned long peerAge = millis() - peerSeenAt;
+
+            // BlueZ often sits at GAP-connected until the peripheral starts encryption.
+            // Do NOT kick every ~1s — repeated startSecurity aborts BlueZ and causes
+            // the connect/disconnect loop. Kick once early, then sparsely.
+            if (!secured) {
+                const bool due =
+                    (lastSecKick == 0 && peerAge > 250) ||
+                    (lastSecKick > 0 && (millis() - lastSecKick) > 4000 && peerAge < 20000);
+                if (due) {
+                    NimBLEDevice::startSecurity(info.getConnHandle());
+                    lastSecKick = millis();
+                    HID_SLOT_LOG("security kick handle=%u age=%lu", (unsigned)info.getConnHandle(), peerAge);
+                }
+                paintWaitUi(1, "Host contacting...");
+            } else if (!hidReady) {
+                paintWaitUi(2, "Securing HID link...");
+            } else {
+                paintWaitUi(3, "HID ready...");
+            }
+
+            if ((millis() - lastStatusLog) > 1000) {
+                lastStatusLog = millis();
+                HID_SLOT_LOG(
+                    "link peer=%s id=%s bond=%d slot=%d enc=%d bonded=%d sub=%d ready=%d age=%lu",
+                    String(info.getAddress().toString().c_str()).c_str(),
+                    String(info.getIdAddress().toString().c_str()).c_str(),
+                    liveBond,
+                    liveSlot,
+                    (int)info.isEncrypted(),
+                    (int)info.isBonded(),
+                    (gHidRemoteSession.bleHid != nullptr)
+                        ? (int)gHidRemoteSession.bleHid->getSubscribedCount()
+                        : -1,
+                    (int)hidReady,
+                    peerAge
+                );
+            }
 
             if ((excludeBond >= 0 && liveBond == excludeBond) ||
-                (!excludeAddr.isEmpty() && connectionMatchesAddr(excludeAddr))) {
+                (!excludeAddr.isEmpty() && connectionMatchesAddr(excludeAddr) &&
+                 !connectionMatchesAddr(expectedAddr))) {
                 knownWrong = true;
             }
 
@@ -606,7 +663,6 @@ bool HidRemoteTransportSession::waitConnectedExpected(
                 else if (hidReady) knownRight = true;
             } else {
                 // Exclusive switch: only the selected host may stay connected.
-                const int liveSlot = findSlotMatchingConnection();
                 const bool addrMatch = connectionMatchesAddr(expectedAddr);
                 const bool bondMatch =
                     (expectedBond >= 0 && liveBond >= 0 && expectedBond == liveBond);
@@ -615,26 +671,19 @@ bool HidRemoteTransportSession::waitConnectedExpected(
 
                 const bool excluded =
                     (excludeBond >= 0 && liveBond >= 0 && liveBond == excludeBond) ||
-                    (!excludeAddr.isEmpty() && connectionMatchesAddr(excludeAddr));
+                    (!excludeAddr.isEmpty() && connectionMatchesAddr(excludeAddr) && !addrMatch);
 
-                if (positiveMatch && !isOtherSlotPeer(liveBond)) {
-                    // The selected host: wait as long as needed for the HID link.
+                // Reject ONLY on positive wrong identity. Bond-index mismatch alone
+                // is a common BlueZ false positive and causes connect/drop loops.
+                if (excluded || isOtherSlotPeer(liveBond) ||
+                    (liveSlot > 0 && wantSlot > 0 && liveSlot != wantSlot)) {
+                    knownWrong = true;
+                } else if (positiveMatch) {
                     knownRight = true;
-                } else if (excluded || isOtherSlotPeer(liveBond) ||
-                           (liveSlot > 0 && wantSlot > 0 && liveSlot != wantSlot)) {
-                    knownWrong = true;
-                } else if (expectedBond >= 0 && liveBond >= 0 && liveBond != expectedBond) {
-                    // Known bond, but not the one we asked for.
-                    knownWrong = true;
-                } else if (hidReady && expectedBond < 0 && liveBond < 0 &&
-                           !isOtherSlotPeer(liveBond)) {
-                    // Target's stored address no longer resolves to a bond, and
-                    // the live peer is not a known bond either. Accept and
-                    // re-canonicalize — but never when another slot's host linked.
+                } else if (peerAge > 800) {
+                    // Unidentified / not-yet-mapped peer after a short grace —
+                    // assume the host the user just asked for (open ADV).
                     knownRight = true;
-                } else if ((millis() - peerSeenAt) > 8000) {
-                    // Unidentified for too long — let the next window try again.
-                    knownWrong = true;
                 }
             }
 
@@ -660,20 +709,23 @@ bool HidRemoteTransportSession::waitConnectedExpected(
                 return true;
             }
 
-            // Right host still handshaking — keep waiting.
+            // Candidate host still handshaking — keep waiting (no ADV restart).
             delay(40);
             continue;
         }
 
         peerSeenAt = 0;
+        lastSecKick = 0;
+        paintWaitUi(0, acceptNewOnly ? "Advertising for new host..." : "Waiting for host...");
 
         if (millis() >= quietUntil) {
             NimBLEAdvertising *adv =
                 NimBLEDevice::isInitialized() ? NimBLEDevice::getAdvertising() : nullptr;
             if (adv != nullptr) {
+                // Only (re)start when quiet ended or ADV died — do not thrash
+                // every few seconds; that aborts BlueZ mid-reconnect.
                 const bool needStart = resumeAfterQuiet || !adv->isAdvertising();
-                const bool needRefresh = exclusiveHost && (millis() - lastAdvRefresh) > 5000;
-                if (needStart || needRefresh) {
+                if (needStart) {
                     resumeAdv();
                     resumeAfterQuiet = false;
                     lastAdvKick = millis();
@@ -685,6 +737,34 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         if (timeoutMs > 0 && (millis() - start) >= timeoutMs) break;
         delay(40);
     }
+
+    // Timeout/Esc: if a secured candidate for the expected host is still up,
+    // accept it instead of tearing BlueZ down into another reconnect loop.
+    if (exclusiveHost && NimBLEDevice::isInitialized()) {
+        NimBLEServer *server = NimBLEDevice::getServer();
+        if (server != nullptr && server->getConnectedCount() > 0) {
+            NimBLEConnInfo info = server->getPeerInfo(0);
+            const bool secured = info.isEncrypted() || info.isBonded();
+            const bool positivelyWrong =
+                (!excludeAddr.isEmpty() && connectionMatchesAddr(excludeAddr) &&
+                 !connectionMatchesAddr(expectedAddr)) ||
+                isOtherSlotPeer(bondIndexForConnection());
+            if (secured && !positivelyWrong) {
+                if (gHidRemoteSession.bleHid != nullptr) {
+                    gHidRemoteSession.bleHid->ensureNotifyReady();
+                }
+                BLEConnected = true;
+                connected = true;
+                rememberConnectedHost(wantSlot > 0 ? wantSlot : 0, true);
+                advertiseStop();
+                refreshHostLabel();
+                hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
+                HID_SLOT_LOG("accept-on-exit addr=%s", getConnectedAddress().c_str());
+                return true;
+            }
+        }
+    }
+
     disconnectHost(false);
     advertiseStop();
     connected = false;
@@ -717,10 +797,11 @@ bool HidRemoteTransportSession::isConnected() {
     }
 
     NimBLEConnInfo info = server->getPeerInfo(0);
-    // Require a usable HID link: encrypted/bonded, or subscribed notifies.
-    const bool hidReady =
-        info.isEncrypted() || info.isBonded() || (bleHid->getSubscribedCount() > 0);
-    if (!hidReady) {
+    // Require secured link AND notify subscriptions (matches BleKeyboard send gate).
+    const bool secured = info.isEncrypted() || info.isBonded();
+    if (secured) bleHid->ensureNotifyReady();
+    const bool subscribed = bleHid->getSubscribedCount() > 0;
+    if (!secured || !subscribed) {
         connected = false;
         BLEConnected = false;
         return false;
@@ -1116,8 +1197,13 @@ bool HidRemoteTransportSession::advertiseReconnect() {
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     if (adv == nullptr) return false;
 
-    adv->stop();
-    delay(40);
+    // BlueZ aborts mid-reconnect if we stop/restart ADV while it is connecting.
+    // If we are already connectable+advertising with no scan filter, leave it alone.
+    if (adv->isAdvertising()) {
+        HID_SLOT_LOG("adv reconnect keep-alive");
+        return true;
+    }
+
     clearBleWhitelist();
     adv->setScanFilter(false, false);
     // Fast intervals + full HID payload: works for iOS, Android, Windows, Linux.
@@ -1463,18 +1549,36 @@ bool HidRemoteTransportSession::switchToHost(const String &addr, unsigned long t
         return true;
     }
 
+    // If Linux/BlueZ already has a GAP link to the target, do NOT drop it —
+    // that is the classic connect/disconnect loop. Finish HID ready in place.
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEServer *server = NimBLEDevice::getServer();
+        if (server != nullptr && server->getConnectedCount() > 0 && connectionMatchesAddr(addr)) {
+            kvxConfig.setHidRemotePreferredHost(addr);
+            HID_SLOT_LOG("switchToHost keep live GAP for '%s'", addr.c_str());
+            if (!waitConnectedExpected(addr, timeoutMs, String(""))) {
+                advertiseStop();
+                return false;
+            }
+            return true;
+        }
+    }
+
     // Previous live host (usually iOS) will hammer reconnect — exclude by canonical bond.
+    // Never exclude the target itself (address-form / preferred mismatch).
     String excludeAddr = "";
     if (isConnected()) {
-        const int liveBond = bondIndexForConnection();
-        if (liveBond >= 0) {
-            excludeAddr = String(NimBLEDevice::getBondedAddress(liveBond).toString().c_str());
+        if (!connectionMatchesAddr(addr)) {
+            const int liveBond = bondIndexForConnection();
+            if (liveBond >= 0) {
+                excludeAddr = String(NimBLEDevice::getBondedAddress(liveBond).toString().c_str());
+            }
+            if (excludeAddr.isEmpty()) {
+                const int liveSlot = findSlotMatchingConnection();
+                if (liveSlot > 0) excludeAddr = kvxConfig.getHidRemoteHostSlot(liveSlot);
+            }
+            if (excludeAddr.isEmpty()) excludeAddr = getConnectedAddress();
         }
-        if (excludeAddr.isEmpty()) {
-            const int liveSlot = findSlotMatchingConnection();
-            if (liveSlot > 0) excludeAddr = kvxConfig.getHidRemoteHostSlot(liveSlot);
-        }
-        if (excludeAddr.isEmpty()) excludeAddr = getConnectedAddress();
     } else {
         // Not currently linked: still exclude the last preferred host when it is
         // a *different* slot than the target (stops iOS auto-winning Linux switch).
@@ -1488,13 +1592,20 @@ bool HidRemoteTransportSession::switchToHost(const String &addr, unsigned long t
             else if (prefBond >= 0 && wantBond >= 0 && prefBond != wantBond) excludeAddr = pref;
         }
     }
+    if (excludeAddr.length() &&
+        (hidRemoteAddrEqual(excludeAddr, addr) ||
+         (bondIndexForStoredAddr(excludeAddr) >= 0 &&
+          bondIndexForStoredAddr(excludeAddr) == bondIndexForStoredAddr(addr)))) {
+        HID_SLOT_LOG("switchToHost cleared self-exclude '%s'", excludeAddr.c_str());
+        excludeAddr = "";
+    }
 
-    // Drop current link and keep ADV off so iPhone cannot race back during settle.
+    // Drop current (wrong) link and keep ADV off so iPhone cannot race during settle.
     disconnectHost(false);
-    delay(800);
+    delay(500);
     kvxConfig.setHidRemotePreferredHost(addr);
 
-    // Exclusive wait: whitelist-only for this host; all other bonds are rejected.
+    // Exclusive wait: open reconnect ADV + software accept only this host.
     HID_SLOT_LOG(
         "switchToHost '%s' timeout=%lu exclude='%s'",
         addr.c_str(),

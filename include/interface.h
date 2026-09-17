@@ -45,6 +45,8 @@ void _setBrightness(uint8_t brightval);
 **********************************************************************/
 void InputHandler(void);
 void resetHeldNavKeys(void);
+// True while a printable key is physically held (TCA8418 ADV + matrix Cardputer).
+bool isCardputerKeyHeld(char c);
 
 /*********************************************************************
 ** Function: pollEncoder

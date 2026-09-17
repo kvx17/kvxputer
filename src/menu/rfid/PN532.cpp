@@ -515,7 +515,7 @@ int PN532::emulate() {
             if ((!canParseUltralightDump ||
                  !extractNdefMessageFromPageDump(strAllPages, emulatedNdefMessage))) {
                 if (!buildNdefMessageFromStruct(this->ndefMessage, emulatedNdefMessage)) {
-                    std::vector<uint8_t> uriPayload = Ndef::urlNdefAbbrv("https://bruce.computer");
+                    std::vector<uint8_t> uriPayload = Ndef::urlNdefAbbrv("https://github.com/kvx17/kvxputer");
                     emulatedNdefMessage = Ndef::newMessage(uriPayload);
                 }
             }

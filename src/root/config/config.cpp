@@ -523,6 +523,15 @@ void KvxputerConfig::fromFile(bool checkFS) {
         for (int i = 0; i < HID_REMOTE_HOST_SLOT_COUNT; i++) {
             hidRemoteHostSlots[i] = (i < (int)slots.size()) ? slots[i].as<String>() : String("");
         }
+        // Legacy configs could store 8 slots; fold extras into empty 1..6.
+        for (size_t i = (size_t)HID_REMOTE_HOST_SLOT_COUNT; i < slots.size(); i++) {
+            String extra = slots[i].as<String>();
+            if (extra.isEmpty()) continue;
+            if (findHidRemoteHostSlotForAddr(extra) > 0) continue;
+            int empty = findEmptyHidRemoteHostSlot();
+            if (empty <= 0) break;
+            hidRemoteHostSlots[empty - 1] = extra.substring(0, 32);
+        }
     }
     if (!setting["hidRemoteHostAliases"].isNull()) {
         hidRemoteHostAliases.clear();
@@ -667,6 +676,7 @@ void KvxputerConfig::validateConfig() {
     validateEvilPasswordMode();
     validateEvilGatewayIp();
     validatePahub();
+    validateQrCodes();
 }
 
 void KvxputerConfig::setUiColor(uint16_t primary, uint16_t *secondary, uint16_t *background) {
@@ -1260,6 +1270,62 @@ void KvxputerConfig::removeDisabledMenu(String value) {
 void KvxputerConfig::addQrCodeEntry(const String &menuName, const String &content) {
     qrCodes.push_back({menuName, content});
     saveFile();
+}
+
+void KvxputerConfig::validateQrCodes() {
+    static const char *kRepoUrl = "https://github.com/kvx17/kvxputer";
+    bool changed = false;
+
+    auto isLegacyBruce = [](const QrCodeEntry &e) {
+        String name = e.menuName;
+        name.toLowerCase();
+        String content = e.content;
+        content.toLowerCase();
+        if (name == "bruce ap" || name == "bruce wiki" || name == "bruce site") return true;
+        if (content.indexOf("bruce.computer") >= 0) return true;
+        if (content.indexOf("github.com/pr3y/bruce") >= 0) return true;
+        return false;
+    };
+
+    size_t writeIndex = 0;
+    for (size_t readIndex = 0; readIndex < qrCodes.size(); ++readIndex) {
+        if (isLegacyBruce(qrCodes[readIndex])) {
+            changed = true;
+            continue;
+        }
+        if (writeIndex != readIndex) qrCodes[writeIndex] = std::move(qrCodes[readIndex]);
+        ++writeIndex;
+    }
+    if (writeIndex < qrCodes.size()) qrCodes.erase(qrCodes.begin() + writeIndex, qrCodes.end());
+
+    bool hasRepo = false;
+    for (const auto &e : qrCodes) {
+        if (e.content == kRepoUrl) {
+            hasRepo = true;
+            break;
+        }
+    }
+    if (!hasRepo) {
+        qrCodes.insert(qrCodes.begin(), {"kvxputer GitHub", kRepoUrl});
+        changed = true;
+    } else if (!qrCodes.empty() && qrCodes[0].content != kRepoUrl) {
+        // Keep the repo QR first in the list.
+        QrCodeEntry repoEntry;
+        size_t repoIndex = 0;
+        for (size_t i = 0; i < qrCodes.size(); ++i) {
+            if (qrCodes[i].content == kRepoUrl) {
+                repoEntry = qrCodes[i];
+                if (repoEntry.menuName.length() == 0) repoEntry.menuName = "kvxputer GitHub";
+                repoIndex = i;
+                break;
+            }
+        }
+        qrCodes.erase(qrCodes.begin() + repoIndex);
+        qrCodes.insert(qrCodes.begin(), repoEntry);
+        changed = true;
+    }
+
+    if (changed) saveFile();
 }
 
 void KvxputerConfig::removeQrCodeEntry(const String &menuName) {

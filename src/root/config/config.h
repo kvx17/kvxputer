@@ -113,13 +113,13 @@ public:
     uint8_t pahubAddr = 0x70;
     uint8_t pahubChannels[6] = {};
 
-    // HID Remote
-    static const int HID_REMOTE_HOST_SLOT_COUNT = 8;
+    // HID Remote — 6 UI slots; NimBLE MAX_BONDS stays 8 for other BLE tools
+    static const int HID_REMOTE_HOST_SLOT_COUNT = 6;
     int hidRemoteTransport = 0; // 0=USB, 1=BLE
     String hidRemoteBleName = "kvxKeyboard";
     String hidRemoteHostName = "";
     String hidRemotePreferredHost = ""; // bonded BLE address; empty = any bonded
-    String hidRemoteHostSlots[HID_REMOTE_HOST_SLOT_COUNT]; // 1-based UI maps to index 0..7
+    String hidRemoteHostSlots[HID_REMOTE_HOST_SLOT_COUNT]; // 1-based UI maps to index 0..5
     std::map<String, String> hidRemoteHostAliases = {}; // addr -> display name
     int hidRemoteLastMode = 0;
     int hidRemoteMouseSensitivity = 5;
@@ -142,10 +142,9 @@ public:
     std::map<String, String> mainscreenShortcuts = {};
 
     std::vector<QrCodeEntry> qrCodes = {
-        {"Bruce AP",   "WIFI:T:WPA;S:KvxputerNet;P:kvxputernet;;"},
-        {"Bruce Wiki", "https://github.com/pr3y/Bruce/wiki"},
-        {"Bruce Site", "https://bruce.computer"            },
-        {"Rickroll",   "https://youtu.be/dQw4w9WgXcQ"      }
+        {"kvxputer GitHub", "https://github.com/kvx17/kvxputer"},
+        {"kvxputer AP",     "WIFI:T:WPA;S:KvxputerNet;P:kvxputernet;;"},
+        {"Rickroll",        "https://youtu.be/dQw4w9WgXcQ"          }
     };
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -211,6 +210,7 @@ public:
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);
     void removeQrCodeEntry(const String &menuName);
+    void validateQrCodes();
     String getWifiPassword(const String &ssid) const;
     void addEvilWifiName(String value);
     void removeEvilWifiName(String value);
@@ -269,7 +269,7 @@ public:
     void clearHidRemoteHostSlot(int index1to8);
     void clearAllHidRemoteHostSlots();
     int findHidRemoteHostSlotForAddr(const String &addr) const; // 1..8 or 0
-    int findEmptyHidRemoteHostSlot() const;                     // 1..8 or 0
+    int findEmptyHidRemoteHostSlot() const;                     // 1..6 or 0
     void setHidRemoteLastMode(int value);
     void setHidRemoteMouseSensitivity(int value);
     void setHidRemoteJoyInvertY(bool value);

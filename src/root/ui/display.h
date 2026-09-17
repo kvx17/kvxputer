@@ -35,6 +35,10 @@ void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight =
 struct GifPosition {
     int x;
     int y;
+    int destW = 0;
+    int destH = 0;
+    int srcW = 0;
+    int srcH = 0;
 
     GifPosition(int xCoord, int yCoord) : x(xCoord), y(yCoord) {}
 };
@@ -46,6 +50,7 @@ public:
     ~Gif();
 
     bool openGIF(FS *fs, const char *filename);
+    bool openGIF(const uint8_t *data, int size);
 
     int playFrame(int x = 0, int y = 0, bool bSync = true);
 
@@ -58,6 +63,8 @@ public:
     int getCanvasWidth() { return gif->getCanvasWidth(); }
 
     int getCanvasHeight() { return gif->getCanvasHeight(); }
+
+    void setScaleTo(int destW, int destH);
 
     int getLastError();
 
@@ -98,7 +105,11 @@ bool drawBmp(FS &fs, const String &filename, int x = 0, int y = 0, bool center =
 #if !defined(LITE_VERSION)
 bool showGif(
     FS *fs, const char *filename, int x = 0, int y = 0, bool center = false, int playDurationMs = 0,
-    bool clearButtonStatus = true
+    bool clearButtonStatus = true, bool fullscreen = false
+);
+bool showGif(
+    const uint8_t *data, size_t data_size, int x = 0, int y = 0, bool center = false,
+    int playDurationMs = 0, bool clearButtonStatus = true, bool fullscreen = false
 );
 #endif
 bool showJpeg(FS &fs, const String &filename, int x = 0, int y = 0, bool center = false);

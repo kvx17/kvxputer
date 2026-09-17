@@ -71,7 +71,7 @@ void interpreterHandler(void *pvParameters) {
         ctx, global, "__filepath", JS_NewString(ctx, (String(scriptDirpath) + String(scriptName)).c_str())
     );
     JS_SetPropertyStr(ctx, global, "__dirpath", JS_NewString(ctx, scriptDirpath));
-    JS_SetPropertyStr(ctx, global, "BRUCE_VERSION", JS_NewString(ctx, BRUCE_VERSION));
+    JS_SetPropertyStr(ctx, global, "KVXPUTER_VERSION", JS_NewString(ctx, KVXPUTER_VERSION));
     JS_SetPropertyStr(ctx, global, "BRUCE_PRICOLOR", JS_NewInt32(ctx, kvxConfig.priColor));
     JS_SetPropertyStr(ctx, global, "BRUCE_SECCOLOR", JS_NewInt32(ctx, kvxConfig.secColor));
     JS_SetPropertyStr(ctx, global, "BRUCE_BGCOLOR", JS_NewInt32(ctx, kvxConfig.bgColor));

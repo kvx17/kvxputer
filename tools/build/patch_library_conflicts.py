@@ -200,6 +200,12 @@ conflicts = [
         r'#define RFAL_NFCA_N_RETRANS         2U',
         '#define RFAL_NFCA_N_RETRANS         4U'
     ),
+    # Boot GIF (and other animations) can exceed the library's 480px default canvas.
+    (
+        ".pio/libdeps/*/AnimatedGIF/src/AnimatedGIF.h",
+        r'#define MAX_WIDTH 480',
+        '#define MAX_WIDTH 640'
+    ),
 ]
 
 for file_pattern, search, replace in conflicts:

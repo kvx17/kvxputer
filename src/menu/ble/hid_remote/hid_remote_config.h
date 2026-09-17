@@ -3,7 +3,7 @@
 #include <stdint.h>
 
 #define KVXKEYBOARD_HID_NAME "kvxkeyboard HID"
-#define HID_REMOTE_HOST_SLOTS 8
+#define HID_REMOTE_HOST_SLOTS 6
 #define HID_REMOTE_BLE_APPEARANCE 0x03C0
 
 // Serial trace for host-slot connect/reject decisions (HID_SLOT ... lines).
@@ -15,6 +15,7 @@ enum HidRemoteLedMode {
     HID_REMOTE_LED_OFF = 0,
     HID_REMOTE_LED_CONNECTING,
     HID_REMOTE_LED_PAIRING,
+    HID_REMOTE_LED_HANDSHAKE, // GAP peer present; encrypting / waiting HID ready
     HID_REMOTE_LED_CONNECTED,
     HID_REMOTE_LED_DISCONNECTED,
     HID_REMOTE_LED_REJECT,

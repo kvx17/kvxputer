@@ -18,8 +18,8 @@ JSValue native_getBoard(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
     return JS_NewString(ctx, board.c_str());
 }
 
-JSValue native_getBruceVersion(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
-    return JS_NewString(ctx, BRUCE_VERSION);
+JSValue native_getKvxputerVersion(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
+    return JS_NewString(ctx, KVXPUTER_VERSION);
 }
 
 JSValue native_getBattery(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {

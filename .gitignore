@@ -28,6 +28,7 @@ lib/mquickjs_headers/mqjs_stdlib_generator.exe
 # Generated at build time
 include/webFiles.h
 include/current_year.h
+src/root/ui/bootimage_embed.S
 bruce.conf
 
 # Reference / inspiration (local only — not part of firmware)

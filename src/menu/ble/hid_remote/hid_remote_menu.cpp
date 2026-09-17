@@ -7,6 +7,7 @@
 #include "root/config/config.h"
 #include "root/input/mykeyboard.h"
 #include <globals.h>
+#include <interface.h>
 #if defined(HAS_KEYBOARD)
 #include <Keyboard.h>
 extern Keyboard_Class Keyboard;
@@ -16,7 +17,7 @@ extern Keyboard_Class Keyboard;
 #endif
 
 // Hold a slot key this long to open that host's options instead of connecting.
-static const unsigned long HID_SLOT_HOLD_MS = 3000;
+static const unsigned long HID_SLOT_HOLD_MS = 2000;
 
 static HidRemoteTransport resolveTransport(HidRemoteLaunch launch) {
     if (launch == HID_REMOTE_LAUNCH_USB) return HID_REMOTE_USB;
@@ -50,21 +51,23 @@ static bool hidRemoteRunPairIntoSlot(int slot) {
 
 static void hidRemoteIdleAdvertiseStop() { gHidRemoteSession.advertiseStop(); }
 
-// True when the slot key is still held after HID_SLOT_HOLD_MS.
+// True when the slot key is still held after HID_SLOT_HOLD_MS (options).
+// False on early release (tap → connect / pair).
 static bool hidRemoteSlotKeyHeld(char key) {
 #if defined(HAS_KEYBOARD)
     const unsigned long start = millis();
     bool hinted = false;
 
+    // Let InputHandler run so TCA8418 press/release can update held state.
     while (true) {
-        Keyboard.update();
-        if (!Keyboard.isKeyPressed(key)) return false;
+        if (!isCardputerKeyHeld(key)) return false;
         if (millis() - start >= HID_SLOT_HOLD_MS) return true;
-        if (!hinted && (millis() - start) > 400) {
+        if (!hinted && (millis() - start) > 350) {
             hidRemoteDrawFooter("Keep holding for host options");
             hinted = true;
         }
-        delay(30);
+        hidRemoteLedTick();
+        delay(20);
     }
 #else
     (void)key;
@@ -80,7 +83,7 @@ static void hidRemoteHostDetailMenu(int slot) {
         const String name = gHidRemoteSession.displayNameForAddr(addr);
         const String connected = gHidRemoteSession.getConnectedAddress();
         const bool isLive =
-            connected.length() && connected.equalsIgnoreCase(addr) && gHidRemoteSession.isConnected();
+            connected.length() && hidRemoteAddrEqual(connected, addr) && gHidRemoteSession.isConnected();
 
         std::vector<Option> opts = {
             {String("Slot ") + String(slot) + (isLive ? ": connected" : ": remembered"), []() {}},
@@ -94,7 +97,7 @@ static void hidRemoteHostDetailMenu(int slot) {
                  } else {
                      hidRemoteLedSet(HID_REMOTE_LED_DISCONNECTED);
                      displayWarning(
-                         "Not in range / host idle.\nOpen Bluetooth on host\nor tap the keyboard.",
+                         "Wrong phone raced in / host idle.\nOpen BT and tap keyboard.",
                          true
                      );
                  }
@@ -141,7 +144,7 @@ static void hidRemoteHostDetailMenu(int slot) {
 static void hidRemoteConnectNewDevice() {
     int slot = kvxConfig.findEmptyHidRemoteHostSlot();
     if (slot <= 0) {
-        displayWarning("All 8 host slots full.\nForget a host first.", true);
+        displayWarning("All 6 host slots full.\nForget a host first.", true);
         return;
     }
     if (hidRemoteRunPairIntoSlot(slot)) {
@@ -157,7 +160,7 @@ static void hidRemoteConnectNewDevice() {
     }
 }
 
-// Interactive 1-8 slot selector.
+// Interactive 1-6 slot selector.
 // fromSettings=false (startup): success → continue to modes; ESC → exit app
 // fromSettings=true: ESC/Ok → return to settings (session stays up)
 static bool hidRemoteHostSlotScreen(bool fromSettings) {
@@ -168,8 +171,8 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
     String lastLiveAddr = wasConnected ? gHidRemoteSession.getConnectedAddress() : String("");
     (void)_getKeyPress(); // drain menu key
 
-    const char *footer = fromSettings ? "1-8 select (hold 3s: options)  S settings  ESC back"
-                                      : "1-8 select (hold 3s: options)  S settings  ESC exit";
+    const char *footer = fromSettings ? "1-6 tap=connect  hold 2s=options  S settings  ESC back"
+                                      : "1-6 tap=connect  hold 2s=options  S settings  ESC exit";
 
     tft.fillScreen(0x0841);
     hidRemoteDrawHostSlots(HID_REMOTE_BLE, wasConnected);
@@ -182,7 +185,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
         const bool linkedNow = gHidRemoteSession.isConnected();
         hidRemoteDrawHostSlots(HID_REMOTE_BLE, linkedNow);
         hidRemoteDrawFooter(footer);
-        wasConnected = !linkedNow;
+        wasConnected = linkedNow;
         lastLiveAddr = "";
     };
 
@@ -203,7 +206,8 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
         }
         const bool linked = gHidRemoteSession.isConnected();
         const String liveAddr = linked ? gHidRemoteSession.getConnectedAddress() : String("");
-        if (linked != wasConnected || !liveAddr.equalsIgnoreCase(lastLiveAddr)) {
+        if (linked != wasConnected || liveAddr != lastLiveAddr) {
+            // liveAddr may include type suffix; slot matching uses hidRemoteAddrEqual elsewhere.
             hidRemoteDrawHostSlots(HID_REMOTE_BLE, linked);
             hidRemoteDrawFooter(footer);
             if (linked) hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
@@ -219,9 +223,11 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
                 redrawSlots();
                 break;
             }
-            if (c >= '1' && c <= '8') {
+            if (c >= '1' && c < ('1' + KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT)) {
                 int slot = c - '0';
                 String addr = kvxConfig.getHidRemoteHostSlot(slot);
+                // Filled slot: tap → connect, hold 2s → host options.
+                // Empty slot: tap/hold both start pairing (no options yet).
                 if (addr.length() && hidRemoteSlotKeyHeld(c)) {
                     hidRemoteHostDetailMenu(slot);
                     redrawSlots();
@@ -253,7 +259,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
                     } else {
                         hidRemoteLedSet(HID_REMOTE_LED_DISCONNECTED);
                         displayWarning(
-                            "Not in range / host idle.\nOpen Bluetooth on host\nor tap the keyboard.",
+                            "Wrong phone raced in / host idle.\nOpen BT and tap keyboard.",
                             true
                         );
                         hidRemoteIdleAdvertiseStop();
@@ -341,7 +347,7 @@ static void hidRemoteHostsMenu() {
                 );
             } else {
                 label = String(slot) + " " + gHidRemoteSession.displayNameForAddr(addr);
-                if (live.length() && live.equalsIgnoreCase(addr) && gHidRemoteSession.isConnected()) {
+                if (live.length() && hidRemoteAddrEqual(live, addr) && gHidRemoteSession.isConnected()) {
                     label = "* " + label;
                 }
                 opts.push_back({label, [=]() { hidRemoteHostDetailMenu(slot); }});
@@ -596,12 +602,19 @@ static int hidRemoteModePicker(int startIndex) {
     const int exitIdx = HID_MODE_COUNT + 1;
 
     while (true) {
-        // Drop a link from any host other than the one the user chose.
+        // Drop only when live peer clearly belongs to a different filled slot.
+        // Address-form mismatches must not tear down a just-accepted link.
         if (gHidRemoteSession.transport == HID_REMOTE_BLE && gHidRemoteSession.isConnected()) {
             String pref = kvxConfig.hidRemotePreferredHost;
             if (pref.length() && !gHidRemoteSession.isConnectedToAddr(pref)) {
-                gHidRemoteSession.disconnectHost(false);
-                gHidRemoteSession.advertiseStop();
+                const int prefSlot = kvxConfig.findHidRemoteHostSlotForAddr(pref);
+                const String live = gHidRemoteSession.getConnectedAddress();
+                const int liveSlot =
+                    live.length() ? kvxConfig.findHidRemoteHostSlotForAddr(live) : 0;
+                if (prefSlot > 0 && liveSlot > 0 && liveSlot != prefSlot) {
+                    gHidRemoteSession.disconnectHost(false);
+                    gHidRemoteSession.advertiseStop();
+                }
             }
         }
 
