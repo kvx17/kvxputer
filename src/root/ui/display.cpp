@@ -7,6 +7,9 @@
 #include "root/ui/settings.h" //for timeStr
 #include "root/app/utils.h"
 #include "root/hal/led_control.h"
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_alarms.h"
+#endif
 #include <JPEGDecoder.h>
 #include <interface.h> //for charging ischarging to print charging indicator
 #include <memory>
@@ -26,6 +29,12 @@ void panelSleep(bool on) {
 #endif
     // Disables tft writings on the display
     tft.setSleepMode(on);
+}
+
+void tftReleaseFrameCanvas() {
+#if defined(HAS_SCREEN)
+    tft.releaseCanvas();
+#endif
 }
 
 bool __attribute__((weak)) isCharging() { return false; }
@@ -587,6 +596,9 @@ int loopOptions(
             index = -1;
             break;
         }
+#ifndef LITE_VERSION
+        if (pdaAlarmsPoll()) redraw = true;
+#endif
         if (menuType == MENU_TYPE_MAIN) {
             checkReboot();
             if (devModeCounter >= 5 && !kvxConfig.devMode) {
@@ -602,7 +614,21 @@ int loopOptions(
             drawKvxTopBar(kvxActiveTitle.c_str());
         }
 
-        if (redraw) {
+        // Only redraw when dirty. For long submenu labels, tick a marquee ~3.5Hz
+        // without forcing a full TftFrame present every 20ms (that caused flicker).
+        bool marqueeRedraw = false;
+        if (menuType == MENU_TYPE_SUBMENU && index >= 0 && index < (int)options.size()) {
+            const int nchars = max(1, (tftWidth - 12) / (FM * LW));
+            if ((int)options[index].label.length() + 2 > nchars) {
+                static unsigned long marqueeTs = 0;
+                if (millis() - marqueeTs > 280) {
+                    marqueeTs = millis();
+                    marqueeRedraw = true;
+                }
+            }
+        }
+
+        if (redraw || marqueeRedraw) {
             menuOptionType = menuType; // updates menutype to the remote controller
             menuOptionLabel = kvxActiveTitle;
             // update the hovered
@@ -915,13 +941,17 @@ void drawStatusBar() {
         tft.print(String("kvxputer v") + KVXPUTER_VERSION);
     }
 
-    int iconCount = 0;
     bool showSD = sdcardMounted;
     bool showGPS = gpsConnected;
     bool showWifi = (WiFi.getMode() != 0);
     bool showWeb = isWebUIActive;
     bool showBLE = BLEConnected;
     bool showWG = isConnectedWireguard;
+
+    const int IW = 16;
+    const int IH = 16;
+    const int GAP = 6;
+    int iconCount = 0;
     if (showSD) iconCount++;
     if (showGPS) iconCount++;
     if (showWifi) iconCount++;
@@ -930,49 +960,39 @@ void drawStatusBar() {
     if (showWG) iconCount++;
 
     if (iconCount > 0) {
-        const int IW = 16;
-        const int IH = 16;
-        const int GAP = 6;
-        int totalW = iconCount * IW + (iconCount - 1) * GAP;
-        int sx = (tftWidth - totalW) / 2;
+        // Pack from the right: SD immediately left of battery (same as kvx top bar).
+        int rightEdge = (bat > 0) ? (tftWidth - 85) : (tftWidth - 6);
+        int x = rightEdge - (iconCount * IW + (iconCount - 1) * GAP);
         int iy = 7;
-        int idx = 0;
 
-        if (showSD) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawSdSmall(x, iy);
-            idx++;
-        }
-        if (showGPS) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawGpsSmall(x, iy);
-            idx++;
-        }
-        if (showWifi) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWifiSmall(x, iy);
-            idx++;
-        }
-        if (showWeb) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWebUISmall(x, iy);
-            idx++;
-        }
-        if (showBLE) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawBLESmall(x, iy);
-            idx++;
-        }
         if (showWG) {
-            int x = sx + idx * (IW + GAP);
             tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
             drawWireguardStatus(x, iy);
-            idx++;
+            x += IW + GAP;
+        }
+        if (showBLE) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawBLESmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showWeb) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawWebUISmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showWifi) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawWifiSmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showGPS) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawGpsSmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showSD) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawSdSmall(x, iy);
         }
     }
 }

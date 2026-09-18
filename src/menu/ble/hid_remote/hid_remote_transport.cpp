@@ -2,6 +2,7 @@
 #include "hid_remote_ui.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
 #include "root/hal/radio_mem.h"
+#include "root/hal/led_control.h"
 #include "root/ui/display.h"
 #include "root/config/config.h"
 
@@ -14,6 +15,7 @@
 #include <NimBLEDevice.h>
 #include <NimBLEAdvertisementData.h>
 #include <NimBLEServer.h>
+#include <host/ble_store.h>
 #include <esp_mac.h>
 #if defined(USB_as_HID)
 #include <USB.h>
@@ -61,45 +63,65 @@ static void setHidRemoteBleMac() {
 #endif
 }
 
-static bool ensureUsbKeyboard(HidRemoteTransportSession &s) {
+static bool waitUsbMounted(unsigned long timeoutMs = 0) {
 #if defined(USB_as_HID)
-    if (s.usbKeyboard == nullptr) s.usbKeyboard = new USBHIDKeyboard();
-    if (!s.keyboardActive) {
-        if (!s.mouseActive) {
-            applyGenericUsbIdentity();
-            USB.begin();
-        }
-        while (!tud_mounted() && !check(EscPress)) delay(50);
+    unsigned long start = millis();
+    while (!tud_mounted()) {
         if (check(EscPress)) return false;
-        s.usbKeyboard->begin();
-        s.keyboardHid = s.usbKeyboard;
-        s.keyboardActive = true;
+        if (timeoutMs > 0 && (millis() - start) >= timeoutMs) return false;
+        delay(40);
+        yield();
     }
-    s.connected = true;
     return true;
 #else
-    (void)s;
+    (void)timeoutMs;
     return false;
 #endif
 }
 
-static bool ensureUsbMouse(HidRemoteTransportSession &s) {
+// Register HID interfaces before USB.begin() so the host enumerates a real
+// keyboard/mouse composite. Starting USB first (then begin after mount) left
+// the host with a non-HID device and tud_mounted() never reported a usable link.
+static bool ensureUsbStack(HidRemoteTransportSession &s, HidRemoteCapability caps) {
 #if defined(USB_as_HID)
-    if (s.usbMouse == nullptr) s.usbMouse = new USBHIDMouse();
-    if (!s.mouseActive) {
-        if (!s.keyboardActive) {
-            applyGenericUsbIdentity();
-            USB.begin();
-        }
-        while (!tud_mounted() && !check(EscPress)) delay(50);
-        if (check(EscPress)) return false;
+    const bool wantKb = (caps & HID_CAP_KEYBOARD) || (caps & HID_CAP_MEDIA);
+    const bool wantMouse = (caps & HID_CAP_MOUSE);
+
+    if (wantKb && s.usbKeyboard == nullptr) s.usbKeyboard = new USBHIDKeyboard();
+    if (wantMouse && s.usbMouse == nullptr) s.usbMouse = new USBHIDMouse();
+
+    if (wantKb && !s.keyboardActive) {
+        s.usbKeyboard->begin(KeyboardLayout_en_US);
+        s.usbKeyboard->setDelay(kvxConfig.badUSBBLEKeyDelay);
+        s.keyboardHid = s.usbKeyboard;
+        s.keyboardActive = true;
+    }
+    if (wantMouse && !s.mouseActive) {
         s.usbMouse->begin();
         s.mouseActive = true;
+    }
+
+    // Bring (or re-bring) the TinyUSB device stack up after HID registration.
+    applyGenericUsbIdentity();
+    USB.begin();
+    delay(50);
+    // Force re-enumeration so hosts that already saw a non-HID CDC/JTAG link
+    // pick up the new HID descriptors.
+    tud_disconnect();
+    delay(120);
+    tud_connect();
+    delay(80);
+
+    EscPress = false; // stale Esc must not abort the wait
+    if (!waitUsbMounted(0)) {
+        s.connected = false;
+        return false;
     }
     s.connected = true;
     return true;
 #else
     (void)s;
+    (void)caps;
     return false;
 #endif
 }
@@ -115,9 +137,10 @@ static void teardownUsb(HidRemoteTransportSession &s) {
         s.mouseActive = false;
     }
     s.keyboardHid = nullptr;
-    USB.~ESPUSB();
-    delay(50);
-    USB.enableDFU();
+    // Soft-detach only — avoid USB.~ESPUSB() which leaves the global USB object
+    // half-destroyed and breaks the next USB.begin() on Cardputer.
+    tud_disconnect();
+    delay(80);
 #endif
     s.connected = false;
 }
@@ -132,12 +155,8 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         return true;
     }
 
-    if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
-        return false;
-    }
-
-    // Tear down any leftover BadUSB BLE pointer without double-deleting ours
+    // Tear down any existing BLE first — leftover NimBLE/hid_ble holds the DMA
+    // block that radioHasMemForBle() is about to require.
 #if !defined(LITE_VERSION)
     if (hid_ble != nullptr && hid_ble != s.bleHid) {
         safeCleanupDuckyBLE(hid_ble);
@@ -152,15 +171,24 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         s.bleHid = nullptr;
     }
 
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEDevice::deinit(true);
+        delay(150);
+    }
+
+#ifdef HAS_RGB_LED
+    ledEffects(false);
+#endif
+
+    if (!radioHasMemForBle()) {
+        displayError("Low RAM: free WiFi/SD first", true);
+        return false;
+    }
+
     setHidRemoteBleMac();
 
     String deviceName = kvxConfig.hidRemoteBleName;
     if (deviceName.isEmpty()) deviceName = KVXKEYBOARD_HID_NAME;
-
-    if (NimBLEDevice::isInitialized()) {
-        NimBLEDevice::deinit(true);
-        delay(100);
-    }
 
     s.bleHid = new BleCompositeHid(deviceName, "HID", 100);
     s.bleHid->setName(deviceName);
@@ -235,12 +263,15 @@ bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability 
     connected = false;
 
     if (t == HID_REMOTE_USB) {
-        bool ok = true;
-        if (caps & HID_CAP_KEYBOARD) ok = ok && ensureUsbKeyboard(*this);
-        if (caps & HID_CAP_MOUSE) ok = ok && ensureUsbMouse(*this);
+#if defined(USB_as_HID)
+        bool ok = ensureUsbStack(*this, caps);
         connected = ok;
         if (ok) refreshHostLabel();
         return ok;
+#else
+        (void)caps;
+        return false;
+#endif
     }
 
     if (t == HID_REMOTE_BLE) {
@@ -777,7 +808,18 @@ bool HidRemoteTransportSession::waitConnectedExpected(
 }
 
 bool HidRemoteTransportSession::isConnected() {
-    if (transport == HID_REMOTE_USB) return connected;
+    if (transport == HID_REMOTE_USB) {
+#if defined(USB_as_HID)
+        // Re-check the TinyUSB mount every poll — `connected` alone stays true
+        // after begin() even when the host never finished enumerating, and stays
+        // stale if the cable is unplugged.
+        const bool mounted = tud_mounted();
+        connected = mounted && (keyboardActive || mouseActive);
+        return connected;
+#else
+        return false;
+#endif
+    }
 #if defined(CONFIG_BT_ENABLED)
     if (bleHid == nullptr || !NimBLEDevice::isInitialized()) {
         connected = false;
@@ -1427,52 +1469,85 @@ bool HidRemoteTransportSession::disconnectHost(bool readvertise) {
 #endif
 }
 
-bool HidRemoteTransportSession::forgetBond(const String &addr) {
 #if defined(CONFIG_BT_ENABLED)
-    if (transport != HID_REMOTE_BLE) return false;
-    if (!NimBLEDevice::isInitialized() || addr.isEmpty()) return false;
+// Stop ADV + drop every link before editing the bond store. ble_gap_unpair()
+// returns BLE_HS_EBUSY while advertising when the peer has an IRK (iOS/Android).
+static void quiesceBleForBondEdit(HidRemoteTransportSession &s) {
+    s.disconnectHost(false);
 
-    // ble_gap_unpair() edits the resolving list and terminates links. Doing that
-    // while advertising (especially with a filter-accept list) aborts the host.
-    // Always go quiet and drop every link before touching bonds.
-    advertiseStop();
+    NimBLEAdvertising *adv = NimBLEDevice::isInitialized() ? NimBLEDevice::getAdvertising() : nullptr;
+    unsigned long t0 = millis();
+    while (adv != nullptr && adv->isAdvertising() && (millis() - t0) < 2000) {
+        adv->stop();
+        delay(40);
+    }
     clearBleWhitelist();
-    NimBLEServer *server = NimBLEDevice::getServer();
-    if (server != nullptr && server->getConnectedCount() > 0) {
-        disconnectHost(false);
-        delay(250);
+    if (adv != nullptr) {
+        adv->setScanFilter(false, false);
+        adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
     }
 
-    bool deleted = false;
-    const int idx = bondIndexForStoredAddr(addr);
-    if (idx >= 0) {
-        NimBLEAddress bonded = NimBLEDevice::getBondedAddress(idx);
-        if (!bonded.isNull()) deleted = NimBLEDevice::deleteBond(bonded);
+    NimBLEServer *server = NimBLEDevice::getServer();
+    t0 = millis();
+    while (server != nullptr && server->getConnectedCount() > 0 && (millis() - t0) < 3000) {
+        NimBLEConnInfo info = server->getPeerInfo(0);
+        server->disconnect(info.getConnHandle());
+        delay(80);
     }
-    if (!deleted) {
-        // Try both address types — deleteBond fails when type is wrong
-        NimBLEAddress pub, rnd;
-        if (makeBleAddr(addr, BLE_ADDR_PUBLIC, pub)) deleted = NimBLEDevice::deleteBond(pub) || deleted;
-        if (makeBleAddr(addr, BLE_ADDR_RANDOM, rnd)) deleted = NimBLEDevice::deleteBond(rnd) || deleted;
+    if (s.bleHid != nullptr) s.bleHid->clearConnected();
+    s.connected = false;
+    BLEConnected = false;
+
+    // Second ADV stop — BleKeyboard / host reconnect races can restart it.
+    t0 = millis();
+    while (adv != nullptr && adv->isAdvertising() && (millis() - t0) < 1000) {
+        adv->stop();
+        delay(40);
     }
-    // Last resort: scan bonds for a peer that string-matches ignoring type
-    if (!deleted) {
+    clearBleWhitelist();
+    delay(100);
+}
+
+// Prefer store deletion: ble_gap_unpair often fails with EBUSY when an IRK peer
+// exists and advertising has not fully quiesced. isBonded() is the source of truth.
+static bool deleteBondHard(const NimBLEAddress &bonded) {
+    if (bonded.isNull()) return false;
+    (void)ble_store_util_delete_peer(bonded.getBase());
+    (void)NimBLEDevice::deleteBond(bonded); // best-effort resolving-list cleanup
+    delay(20);
+    return !NimBLEDevice::isBonded(bonded);
+}
+
+static bool deleteBondMatchingAddr(const String &addr) {
+    // Walk the live bond list first — those NimBLEAddress objects have the correct type.
+    for (int pass = 0; pass < 3; pass++) {
         const int n = NimBLEDevice::getNumBonds();
+        if (n <= 0) return true;
+        bool matched = false;
         for (int i = n - 1; i >= 0; i--) {
             NimBLEAddress b = NimBLEDevice::getBondedAddress(i);
             if (b.isNull()) continue;
-            if (bleAddrEqual(addr, String(b.toString().c_str()))) {
-                deleted = NimBLEDevice::deleteBond(b) || deleted;
-                delay(20);
-            }
+            String bonded = String(b.toString().c_str());
+            if (!bleAddrEqual(addr, bonded) && bleAddrCore(bonded) != bleAddrCore(addr)) continue;
+            matched = true;
+            (void)deleteBondHard(b);
+            delay(20);
         }
+        if (!matched) break;
     }
 
-    // Always clear slot/alias — host is forgotten from UI even if NVS unpair glitches
+    // Also try constructing both address types from the stored string.
+    NimBLEAddress pub, rnd;
+    if (makeBleAddr(addr, BLE_ADDR_PUBLIC, pub)) (void)deleteBondHard(pub);
+    if (makeBleAddr(addr, BLE_ADDR_RANDOM, rnd)) (void)deleteBondHard(rnd);
+
+    return bondIndexForStoredAddr(addr) < 0;
+}
+
+static void clearSlotMappingForAddr(const String &addr) {
     kvxConfig.clearHidRemoteHostAlias(addr);
     int slot = kvxConfig.findHidRemoteHostSlotForAddr(addr);
     if (slot > 0) kvxConfig.clearHidRemoteHostSlot(slot);
-    // Also clear any slot that fuzzy-matches via remaining bond identity
     for (int s = 1; s <= KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT; s++) {
         String slotted = kvxConfig.getHidRemoteHostSlot(s);
         if (slotted.length() && bleAddrEqual(slotted, addr)) {
@@ -1485,11 +1560,30 @@ bool HidRemoteTransportSession::forgetBond(const String &addr) {
          bleAddrEqual(kvxConfig.hidRemotePreferredHost, addr))) {
         kvxConfig.setHidRemotePreferredHost("");
     }
+}
+#endif
+
+bool HidRemoteTransportSession::forgetBond(const String &addr) {
+#if defined(CONFIG_BT_ENABLED)
+    if (transport != HID_REMOTE_BLE) return false;
+    if (addr.isEmpty()) return false;
+    if (!NimBLEDevice::isInitialized()) {
+        // Stack down — still drop the UI slot so the host disappears from the pad.
+        clearSlotMappingForAddr(addr);
+        return true;
+    }
+
+    quiesceBleForBondEdit(*this);
+    (void)deleteBondMatchingAddr(addr);
+    clearSlotMappingForAddr(addr);
 
     advertiseStop();
-    // Success if bond gone or we cleared the slot mapping
-    return deleted || bondIndexForStoredAddr(addr) < 0 ||
-           kvxConfig.findHidRemoteHostSlotForAddr(addr) == 0;
+    connected = false;
+    BLEConnected = false;
+    hostLabel = "";
+
+    // Success when that peer is no longer in the NimBLE bond list (or never was).
+    return bondIndexForStoredAddr(addr) < 0;
 #else
     (void)addr;
     return false;
@@ -1499,27 +1593,30 @@ bool HidRemoteTransportSession::forgetBond(const String &addr) {
 bool HidRemoteTransportSession::forgetBonds() {
 #if defined(CONFIG_BT_ENABLED)
     if (transport != HID_REMOTE_BLE) return false;
-    if (!NimBLEDevice::isInitialized()) return false;
 
-    disconnectHost(false);
+    if (NimBLEDevice::isInitialized()) {
+        quiesceBleForBondEdit(*this);
 
-    NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
-    if (adv) adv->stop();
-    delay(50);
-
-    // Delete until empty (ble_gap_unpair can fail mid-list if called while connected)
-    for (int attempt = 0; attempt < 3; attempt++) {
-        int n = NimBLEDevice::getNumBonds();
-        if (n <= 0) break;
-        for (int i = n - 1; i >= 0; i--) {
-            NimBLEAddress a = NimBLEDevice::getBondedAddress(i);
-            NimBLEDevice::deleteBond(a);
-            delay(20);
-        }
+        // Store clear is the reliable wipe; deleteAllBonds/unpair often hit EBUSY
+        // with privacy-bonded phones while ADV is settling.
+        ble_store_clear();
         delay(50);
+        (void)NimBLEDevice::deleteAllBonds();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            int n = NimBLEDevice::getNumBonds();
+            if (n <= 0) break;
+            for (int i = n - 1; i >= 0; i--) {
+                NimBLEAddress a = NimBLEDevice::getBondedAddress(i);
+                (void)deleteBondHard(a);
+                delay(20);
+            }
+            ble_store_clear();
+            delay(50);
+        }
+        clearBleWhitelist();
+        advertiseStop();
     }
 
-    clearBleWhitelist();
     kvxConfig.hidRemoteHostAliases.clear();
     kvxConfig.clearAllHidRemoteHostSlots();
     kvxConfig.setHidRemotePreferredHost("");
@@ -1527,7 +1624,9 @@ bool HidRemoteTransportSession::forgetBonds() {
 
     connected = false;
     BLEConnected = false;
-    advertiseStop();
+    hostLabel = "";
+
+    if (!NimBLEDevice::isInitialized()) return true;
     return NimBLEDevice::getNumBonds() == 0;
 #else
     return false;

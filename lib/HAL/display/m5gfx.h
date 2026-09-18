@@ -99,6 +99,8 @@ public:
 
     bool beginFrame();
     void endFrame(bool present = true);
+    bool isFraming() const { return _buffering; }
+    void releaseCanvas();
 
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {
@@ -127,10 +129,18 @@ private:
     lgfx::LGFXBase &drawDst();
     bool ensureCanvas();
     void syncCanvasState();
+    void markDirty(int32_t x, int32_t y, int32_t w, int32_t h);
+    void resetDirty();
+    void presentDirty();
+    bool canvasInInternalRam() const;
 
     M5Canvas *_fb = nullptr;
     bool _buffering = false;
     uint8_t _frameDepth = 0;
+    int16_t _dx0 = 32767;
+    int16_t _dy0 = 32767;
+    int16_t _dx1 = -32768;
+    int16_t _dy1 = -32768;
 };
 
 class tft_sprite : private lgfx::LGFX_Sprite {

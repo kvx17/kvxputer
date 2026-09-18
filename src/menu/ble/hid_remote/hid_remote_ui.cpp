@@ -548,7 +548,9 @@ static bool hidLedHeld = false;
 
 static bool hidLedAllowed() {
     if (isScreenOff) return false;
+#ifdef HAS_RGB_LED
     if (kvxConfig.ledBright <= 0) return false;
+#endif
     if (!kvxConfig.hidRemoteLedEnabled) return false;
     return true;
 }
@@ -559,13 +561,22 @@ static void hidLedPaint(uint8_t r, uint8_t g, uint8_t b, bool dim) {
         return;
     }
     const int cap = dim ? 20 : 100;
+#ifdef HAS_RGB_LED
     uint8_t bright = (uint8_t)(255 * kvxConfig.ledBright * cap / 10000);
     if (dim && bright < 8 && kvxConfig.ledBright > 0) bright = 8;
+#else
+    uint8_t bright = (uint8_t)(255 * cap / 100);
+    if (dim && bright < 8) bright = 8;
+#endif
     ledShowApp(r, g, b, bright);
 }
 
 void hidRemoteLedBegin() {
     hidLedHeld = true;
+#ifdef HAS_RGB_LED
+    // Drop the LED effect task so BLE can claim a contiguous DMA block.
+    ledEffects(false);
+#endif
     ledSuppressStatus(true);
     hidLedMode = HID_REMOTE_LED_OFF;
     hidLedFlashUntil = 0;

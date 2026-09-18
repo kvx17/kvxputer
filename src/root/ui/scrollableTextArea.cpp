@@ -34,9 +34,14 @@ void ScrollableTextArea::setup() {
     _scrollBuffer.setTextSize(_fontSize);
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
 
-    _maxCharactersPerLine = floor(_width / _scrollBuffer.textWidth("w", _fontSize));
-    _pixelsPerLine = _scrollBuffer.fontHeight() + 2;
-    _maxVisibleLines = floor(_height / _pixelsPerLine);
+    // Prefer glyph-grid width (LW * size). textWidth("w") on some GFX backends
+    // returns an oversized advance and collapses wrap to ~3 chars/line.
+    int charW = LW * max(1, (int)_fontSize);
+    int measured = _scrollBuffer.textWidth("W", _fontSize);
+    if (measured > 0 && measured <= charW * 2) charW = measured;
+    _maxCharactersPerLine = max(8, (int)(_width / charW));
+    _pixelsPerLine = max(LH * max(1, (int)_fontSize), (int)_scrollBuffer.fontHeight()) + 2;
+    _maxVisibleLines = max(1, (int)(_height / _pixelsPerLine));
 }
 
 void ScrollableTextArea::scrollUp() {
@@ -78,7 +83,8 @@ void ScrollableTextArea::show(bool force) {
         update(force);
         yield();
     }
-    while (!check(SelPress)) {
+    while (!check(SelPress) && !check(EscPress)) {
+        if (returnToMenu || forceHome) break;
         update(force);
         yield();
     }
@@ -184,8 +190,10 @@ void ScrollableTextArea::draw(bool force) {
 
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
     _scrollBuffer.setTextColor(kvxConfig.priColor);
-    uint8_t _fSize = tft.getTextSize();
-    tft.setTextSize(FP);
+    // Must draw at the constructor font size — wrapping used that size's metrics.
+    // Forcing FP here made memo/note bodies look tiny with ~3 glyphs/line.
+    const uint8_t prevSize = tft.getTextSize();
+    tft.setTextSize(_fontSize);
 
     uint16_t yOffset = 0;
     size_t lines = 0;
@@ -214,7 +222,7 @@ void ScrollableTextArea::draw(bool force) {
     }
 
     lastVisibleLine = firstVisibleLine + lines;
-    tft.setTextFont(_fSize);
+    tft.setTextSize(prevSize);
 
     _redraw = false;
 }

@@ -72,6 +72,11 @@ void ConfigMenu::displayUIMenu() {
             {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
             {"UI Color",             [this]() { setUIColor(); }                      },
             {"UI Theme",             [this]() { setTheme(); }                        },
+            {"G0 Hold = Home",
+             []() {
+                 kvxConfig.setG0HoldHome(!kvxConfig.g0HoldHome);
+                 displaySuccess(kvxConfig.g0HoldHome ? "G0 hold → Home ON" : "G0 hold → Home OFF", true);
+             }},
 #ifdef HAS_KEYBOARD
             {"Mainscreen Shortcuts", []() { setMainscreenShortcutsMenu(); }          },
 #endif

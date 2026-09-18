@@ -7,12 +7,19 @@
 #include "root/app/utils.h"
 #include "root/hal/led_control.h"
 #include "root/app/app_catalog.h"
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_alarms.h"
+#endif
 #include <globals.h>
 
 static constexpr int KVX_COLS = 3;
 static constexpr int KVX_ROWS = 2;
 static constexpr int KVX_SLOTS = KVX_COLS * KVX_ROWS;
 static constexpr int KVX_FOOTER_H = 26;
+
+// Invalidate after leaving the grid (submenu / other screens overwrote the panel).
+static int s_lastIndex = -1;
+static int s_lastPage = -1;
 
 // Column-major layout:
 //   0  2  4
@@ -60,61 +67,117 @@ static void drawChannelTile(int x, int y, int w, int h, bool selected, MenuItemI
     item->drawIconAt(scale, x + w / 2, y + h / 2, w - 6, h - 6, fill);
 }
 
-static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items) {
-    TftFrame frame;
-    const int count = (int)items.size();
-    if (count == 0) return;
+struct GridGeom {
+    int top;
+    int gridH;
+    int marginX;
+    int arrowW;
+    int originX;
+    int cellW;
+    int cellH;
+    float scale;
+    bool hasPrev;
+    bool hasNext;
+    int pageStart;
+};
 
+static GridGeom computeGridGeom(int globalIndex, int count) {
+    GridGeom g;
     const int page = globalIndex / KVX_SLOTS;
-    const int pageStart = page * KVX_SLOTS;
-    const int top = KVX_TOPBAR_H + 4;
+    g.pageStart = page * KVX_SLOTS;
+    g.top = KVX_TOPBAR_H + 4;
     const int bottom = tftHeight - KVX_FOOTER_H;
-    const int gridH = bottom - top - 4;
-    const int marginX = 8;
-    const int arrowW = 14;
-    const bool hasPrev = page > 0;
-    const bool hasNext = pageStart + KVX_SLOTS < count;
+    g.gridH = bottom - g.top - 4;
+    g.marginX = 8;
+    g.arrowW = 14;
+    g.hasPrev = page > 0;
+    g.hasNext = g.pageStart + KVX_SLOTS < count;
 
-    int usableW = tftWidth - marginX * 2;
-    if (hasPrev) usableW -= arrowW;
-    if (hasNext) usableW -= arrowW;
-    int originX = marginX + (hasPrev ? arrowW : 0);
+    int usableW = tftWidth - g.marginX * 2;
+    if (g.hasPrev) usableW -= g.arrowW;
+    if (g.hasNext) usableW -= g.arrowW;
+    g.originX = g.marginX + (g.hasPrev ? g.arrowW : 0);
+    g.cellW = (usableW - (KVX_COLS - 1) * 4) / KVX_COLS;
+    g.cellH = (g.gridH - (KVX_ROWS - 1) * 4) / KVX_ROWS;
+    g.scale = (float)tftWidth / 240.0f;
+    if (kvxConfigPins.rotation & 0b01) g.scale = (float)tftHeight / 135.0f;
+    return g;
+}
 
-    int cellW = (usableW - (KVX_COLS - 1) * 4) / KVX_COLS;
-    int cellH = (gridH - (KVX_ROWS - 1) * 4) / KVX_ROWS;
-    float scale = (float)tftWidth / 240.0f;
-    if (kvxConfigPins.rotation & 0b01) scale = (float)tftHeight / 135.0f;
+static void tileXY(const GridGeom &g, int itemIdx, int &x, int &y) {
+    int slot = itemIdx - g.pageStart;
+    int row = slot % KVX_ROWS;
+    int col = slot / KVX_ROWS;
+    x = g.originX + col * (g.cellW + 4);
+    y = g.top + row * (g.cellH + 4);
+}
 
-    tft.fillScreen(kvxConfig.bgColor);
-    drawKvxTopBar("kvxputer");
-    tft.fillRect(0, top, tftWidth, gridH + 4, kvxConfig.bgColor);
-
-    for (int slot = 0; slot < KVX_SLOTS; slot++) {
-        int row = slot % KVX_ROWS;
-        int col = slot / KVX_ROWS;
-        int itemIdx = pageStart + slot;
-        int x = originX + col * (cellW + 4);
-        int y = top + row * (cellH + 4);
-        bool selected = (itemIdx == globalIndex);
-        MenuItemInterface *item = (itemIdx < count) ? items[itemIdx] : nullptr;
-        if (item) drawChannelTile(x, y, cellW, cellH, selected, item, scale * 0.5f);
-        else {
-            tft.fillRoundRect(x, y, cellW, cellH, 6, kvxConfig.bgColor);
-            tft.drawRoundRect(x, y, cellW, cellH, 6, getColorVariation(kvxConfig.priColor, 10, -1));
-        }
-    }
-
-    int midY = top + gridH / 2 - 7;
-    if (hasPrev) drawArrow(marginX, midY, false, kvxConfig.secColor);
-    if (hasNext) drawArrow(tftWidth - marginX - 10, midY, true, kvxConfig.secColor);
-
+static void drawFooter(int globalIndex, std::vector<MenuItemInterface *> &items) {
     String label = items[globalIndex]->getName();
     tft.fillRect(0, tftHeight - KVX_FOOTER_H, tftWidth, KVX_FOOTER_H, kvxConfig.secColor);
     tft.setTextSize(FM);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
     tft.drawCentreString(label, tftWidth / 2, tftHeight - KVX_FOOTER_H + 6, 1);
+}
 
-    drawKvxTopBar("kvxputer");
+static void drawOneTile(
+    const GridGeom &g, int itemIdx, int selectedIdx, int count, std::vector<MenuItemInterface *> &items
+) {
+    int x, y;
+    tileXY(g, itemIdx, x, y);
+    bool selected = (itemIdx == selectedIdx);
+    MenuItemInterface *item = (itemIdx < count) ? items[itemIdx] : nullptr;
+    if (item) drawChannelTile(x, y, g.cellW, g.cellH, selected, item, g.scale * 0.5f);
+    else {
+        tft.fillRoundRect(x, y, g.cellW, g.cellH, 6, kvxConfig.bgColor);
+        tft.drawRoundRect(x, y, g.cellW, g.cellH, 6, getColorVariation(kvxConfig.priColor, 10, -1));
+    }
+}
+
+static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items) {
+    // Offscreen canvas then one present — avoids erase/redraw flash while navigating.
+    TftFrame frame;
+    const int count = (int)items.size();
+    if (count == 0) return;
+
+    const int page = globalIndex / KVX_SLOTS;
+    GridGeom g = computeGridGeom(globalIndex, count);
+
+    const bool fullRedraw = (s_lastIndex < 0 || s_lastPage != page);
+
+    if (fullRedraw) {
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("kvxputer");
+        tft.fillRect(0, g.top, tftWidth, g.gridH + 4, kvxConfig.bgColor);
+
+        for (int slot = 0; slot < KVX_SLOTS; slot++) {
+            int itemIdx = g.pageStart + slot;
+            drawOneTile(g, itemIdx, globalIndex, count, items);
+        }
+
+        int midY = g.top + g.gridH / 2 - 7;
+        if (g.hasPrev) drawArrow(g.marginX, midY, false, kvxConfig.secColor);
+        if (g.hasNext) drawArrow(tftWidth - g.marginX - 10, midY, true, kvxConfig.secColor);
+
+        drawFooter(globalIndex, items);
+    } else if (s_lastIndex != globalIndex) {
+        // Same page: only flip selection highlight + footer (small dirty blit).
+        if (s_lastIndex >= g.pageStart && s_lastIndex < g.pageStart + KVX_SLOTS) {
+            drawOneTile(g, s_lastIndex, globalIndex, count, items);
+        }
+        if (globalIndex >= g.pageStart && globalIndex < g.pageStart + KVX_SLOTS) {
+            drawOneTile(g, globalIndex, globalIndex, count, items);
+        }
+        drawFooter(globalIndex, items);
+    }
+
+    s_lastIndex = globalIndex;
+    s_lastPage = page;
+}
+
+static void invalidateKvxGridCache() {
+    s_lastIndex = -1;
+    s_lastPage = -1;
 }
 
 int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
@@ -128,9 +191,17 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
     unsigned long menuOpenTs = 0;
     unsigned long batTimer = millis();
     int devModeCounter = 0;
+    invalidateKvxGridCache();
 
     while (true) {
         checkReboot();
+
+#ifndef LITE_VERSION
+        if (pdaAlarmsPoll()) {
+            invalidateKvxGridCache();
+            redraw = true;
+        }
+#endif
 
         if (redraw) {
             drawKvxGrid(index, items);
@@ -148,12 +219,14 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             returnToMenu = false;
             EscPress = false;
             ledSetStatus(LED_STATUS_IDLE);
+            invalidateKvxGridCache();
             redraw = true;
             continue;
         }
 
 #ifdef HAS_KEYBOARD
         if (appCatalogHandleMainscreenKeys()) {
+            invalidateKvxGridCache();
             redraw = true;
             continue;
         }
@@ -233,6 +306,7 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
         if (devModeCounter >= 5 && !kvxConfig.devMode) {
             kvxConfig.setDevMode(true);
             displayInfo("Dev Mode Enabled", true);
+            invalidateKvxGridCache();
         }
 
         static const unsigned long MENU_SELECT_IGNORE_MS = 600;
@@ -240,6 +314,8 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             ledSetStatus(LED_STATUS_BUSY);
             items[index]->optionsMenu();
             ledSetStatus(LED_STATUS_IDLE);
+            // Submenu overwrote the panel — next draw must be a full frame.
+            invalidateKvxGridCache();
             redraw = true;
             if (forceHome) {
                 forceHome = false;

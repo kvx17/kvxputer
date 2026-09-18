@@ -185,7 +185,7 @@ On-device setup lives under **Modules**. Domain-specific pin/module picks live u
 | Adafruit Si4713 | I2C | **FM** broadcast | Board flag `FM_SI4713` |
 | W5500 Ethernet | SPI | **Ethernet** | SPI CS shared with Grove SPI stack |
 | Cardputer Adv LoRa Cap | Onboard SX1262 | **LoRa** chat | Present when `HAS_LORA_CAP` |
-| Mic (SPM1423 / INMP441) | Onboard / board pins | **Others → Microphone** | Board mic flags |
+| Mic (SPM1423 / INMP441) | Onboard / board pins | **Tools → Microphone** | Board mic flags |
 | Chameleon Ultra | BLE | **RFID → Chameleon** | Power on companion, then open app |
 | Amiibolink | BLE | **RFID → Amiibolink** | Power on companion, then open app |
 | PN532 BLE / PN532Killer | BLE or UART | **RFID → PN532 BLE / UART** | Pair / wire UART |
@@ -319,7 +319,7 @@ Onboard SPM1423 (Cardputer) or INMP441 on boards that define the mic pins.
 
 | Serves | Apps |
 |--------|------|
-| **Others → Microphone** | Spectrum, Record (WAV to `support_files/media/`) |
+| **Tools → Microphone** | Spectrum, Record (WAV to `support_files/media/`) |
 
 ### Wireless RFID companions
 
@@ -526,10 +526,13 @@ Wired readers and companions — see [Modules & Add-ons](#modules--add-ons).
 
 Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. Can be set as startup app under Config.
 
-### Others
+### Tools
 
 | Tool | Purpose |
 |------|---------|
+| **Calculator** | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD, Fn function picker; `*` multiplies, `x` solves linear equations (`2x=4`). |
+| **Media Player** *(speaker)* | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL). |
+| **PDA** *(lite off)* | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
 | **QRCodes** | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll. |
 | **Microphone** | Spectrum and WAV record. |
 | **iButton** *(lite off)* | 1-Wire iButton read/write. |

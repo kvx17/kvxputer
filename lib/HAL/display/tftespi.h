@@ -37,8 +37,12 @@ public:
 
     // Offscreen canvas (TFT_eSprite, same idea as M5Canvas). Draw into RAM, then
     // endFrame() blits once so fillScreen/redraw is not visible on the panel.
+    // On no-PSRAM boards the pixel buffer is freed after present so BLE/WiFi
+    // still have a contiguous internal-DMA block.
     bool beginFrame();
     void endFrame(bool present = true);
+    bool isFraming() const { return _buffering; }
+    void releaseCanvas();
 
     void setRotation(uint8_t r);
     void drawPixel(int32_t x, int32_t y, uint32_t color);
@@ -116,10 +120,19 @@ public:
 private:
     bool ensureCanvas();
     void syncCanvasState();
+    void markDirty(int32_t x, int32_t y, int32_t w, int32_t h);
+    void markTextDirty(int32_t x, int32_t y, int32_t w, uint8_t font);
+    void resetDirty();
+    void presentDirty();
+    bool canvasInInternalRam() const;
 
     TFT_eSprite *_fb = nullptr;
     bool _buffering = false;
     uint8_t _frameDepth = 0;
+    int16_t _dx0 = 32767;
+    int16_t _dy0 = 32767;
+    int16_t _dx1 = -32768;
+    int16_t _dy1 = -32768;
 };
 
 class tft_sprite : private TFT_eSprite {

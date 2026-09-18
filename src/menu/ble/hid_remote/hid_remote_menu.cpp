@@ -122,13 +122,17 @@ static void hidRemoteHostDetailMenu(int slot) {
             {"Forget this host",
              [=]() {
                  drawMainBorder(true);
-                 int8_t choice =
-                     displayMessage(("Forget " + name + "?").c_str(), "No", nullptr, "Yes", TFT_WHITE);
-                 if (choice != 1) return;
-                 if (gHidRemoteSession.forgetBond(addr)) {
+                 String prompt = "Forget " + name + "?\nOk=Yes  . =No";
+                 int8_t choice = displayMessage(prompt.c_str(), "Yes", nullptr, "No", TFT_WHITE);
+                 if (choice != 0) return;
+                 bool ok = gHidRemoteSession.forgetBond(addr);
+                 bool slotGone = kvxConfig.getHidRemoteHostSlot(slot).isEmpty();
+                 if (ok || slotGone) {
                      hidRemoteLedSet(HID_REMOTE_LED_FORGET_OK);
-                     displayInfo("Forgot host", true);
-                 } else displayError("Forget failed", true);
+                     displayInfo(ok ? "Forgot host" : "Host removed from slots", true);
+                 } else {
+                     displayError("Forget failed.\nBond still stored.", true);
+                 }
              }},
             {"Back", []() {}},
         };
@@ -171,8 +175,9 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
     String lastLiveAddr = wasConnected ? gHidRemoteSession.getConnectedAddress() : String("");
     (void)_getKeyPress(); // drain menu key
 
-    const char *footer = fromSettings ? "1-6 tap=connect  hold 2s=options  S settings  ESC back"
-                                      : "1-6 tap=connect  hold 2s=options  S settings  ESC exit";
+    const char *footer = fromSettings
+                             ? "1-6 connect  hold=opts  S settings  U=USB  ESC"
+                             : "1-6 connect  hold=opts  S settings  U=USB  ESC";
 
     tft.fillScreen(0x0841);
     hidRemoteDrawHostSlots(HID_REMOTE_BLE, wasConnected);
@@ -193,7 +198,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
     // a bonded phone that reconnects on its own gets dropped here.
     int selectedSlot = 0;
 
-    while (!check(EscPress)) {
+    while (!check(EscPress) && !forceHome) {
         hidRemoteLedTick();
         if (selectedSlot > 0 && gHidRemoteSession.isConnected()) {
             String want = kvxConfig.getHidRemoteHostSlot(selectedSlot);
@@ -221,6 +226,48 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
             if (c == 's' || c == 'S') {
                 hidRemoteSettingsMenu();
                 redrawSlots();
+                break;
+            }
+            if (c == 'u' || c == 'U') {
+#if defined(USB_as_HID)
+                gHidRemoteSession.end();
+                kvxConfig.setHidRemoteTransport(0);
+                hidRemoteDrawConnectScreen(HID_REMOTE_USB, nullptr, nullptr);
+                if (!gHidRemoteSession.begin(
+                        HID_REMOTE_USB,
+                        static_cast<HidRemoteCapability>(
+                            HID_CAP_KEYBOARD | HID_CAP_MEDIA | HID_CAP_MOUSE
+                        )
+                    )) {
+                    displayError("USB HID init failed", true);
+                    hidRemoteLedSet(HID_REMOTE_LED_ERROR);
+                    // Restart BLE so the host screen remains usable.
+                    (void)gHidRemoteSession.begin(
+                        HID_REMOTE_BLE,
+                        static_cast<HidRemoteCapability>(
+                            HID_CAP_KEYBOARD | HID_CAP_MEDIA | HID_CAP_MOUSE
+                        )
+                    );
+                    redrawSlots();
+                    break;
+                }
+                int r = hidRemoteWaitLink(HID_REMOTE_USB, 0);
+                if (r == 1) {
+                    hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
+                    if (!fromSettings) return true;
+                    displaySuccess("USB connected", true);
+                    return true;
+                }
+                gHidRemoteSession.end();
+                (void)gHidRemoteSession.begin(
+                    HID_REMOTE_BLE,
+                    static_cast<HidRemoteCapability>(HID_CAP_KEYBOARD | HID_CAP_MEDIA | HID_CAP_MOUSE)
+                );
+                redrawSlots();
+#else
+                displayError("USB HID not available", true);
+                redrawSlots();
+#endif
                 break;
             }
             if (c >= '1' && c < ('1' + KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT)) {
@@ -453,13 +500,16 @@ static void hidRemoteSettingsMenu() {
                  }
                  drawMainBorder(true);
                  int8_t choice =
-                     displayMessage("Forget ALL hosts?", "No", nullptr, "Yes", TFT_WHITE);
-                 if (choice != 1) return;
+                     displayMessage("Forget ALL hosts?\nOk=Yes  . =No", "Yes", nullptr, "No", TFT_WHITE);
+                 if (choice != 0) return;
                  bool ok = gHidRemoteSession.forgetBonds();
                  int left = gHidRemoteSession.getBondCount();
-                 if (ok && left == 0) {
+                 // left==0 is the real success signal (ok can be false if stack was
+                 // already down / getNumBonds raced during wipe).
+                 if (left == 0) {
                      hidRemoteLedSet(HID_REMOTE_LED_FORGET_OK);
                      displayInfo("Forgot all pairings.\nSlots cleared.", true);
+                     (void)ok;
                  } else {
                      displayError(
                          String("Forget incomplete.\nStill bonded: ") + String(left), true
@@ -535,9 +585,15 @@ static void hidRemoteDrawConnectScreen(
 static int hidRemoteWaitLink(HidRemoteTransport transport, unsigned long timeoutMs) {
     unsigned long start = millis();
     hidRemoteLedSet(HID_REMOTE_LED_CONNECTING);
+    // Drop any leftover EscPress (e.g. from an earlier Del on older firmware).
+    EscPress = false;
 
     while (!check(EscPress)) {
         hidRemoteLedTick();
+        if (forceHome) {
+            hidRemoteLedSet(HID_REMOTE_LED_DISCONNECTED);
+            return -1;
+        }
         if (check(SelPress)) {
             hidRemoteSettingsMenu();
             hidRemoteDrawConnectScreen(transport, nullptr, nullptr);

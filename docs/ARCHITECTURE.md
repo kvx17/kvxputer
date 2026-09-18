@@ -29,6 +29,7 @@ kvxputer separates concerns into three roots on both the **device filesystem** a
     ├── lora/
     ├── netops/
     ├── media/
+    ├── pda/
     └── gps/
 ```
 

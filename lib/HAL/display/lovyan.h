@@ -140,6 +140,8 @@ public:
 
     bool beginFrame() { return false; }
     void endFrame(bool present = true) { (void)present; }
+    bool isFraming() const { return false; }
+    void releaseCanvas() {}
 
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {

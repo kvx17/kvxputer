@@ -19,6 +19,21 @@
 #include <stddef.h>
 #include "root/net/wifi_common.h"
 #include <WiFi.h>
+#include <esp_wifi.h>
+#ifdef HAS_RGB_LED
+void ledEffects(bool enable);
+#endif
+// Declared in sd_functions.h; avoid pulling FS headers into every radio caller.
+void closeSdCard();
+extern bool sdcardMounted;
+
+// Implemented in display.cpp. Frees the offscreen UI canvas so BLE/WiFi can
+// reclaim the contiguous internal-DRAM block it occupies on no-PSRAM boards.
+#if defined(HAS_SCREEN)
+void tftReleaseFrameCanvas();
+#else
+static inline void tftReleaseFrameCanvas() {}
+#endif
 
 // Largest contiguous DMA-capable internal block, in bytes. This is the number
 // that gates Wi-Fi/BLE controller init.
@@ -33,39 +48,70 @@ constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
 
 static inline bool radioHasMemForWifi() {
     // return true; // uncomment to disable it
-    return radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK;
+    auto enough = []() { return radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK; };
+    if (enough()) return true;
+    tftReleaseFrameCanvas();
+    return enough();
 }
 
 static inline bool radioHasMemForBle() {
     // return true; // uncomment to disable it
-    
-    // First check if we have enough DMA memory
-    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
+
+    auto enough = []() { return radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK; };
+
+    if (enough()) return true;
+
+    // Full-screen UI canvas (~64KB) sits in internal DRAM on no-PSRAM boards.
+    Serial.println("[RAM] Low DMA for BLE, releasing display canvas...");
+    tftReleaseFrameCanvas();
+    if (enough()) {
+        Serial.printf("[RAM] Display canvas freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
         return true;
     }
-    
-    // Not enough DMA memory - try to free WiFi
+
+#ifdef HAS_RGB_LED
+    // Battery Status / other effects keep a 2KB task in internal RAM.
+    Serial.println("[RAM] Low DMA for BLE, stopping LED effects...");
+    ledEffects(false);
+    delay(30);
+    if (enough()) {
+        Serial.printf("[RAM] LED task freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
+        return true;
+    }
+#endif
+
+    // Free WiFi stack (mode OFF alone can leave DMA buffers allocated).
     Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
-    
-    // Disconnect WiFi if active
     if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
         wifiDisconnect();
-        delay(200);
-        #ifdef WIFI_DEINIT_ON_DISCONNECT
-        WiFi.mode(WIFI_OFF);
-        #endif
-        delay(300);
+        delay(100);
     }
-    
-    // Recheck after freeing WiFi
-    if (radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK) {
-        Serial.printf("[RAM] WiFi freed, DMA block: %d bytes\n", radioLargestDmaBlock());
+    WiFi.mode(WIFI_OFF);
+    delay(50);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    delay(200);
+    if (enough()) {
+        Serial.printf("[RAM] WiFi freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
         return true;
     }
-    
-    // Still not enough - return false, caller shows error
-    Serial.printf("[RAM] Still only %d bytes DMA block, minimum %d needed\n", 
-                  radioLargestDmaBlock(), RADIO_BLE_MIN_DMA_BLOCK);
+
+    // SD SPI DMA buffers also sit in internal DRAM on Cardputer.
+    if (sdcardMounted) {
+        Serial.println("[RAM] Still low DMA, unmounting SD...");
+        closeSdCard();
+        delay(100);
+        if (enough()) {
+            Serial.printf("[RAM] SD freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
+            return true;
+        }
+    }
+
+    Serial.printf(
+        "[RAM] Still only %u bytes DMA block, minimum %u needed\n",
+        (unsigned)radioLargestDmaBlock(),
+        (unsigned)RADIO_BLE_MIN_DMA_BLOCK
+    );
     return false;
 }
 

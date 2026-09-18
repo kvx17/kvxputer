@@ -280,6 +280,14 @@ void tft_logger::endFrame() {
 #endif
 }
 
+bool tft_logger::isFraming() const {
+#if defined(HAS_SCREEN)
+    return BRUCE_TFT_DRIVER::isFraming();
+#else
+    return false;
+#endif
+}
+
 void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, int Ms) {
     if (!logging) return;
     if (!log || !images) return;

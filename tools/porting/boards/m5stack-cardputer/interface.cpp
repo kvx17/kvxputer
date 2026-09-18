@@ -296,6 +296,8 @@ void InputHandler(void) {
     // G0: tap = fake-off display; hold (>=700ms) = force home once.
     // Do NOT re-assert forceHome every poll while held — that starves the
     // mainscreen loop (forceHome → continue forever) and freezes input.
+    // While forceHome is still true, keep EscPress/returnToMenu sticky so
+    // nested apps that only check Esc unwind all the way to the main grid.
     static bool g0WasLow = false;
     static unsigned long g0PressAt = 0;
     static bool g0HoldFired = false;
@@ -307,11 +309,19 @@ void InputHandler(void) {
     }
     if (g0Low && !g0HoldFired && (millis() - g0PressAt >= 700)) {
         g0HoldFired = true;
-        forceHome = true;
+        if (kvxConfig.g0HoldHome) {
+            forceHome = true;
+            returnToMenu = true;
+            EscPress = true;
+            AnyKeyPress = true;
+            if (isScreenOff) wakeUpScreen();
+        }
+    }
+    // Sticky Esc while forceHome is pending (main menu clears it).
+    if (forceHome && kvxConfig.g0HoldHome) {
         returnToMenu = true;
         EscPress = true;
         AnyKeyPress = true;
-        if (isScreenOff) wakeUpScreen();
     }
     if (!g0Low && g0WasLow) {
         if (!g0HoldFired) {
@@ -388,9 +398,11 @@ void InputHandler(void) {
                     tcaCharHeld[(unsigned char)keyVal] = pressed;
                 }
 
+                // Del/Backspace is text delete only — never Esc. Esc is backtick
+                // (and Fn+backtick → 0xB1). Mapping Del to Esc made the PDA editor
+                // open "Discard unsaved changes?" and popped menus on Backspace.
                 if (keyVal == KEY_BACKSPACE && col == 13) {
                     navHoldDel = pressed;
-                    navHoldEsc = pressed;
                     if (pressed) delPulse = true;
                 } else if (keyVal == '`') {
                     navHoldEsc = pressed;
@@ -558,7 +570,8 @@ void InputHandler(void) {
             Keyboard_Class::KeysState status = Keyboard.keysState();
             for (auto i : status.hid_keys) key.hid_keys.emplace_back(i);
             for (auto i : status.word) {
-                if (i == '`' || i == KEY_BACKSPACE) EscPress = true;
+                // Esc is backtick only; KEY_BACKSPACE must not cancel menus/editors.
+                if (i == '`') EscPress = true;
 
                 if (i == ';') {
                     arrow_up = true;

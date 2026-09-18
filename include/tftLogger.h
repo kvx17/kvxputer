@@ -94,6 +94,7 @@ public:
 
     bool beginFrame();
     void endFrame();
+    bool isFraming() const;
 
     // Disables tft writings on the display,
     // Commands wont be passed to the display if isSleeping==true

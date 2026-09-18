@@ -61,6 +61,7 @@ inline void ledBootTick(bool purple) { (void)purple; }
 inline void ledRestoreStatus() {}
 inline int ledGetStatus() { return 1; }
 inline void ledSuppressStatus(bool suppress) { (void)suppress; }
+inline void ledEffects(bool enable) { (void)enable; }
 inline void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
     (void)r;
     (void)g;
