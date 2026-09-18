@@ -5,6 +5,7 @@
 #include "root/config/configPins.h"
 #include "root/ui/theme.h"
 #include "root/hal/led_control.h"
+#include "root/hal/radio_mem.h"
 #include <cstring>
 #include <globals.h>
 
@@ -532,7 +533,7 @@ int hidRemotePickFromList(const char *title, const std::vector<String> &labels, 
 }
 
 bool hidRemoteWaitBack() {
-    while (!check(EscPress)) {
+    while (!check(EscPress) && !forceHome) {
         hidRemoteLedTick();
         delay(20);
     }
@@ -590,6 +591,7 @@ void hidRemoteLedEnd() {
     hidLedHeld = false;
     ledSuppressStatus(false);
     ledSetStatus(LED_STATUS_IDLE);
+    uiRamLeaveHeavy();
 }
 
 void hidRemoteLedSet(HidRemoteLedMode mode) {

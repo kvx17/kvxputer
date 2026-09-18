@@ -48,12 +48,16 @@ static bool krWaitHoldPulse(volatile bool &flag) {
 }
 
 static bool krWaitHoldSticky(volatile bool &flag) {
+    // G0 hold keeps Esc sticky — never wait for release while Home is pending.
+    if (forceHome) return true;
     unsigned long t0 = millis();
     while (millis() - t0 < KREMOTE_HOLD_MS) {
         delay(12);
+        if (forceHome) return true;
         if (!flag) return false;
     }
     while (flag) {
+        if (forceHome) return true;
         check(flag);
         delay(10);
     }
@@ -92,6 +96,8 @@ static void krUseLoop(IRCode *slots[KREMOTE_SLOT_COUNT], const char *title) {
     setup_ir_pin(kvxConfigPins.irTx, OUTPUT);
 
     while (true) {
+        if (forceHome) break;
+
         if (flashId != KREMOTE_FLASH_NONE && millis() > flashUntil) {
             flashId = KREMOTE_FLASH_NONE;
             footerMsg = "hold Back=exit  x2=Power";
@@ -140,10 +146,13 @@ static void krUseLoop(IRCode *slots[KREMOTE_SLOT_COUNT], const char *title) {
             redraw();
             continue;
         }
+        if (forceHome) break;
         if (EscPress) {
+            // G0 Home: exit immediately (do not treat sticky Esc as hold-Back).
+            if (forceHome) break;
             // Peek without consuming until we know short vs hold
             bool hold = krWaitHoldSticky(EscPress);
-            if (hold) {
+            if (forceHome || hold) {
                 pendingBack = false;
                 break; // exit Use Remote
             }

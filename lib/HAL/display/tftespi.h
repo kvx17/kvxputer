@@ -43,6 +43,8 @@ public:
     void endFrame(bool present = true);
     bool isFraming() const { return _buffering; }
     void releaseCanvas();
+    void suppressCanvas(bool suppress);
+    bool isCanvasSuppressed() const { return _canvasSuppressed; }
 
     void setRotation(uint8_t r);
     void drawPixel(int32_t x, int32_t y, uint32_t color);
@@ -128,6 +130,7 @@ private:
 
     TFT_eSprite *_fb = nullptr;
     bool _buffering = false;
+    bool _canvasSuppressed = false;
     uint8_t _frameDepth = 0;
     int16_t _dx0 = 32767;
     int16_t _dy0 = 32767;

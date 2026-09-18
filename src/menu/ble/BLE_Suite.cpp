@@ -16,6 +16,7 @@
 #include "HFP_Exploit.h"
 #include "ble_common.h"
 #include "root/ui/display.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/hal/radio_mem.h"
 #include "root/app/utils.h"
@@ -304,6 +305,7 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
         displayError("Low RAM: free WiFi/SD first", true);
         return false;
     }
+    uiRamEnterHeavy();
 
     std::string nameStr = name.c_str();
     NimBLEDevice::init(nameStr);
@@ -4473,61 +4475,69 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
     int maxVisibleItems = (tftHeight - menuStartY - 50) / menuItemHeight;
     if (maxVisibleItems > (int)deviceCount) maxVisibleItems = deviceCount;
 
+    bool redraw = true;
     while (!exitMenu) {
-        tft.fillScreen(kvxConfig.bgColor);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-        TouchFooter();
+        if (forceHome) {
+            targets.clear();
+            return "";
+        }
+        if (redraw) {
+            tft.fillScreen(kvxConfig.bgColor);
+            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+            TouchFooter();
 
-        tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-        tft.print(title);
-        tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
+            tft.setTextSize(2);
+            tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
+            tft.print(title);
+            tft.setTextSize(1);
 
-        tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
-        tft.setCursor(20, 40);
-        tft.print("Selected: ");
-        tft.print(targets.size());
-        tft.print("/");
-        tft.print(deviceCount);
+            tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
+            tft.setCursor(20, 40);
+            tft.print("Selected: ");
+            tft.print(targets.size());
+            tft.print("/");
+            tft.print(deviceCount);
 
-        for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < (int)deviceCount; i++) {
-            int idx = scrollOffset + i;
-            int yPos = menuStartY + (i * menuItemHeight);
-            if (yPos + menuItemHeight > tftHeight - 45) break;
+            for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < (int)deviceCount; i++) {
+                int idx = scrollOffset + i;
+                int yPos = menuStartY + (i * menuItemHeight);
+                if (yPos + menuItemHeight > tftHeight - 45) break;
 
-            if (idx == currentIndex) {
-                tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
-                tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                tft.setCursor(25, yPos + 8);
-                tft.print(selected[idx] ? "[X] " : "[ ] ");
-            } else {
-                tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, kvxConfig.bgColor);
-                tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
-                tft.setCursor(25, yPos + 8);
-                tft.print(selected[idx] ? "[X] " : "[ ] ");
+                if (idx == currentIndex) {
+                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
+                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
+                    tft.setCursor(25, yPos + 8);
+                    tft.print(selected[idx] ? "[X] " : "[ ] ");
+                } else {
+                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, kvxConfig.bgColor);
+                    tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
+                    tft.setCursor(25, yPos + 8);
+                    tft.print(selected[idx] ? "[X] " : "[ ] ");
+                }
+
+                String display = snapshot->names[idx] + " | " + snapshot->addresses[idx];
+                if (display.length() > 25) display = display.substring(0, 22) + "...";
+                tft.print(display);
             }
 
-            String display = snapshot->names[idx] + " | " + snapshot->addresses[idx];
-            if (display.length() > 25) display = display.substring(0, 22) + "...";
-            tft.print(display);
+            if (deviceCount > (size_t)maxVisibleItems) {
+                tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
+                tft.setCursor(tftWidth - 25, menuStartY + 5);
+                if (scrollOffset > 0) tft.print("^");
+                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
+                if (scrollOffset + maxVisibleItems < (int)deviceCount) tft.print("v");
+            }
+
+            tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
+            redraw = false;
         }
 
-        if (deviceCount > (size_t)maxVisibleItems) {
-            tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-            tft.setCursor(tftWidth - 25, menuStartY + 5);
-            if (scrollOffset > 0) tft.print("^");
-            tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
-            if (scrollOffset + maxVisibleItems < (int)deviceCount) tft.print("v");
-        }
-
-        tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
-        tft.setCursor(20, tftHeight - 30);
-        tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select");
-        tft.setCursor(20, tftHeight - 20);
-        tft.print("ESC: Back");
-
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             delay(200);
             exitMenu = true;
             targets.clear();
@@ -4541,6 +4551,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                 currentIndex = deviceCount - 1;
                 scrollOffset = std::max(0, (int)deviceCount - maxVisibleItems);
             }
+            redraw = true;
         } else if (check(NextPress)) {
             delay(150);
             if (currentIndex < (int)deviceCount - 1) {
@@ -4551,6 +4562,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                 currentIndex = 0;
                 scrollOffset = 0;
             }
+            redraw = true;
         } else if (check(SelPress)) {
             delay(200);
             selected[currentIndex] = !selected[currentIndex];
@@ -4566,6 +4578,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                     }
                 }
             }
+            redraw = true;
         }
         delay(50);
     }
@@ -6429,64 +6442,10 @@ void showSuccessMessage(const char *message) {
 void showDeviceInfoScreen(
     const char *title, const std::vector<String> &lines, uint16_t bgColor, uint16_t textColor
 ) {
-    tft.fillScreen(bgColor);
-    TouchFooter();
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-    tft.setTextColor(TFT_WHITE, bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
-    tft.setTextSize(1);
-
-    tft.setTextColor(textColor, bgColor);
-    int yPos = 60;
-    int lineHeight = 20;
-    int maxLines = 8;
-
-    for (int i = 0; i < std::min((int)lines.size(), maxLines); i++) {
-        if (yPos + lineHeight > tftHeight - 45) break;
-
-        String displayLine = lines[i];
-        int maxWidth = tftWidth - 40;
-        int lineY = yPos;
-        int start = 0;
-        int len = displayLine.length();
-
-        while (start < len) {
-            int end = start;
-            int lastSpace = -1;
-
-            while (end < len && (end - start) * 6 < maxWidth) {
-                if (displayLine.charAt(end) == ' ') lastSpace = end;
-                end++;
-            }
-
-            if (end == len || lastSpace == -1) {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, end));
-                start = end;
-            } else {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, lastSpace));
-                start = lastSpace + 1;
-            }
-            lineY += lineHeight;
-            if (lineY > tftHeight - 45) break;
-        }
-        yPos = lineY;
-    }
-
-    tft.setTextColor(TFT_BLACK, bgColor);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
-        }
-        delay(50);
-    }
+    (void)bgColor;
+    (void)textColor;
+    ScrollableTextArea area = ScrollableTextArea(title ? String(title) : String("INFO"));
+    for (const auto &line : lines) area.addLine(line);
+    area.show();
 }
 #endif

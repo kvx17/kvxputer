@@ -142,6 +142,8 @@ public:
     void endFrame(bool present = true) { (void)present; }
     bool isFraming() const { return false; }
     void releaseCanvas() {}
+    void suppressCanvas(bool suppress) { (void)suppress; }
+    bool isCanvasSuppressed() const { return false; }
 
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {

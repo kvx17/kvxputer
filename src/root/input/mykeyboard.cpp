@@ -572,6 +572,10 @@ String generalKeyboard(
 
     // main loop
     while (1) {
+        if (forceHome) {
+            current_text = "\x1B"; // ASCII ESC CHARACTER — cancel
+            break;
+        }
         if (redraw) {
             // setup
             tft.setCursor(0, 0);

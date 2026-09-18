@@ -674,10 +674,10 @@ unsigned long performClicking(const char *btnNameStr) {
         unsigned long delayStart = millis();
         while (millis() - delayStart < config.delay_ms) {
             InputHandler();
-            wakeUpScreen(); // Keep display active
+            resetPowerSaveTimer();
 
             // Check for stop signal
-            if (check(EscPress) || check(SelPress) || returnToMenu) {
+            if (check(EscPress) || check(SelPress) || returnToMenu || forceHome) {
                 shouldStop = true;
                 break;
             }
@@ -722,7 +722,7 @@ void clicker_setup() {
     bool exit_menu = false;
     while (!exit_menu) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
 
         // Track what needs redrawing
         bool selection_changed = false;
@@ -842,13 +842,13 @@ void clicker_setup() {
     bool restart = false;
     while (!userChoice) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
 
         if (check(SelPress)) {
             restart = true;
             userChoice = true;
         }
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             delay(600);
             displayWarning(
                 "Turn-off to restore USB", true

@@ -1067,22 +1067,20 @@ void fileInfo(FS &fs, const String &filepath) {
         unit = "kB";
     }
 
-    drawMainBorderWithTitle("FILE INFO");
-    padprintln("");
-    padprintln("Path: " + filepath);
-    padprintln("");
-    padprintf("Bytes: %d\n", bytesize);
-    padprintln("");
-    padprintf("Size: %.02f %s\n", filesize, unit.c_str());
-    padprintln("");
-    padprintf("Modified: %s\n", ctime(&modifiedTime));
+    char sizeBuf[32];
+    snprintf(sizeBuf, sizeof(sizeBuf), "%.02f %s", filesize, unit.c_str());
+    String modified = String(ctime(&modifiedTime));
+    modified.trim();
 
     file.close();
-    delay(100);
 
-    while (!check(EscPress) && !check(SelPress)) { delay(100); }
-
-    return;
+    ScrollableTextArea area = ScrollableTextArea("FILE INFO");
+    area.addLine("Path: " + filepath);
+    area.addLine("");
+    area.addLine("Bytes: " + String(bytesize));
+    area.addLine("Size: " + String(sizeBuf));
+    area.addLine("Modified: " + modified);
+    area.show();
 }
 
 /*********************************************************************

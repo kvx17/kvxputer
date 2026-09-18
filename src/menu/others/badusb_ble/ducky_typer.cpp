@@ -591,6 +591,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 returnToMenu = true;
                 return;
             }
+            uiRamEnterHeavy();
 
             // Set function-specific MAC address (Logitech OUIs)
             if (functionId >= 0 && functionId < 5) {

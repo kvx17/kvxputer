@@ -147,8 +147,8 @@ On Cardputer / Adv, the side **G0** button (GPIO0 — same as the download/boot 
 
 | Action | What happens |
 |--------|----------------|
-| **Tap** (release before ~700 ms) | **Fake-off** — blanks the display and turns the status LED off. The device stays awake; Wi‑Fi/BLE/apps keep running. Tap **G0** again to wake the screen (restores brightness). In **Charge**, tap also blanks via the charge sleep path and wakes the same way. |
-| **Hold** (≥ 700 ms) | **Force home** — escapes the current app/submenu and returns to the main channel grid (fires once per hold; keep holding does not spam). If the screen was fake-off, it wakes first. |
+| **Tap** (release before ~3 s) | **Fake-off** — blanks the display and turns the status LED off. The device stays awake; Wi‑Fi/BLE/apps keep running. Tap **G0** again to wake the screen (restores brightness). In **Charge**, tap also blanks via the charge sleep path and wakes the same way. |
+| **Hold** (≥ 3 s) | **Force home** — escapes the current app/submenu and returns to the main channel grid (fires once per hold; keep holding does not spam). If the screen was fake-off, it wakes first. |
 
 Notes:
 

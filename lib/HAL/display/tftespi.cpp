@@ -78,6 +78,11 @@ void tft_display::releaseCanvas() {
     if (_fb) _fb->deleteSprite();
 }
 
+void tft_display::suppressCanvas(bool suppress) {
+    _canvasSuppressed = suppress;
+    if (suppress) releaseCanvas();
+}
+
 bool tft_display::ensureCanvas() {
     const int16_t w = TFT_eSPI::width();
     const int16_t h = TFT_eSPI::height();
@@ -104,6 +109,7 @@ void tft_display::syncCanvasState() {
 }
 
 bool tft_display::beginFrame() {
+    if (_canvasSuppressed) return false;
     if (_buffering) {
         if (_frameDepth < 255) _frameDepth++;
         return true;

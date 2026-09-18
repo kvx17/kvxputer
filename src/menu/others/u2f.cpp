@@ -605,8 +605,8 @@ private:
         uint8_t pressedTicks = isSelectPressedRaw() ? 1 : 0;
         uint32_t lastKeepalive = 0;
         const uint32_t start = millis();
-        while ((millis() - start) < timeoutMs && !returnToMenu) {
-            wakeUpScreen();
+        while ((millis() - start) < timeoutMs && !returnToMenu && !forceHome) {
+            resetPowerSaveTimer();
 
             if (sendKeepalive && keepaliveCid != 0 && (millis() - lastKeepalive) >= 100) {
                 sendKeepaliveNonBlocking(0x02); // STATUS_UPNEEDED
@@ -614,7 +614,7 @@ private:
             }
 
             bool selNow = isSelectPressedRaw();
-            if (EscPress || isEscPressedRaw()) {
+            if (EscPress || isEscPressedRaw() || forceHome) {
                 EscPress = false;
                 _waitingForPresence = false;
                 return false;
@@ -1699,9 +1699,9 @@ void u2f_setup() {
     drawU2fStatusScreen();
 
     uint32_t lastDrawMs = 0;
-    while (!check(EscPress) && !returnToMenu) {
+    while (!check(EscPress) && !returnToMenu && !forceHome) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
         device.poll();
 
         if (millis() - lastDrawMs > 250) {

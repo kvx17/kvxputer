@@ -101,6 +101,8 @@ public:
     void endFrame(bool present = true);
     bool isFraming() const { return _buffering; }
     void releaseCanvas();
+    void suppressCanvas(bool suppress);
+    bool isCanvasSuppressed() const { return _canvasSuppressed; }
 
 private:
     template <typename Ptr> void pushImageFallback(int32_t x, int32_t y, int32_t w, int32_t h, Ptr data) {
@@ -136,6 +138,7 @@ private:
 
     M5Canvas *_fb = nullptr;
     bool _buffering = false;
+    bool _canvasSuppressed = false;
     uint8_t _frameDepth = 0;
     int16_t _dx0 = 32767;
     int16_t _dy0 = 32767;

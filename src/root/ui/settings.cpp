@@ -1035,6 +1035,8 @@ void runClockLoop(bool showMenuHint) {
             Serial.print("Current time: ");
             Serial.println(timeStr);
 
+            if (forceRedraw) clockFaceInvalidate();
+
             if (face == 1) {
                 int bat = getBattery();
                 if (bat <= 0) bat = 50;
@@ -1066,6 +1068,7 @@ void runClockLoop(bool showMenuHint) {
             for (char raw : key.word) {
                 if (raw == '[' || raw == ']') {
                     face = 1 - face;
+                    clockFaceInvalidate();
                     forceRedraw = true;
                     hintVisible = false;
                 }

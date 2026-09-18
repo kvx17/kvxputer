@@ -1231,6 +1231,10 @@ void Pn532ble::ntagEmulationMode() {
     TagFile currentFile = TagFile::NONE;
 
     while (!stopFlag) {
+        if (forceHome || check(EscPress)) {
+            stopFlag = true;
+            break;
+        }
         if (check(PrevPagePress)) {
             area.scrollUp();
         } else if (check(NextPagePress)) {
@@ -1242,7 +1246,7 @@ void Pn532ble::ntagEmulationMode() {
         area.draw();
 
         std::vector<uint8_t> resp = pn532_ble.getData();
-        if (check(SelPress)) {
+        if (check(SelPress) || check(EscPress) || forceHome) {
             stopFlag = true;
             break;
         }

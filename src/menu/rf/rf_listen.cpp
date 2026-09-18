@@ -95,11 +95,13 @@ void rf_listen() {
         displayRedStripe(text, getComplementaryColor2(kvxConfig.priColor), kvxConfig.priColor);
     };
 
-    while (check(EscPress)) { delay(10); }
+    if (!forceHome) {
+        while (check(EscPress)) { delay(10); }
+    }
 
     showStripe("Waiting for a pulse");
 
-    while (!check(EscPress)) {
+    while (!check(EscPress) && !forceHome) {
         if (newPulse) {
             newPulse = false;
             lastPulseTime = millis();

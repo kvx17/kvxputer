@@ -230,7 +230,7 @@ bool showVolumeControl(uint8_t &currentVolume) {
 
     while (true) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
 
         bool needsRedraw = false;
 
@@ -265,7 +265,7 @@ bool showVolumeControl(uint8_t &currentVolume) {
             return changed;
         }
 
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             if (changed) setAudioPlaybackVolume(currentVolume);
             delay(200);
             return false;
@@ -418,7 +418,7 @@ void musicPlayerUI(FS *fs, const String &filepath) {
     // MAIN LOOP
     while (true) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
 
         bool controlsNeedRedraw = false;
         bool progressNeedsRedraw = false;
@@ -511,7 +511,7 @@ void musicPlayerUI(FS *fs, const String &filepath) {
                 }
             }
         }
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             stopAudioPlayback();
             break;
         }

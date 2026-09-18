@@ -264,6 +264,7 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -538,6 +539,7 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
     redrawKb();
 
     while (true) {
+        if (forceHome) break;
         if (fnLayer && fnFlash && millis() > fnFlashUntil) {
             fnFlash = 0;
             dirty = true;
@@ -785,6 +787,7 @@ static bool runMediaLayout(HidRemoteTransportSession &s, const char *title) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -835,6 +838,7 @@ static bool runMouse(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -951,6 +955,7 @@ static bool runShorts(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -1058,6 +1063,7 @@ static bool runClicker(HidRemoteTransportSession &s) {
     hidRemoteDrawFooter("fn+Ok back");
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
@@ -1118,6 +1124,7 @@ static bool runJiggler(HidRemoteTransportSession &s, bool stealth) {
     hidRemoteDrawFooter("fn+Ok back");
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
@@ -1182,6 +1189,7 @@ static bool runPushToTalk(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 

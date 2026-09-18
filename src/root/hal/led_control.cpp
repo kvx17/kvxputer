@@ -166,6 +166,8 @@ void ledSuppressStatus(bool suppress) {
     if (suppress) ledPauseEffects(true);
 }
 
+bool ledIsStatusSuppressed() { return ledStatusHeld; }
+
 void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
     if (isPreviewLed) return;
     ledPauseEffects(true);

@@ -86,7 +86,9 @@ void fillInfo(ScrollableTextArea &area) {
         area.show();
 
         while (check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
-        while (!check(SelPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+        while (!check(SelPress) && !check(EscPress) && !forceHome) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
     }
 
     const auto mac = MAC(ap_info.bssid);

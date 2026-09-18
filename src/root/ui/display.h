@@ -25,9 +25,11 @@ struct TftFrame {
 };
 
 void tftReleaseFrameCanvas();
+void tftSuppressCanvas(bool suppress);
 
 void panelSleep(bool on);
 void turnOffDisplay();
+void resetPowerSaveTimer();
 bool wakeUpScreen();
 
 struct Opt_Coord {
@@ -140,6 +142,7 @@ void setTftDisplay(
 );
 
 void turnOffDisplay();
+void resetPowerSaveTimer();
 bool wakeUpScreen();
 
 void displayRedStripe(const String &text, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_RED);

@@ -37,6 +37,14 @@ void tftReleaseFrameCanvas() {
 #endif
 }
 
+void tftSuppressCanvas(bool suppress) {
+#if defined(HAS_SCREEN)
+    tft.suppressCanvas(suppress);
+#else
+    (void)suppress;
+#endif
+}
+
 bool __attribute__((weak)) isCharging() { return false; }
 /***************************************************************************************
 ** Function name: displayScrollingText
@@ -124,6 +132,8 @@ void setTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg) {
 }
 
 void turnOffDisplay() { setBrightness(0, false); }
+
+void resetPowerSaveTimer() { previousMillis = millis(); }
 
 bool wakeUpScreen() {
     previousMillis = millis();
@@ -927,17 +937,21 @@ void drawStatusBar() {
         tft.drawLine(5, 25, tftWidth - 6, 25, kvxConfig.priColor);
     }
 
+    // Clock / version: compact top-strip size (half of body FP).
+    const int clockSize = max(1, FP / 2);
+    const int clockY = max(4, (25 - clockSize * LH) / 2);
     if (clock_set) {
-        setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
-        tft.fillRect(12, 12, 60, LH, kvxConfig.bgColor);
 #if defined(HAS_RTC)
         updateTimeStr(_rtc.getTimeStruct());
 #else
         updateTimeStr(rtc.getTimeStruct());
 #endif
+        const int clockW = (int)strlen(timeStr) * clockSize * LW + 4;
+        tft.fillRect(12, clockY, max(60, clockW), clockSize * LH, kvxConfig.bgColor);
+        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
         tft.print(timeStr);
     } else {
-        setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
+        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
         tft.print(String("kvxputer v") + KVXPUTER_VERSION);
     }
 
@@ -961,7 +975,8 @@ void drawStatusBar() {
 
     if (iconCount > 0) {
         // Pack from the right: SD immediately left of battery (same as kvx top bar).
-        int rightEdge = (bat > 0) ? (tftWidth - 85) : (tftWidth - 6);
+        const int batReserve = (bat > 0) ? (42 + max(42, 4 * max(1, FP / 2) * LW + 4)) : 6;
+        int rightEdge = tftWidth - batReserve;
         int x = rightEdge - (iconCount * IW + (iconCount - 1) * GAP);
         int iy = 7;
 
@@ -1003,12 +1018,13 @@ void drawMainBorder(bool clear) {
         tft.drawPixel(0, 0, 0);
         tft.fillScreen(kvxConfig.bgColor);
     }
-    setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
+    setTftDisplay(12, 12, kvxConfig.priColor, FP, kvxConfig.bgColor);
     tft.setTextDatum(0);
 
     // if(wifiConnected) {tft.print(timeStr);} else {tft.print("BRUCE 1.0b");}
 
     drawStatusBar();
+    tft.setTextSize(FP);
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -1076,15 +1092,21 @@ void drawBatteryStatus(uint8_t bat) {
     uint16_t barcolor = kvxConfig.priColor;
     if (bat < 16) barcolor = color = TFT_RED;
 
+    // Percent / CHG: compact top-bar size (half of body FP).
+    const int batSize = max(1, FP / 2);
+    const int textY = max(4, (KVX_TOPBAR_H - batSize * LH) / 2);
+    const int pctRight = tftWidth - 44;
+    const int pctClearW = max(42, 4 * batSize * LW + 4);
+
     tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, color);
-    tft.setTextSize(FP);
-    tft.fillRect(tftWidth - 85, 7, 42, 18, kvxConfig.bgColor);
+    tft.setTextSize(batSize);
+    tft.fillRect(pctRight - pctClearW, 2, pctClearW, KVX_TOPBAR_H - 3, kvxConfig.bgColor);
     if (charging) {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawRightString("CHG", tftWidth - 44, 12, 1);
+        tft.drawRightString("CHG", pctRight, textY, 1);
     } else {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 44, 12, 1);
+        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", pctRight, textY, 1);
     }
     tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
     tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, kvxConfig.bgColor);

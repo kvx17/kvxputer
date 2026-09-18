@@ -120,6 +120,7 @@ void stopBLEStack() {
         hid_ble = nullptr;
     }
 #endif
+    uiRamLeaveHeavy();
 }
 
 bool ble_scan_setup() {
@@ -141,6 +142,7 @@ bool ble_scan_setup() {
         returnToMenu = true;
         return false;
     }
+    uiRamEnterHeavy();
 
     BLEDevice::init("");
     is_ble_inited = true;

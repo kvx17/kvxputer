@@ -7,6 +7,10 @@
 // Shared clock / charge-style face painters (no input loops).
 
 void clockFaceFormatDate(const struct tm &t, char *out, size_t outLen);
+
+// Clear dirty-draw caches so the next paint does a full body redraw.
+void clockFaceInvalidate();
+
 void clockFaceDrawMonthCalendar(
     int x, int y, int w, int h, const struct tm &t, uint16_t color, uint16_t bg
 );

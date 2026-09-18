@@ -324,26 +324,32 @@ void EvilPortal::loop() {
             shouldRedraw = true;
         }
 
-        if (check(EscPress)) {
-            options = {
-                {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
-                {"View Creds",
-                 [this, &shouldRedraw]() {
-                     FS *fs;
-                     if (getFsStorage(fs)) {
-                         if (fs->exists(kvx::paths::WIFI_PORTAL_CREDS)) {
-                             loopSD(*fs, false, "CSV", kvx::paths::WIFI_PORTAL_CREDS);
-                         } else {
-                             displayTextLine("No credentials yet");
-                             vTaskDelay(1000);
+        if (check(EscPress) || forceHome) {
+            // G0 Home: shut down portal immediately — do not open Esc options.
+            if (forceHome) {
+                exitPortal = true;
+            } else {
+                options = {
+                    {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
+                    {"View Creds",
+                     [this, &shouldRedraw]() {
+                         FS *fs;
+                         if (getFsStorage(fs)) {
+                             if (fs->exists(kvx::paths::WIFI_PORTAL_CREDS)) {
+                                 loopSD(*fs, false, "CSV", kvx::paths::WIFI_PORTAL_CREDS);
+                             } else {
+                                 displayTextLine("No credentials yet");
+                                 vTaskDelay(1000);
+                             }
                          }
-                     }
-                     shouldRedraw = true;
-                 }},
-                {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
-            };
+                         shouldRedraw = true;
+                     }},
+                    {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
+                };
 
-            loopOptions(options);
+                loopOptions(options);
+                if (forceHome) exitPortal = true;
+            }
             if (exitPortal) {
                 displayTextLine("Shutting down...");
                 vTaskDelay(100 / portTICK_PERIOD_MS);

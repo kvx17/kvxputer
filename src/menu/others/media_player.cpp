@@ -7,6 +7,7 @@
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/hal/radio_mem.h"
 #include <globals.h>
 
 // Extensions understood by the audio pipeline (see isAudioFile / audio.cpp).
@@ -33,7 +34,9 @@ void mediaPlayerApp() {
         return;
     }
 
+    uiRamEnterHeavy();
     musicPlayerUI(fs, path);
+    uiRamLeaveHeavy();
 }
 
 #else

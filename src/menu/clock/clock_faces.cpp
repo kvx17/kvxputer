@@ -3,6 +3,26 @@
 #include <globals.h>
 #include <string.h>
 
+static char s_digitalLastTime[16] = "";
+static int s_digitalLastTop = -1;
+static uint16_t s_digitalLastColor = 0;
+
+static char s_chargeLastTime[16] = "";
+static char s_chargeLastDate[32] = "";
+static int s_chargeLastPct = -1;
+static int s_chargeLastTop = -1;
+static bool s_chargeLastCal = false;
+static uint16_t s_chargeLastColor = 0;
+
+void clockFaceInvalidate() {
+    s_digitalLastTime[0] = '\0';
+    s_digitalLastTop = -1;
+    s_chargeLastTime[0] = '\0';
+    s_chargeLastDate[0] = '\0';
+    s_chargeLastPct = -1;
+    s_chargeLastTop = -1;
+}
+
 void clockFaceFormatDate(const struct tm &t, char *out, size_t outLen) {
     static const char *kDow[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
     static const char *kMon[] = {
@@ -99,8 +119,6 @@ void clockFaceDrawChargeStyle(
     int topY, const struct tm &t, const char *timeStr, int batteryPct, uint16_t color, bool showCalendar
 ) {
     const uint16_t bg = kvxConfig.bgColor;
-    tft.fillRect(0, topY, tftWidth, tftHeight - topY, bg);
-
     char dateBuf[24];
     clockFaceFormatDate(t, dateBuf, sizeof(dateBuf));
 
@@ -110,75 +128,137 @@ void clockFaceDrawChargeStyle(
     char pctBuf[8];
     snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
 
+    const char *s = timeStr ? timeStr : "--:--";
+    const bool layoutChange =
+        (s_chargeLastTop != topY || s_chargeLastCal != showCalendar || s_chargeLastColor != color || s_chargeLastPct < 0);
+    const bool timeChanged = (strncmp(s, s_chargeLastTime, sizeof(s_chargeLastTime)) != 0);
+    const bool dateChanged = (strncmp(dateBuf, s_chargeLastDate, sizeof(s_chargeLastDate)) != 0);
+    const bool pctChanged = (pct != s_chargeLastPct);
+
+    if (layoutChange) {
+        tft.fillRect(0, topY, tftWidth, tftHeight - topY, bg);
+        s_chargeLastTime[0] = '\0';
+        s_chargeLastDate[0] = '\0';
+        s_chargeLastPct = -1;
+    }
+
     const int kBarH = 10;
     int barY = tftHeight - kBarH - 4;
 
     if (showCalendar) {
-        tft.setTextSize(FM);
-        tft.setTextColor(color, bg);
-        tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
+        if (layoutChange || dateChanged) {
+            tft.fillRect(0, topY, tftWidth, FM * LH + 4, bg);
+            tft.setTextSize(FM);
+            tft.setTextColor(color, bg);
+            tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
+            strncpy(s_chargeLastDate, dateBuf, sizeof(s_chargeLastDate) - 1);
+            s_chargeLastDate[sizeof(s_chargeLastDate) - 1] = '\0';
+        }
 
         uint8_t clockSize = 3;
-        int clockLen = timeStr ? (int)strlen(timeStr) : 8;
+        int clockLen = (int)strlen(s);
         if (clockLen < 1) clockLen = 8;
         while (clockSize > 1 && clockSize * 6 * clockLen > tftWidth - 56) clockSize--;
         int clockY = topY + FM * LH + 4;
-        tft.setTextSize(clockSize);
-        tft.setTextColor(color, bg);
-        tft.drawCentreString(timeStr ? timeStr : "--:--", (tftWidth - 50) / 2, clockY, 1);
-
-        tft.setTextSize(FM);
-        tft.setTextColor(color, bg);
-        tft.drawRightString(pctBuf, tftWidth - 4, clockY + 2, 1);
+        if (layoutChange || timeChanged) {
+            tft.fillRect(0, clockY, tftWidth - 54, clockSize * 8 + 2, bg);
+            tft.setTextSize(clockSize);
+            tft.setTextColor(color, bg);
+            tft.drawCentreString(s, (tftWidth - 50) / 2, clockY, 1);
+            strncpy(s_chargeLastTime, s, sizeof(s_chargeLastTime) - 1);
+            s_chargeLastTime[sizeof(s_chargeLastTime) - 1] = '\0';
+        }
+        if (layoutChange || pctChanged) {
+            tft.fillRect(tftWidth - 54, clockY, 54, FM * LH + 2, bg);
+            tft.setTextSize(FM);
+            tft.setTextColor(color, bg);
+            tft.drawRightString(pctBuf, tftWidth - 4, clockY + 2, 1);
+            s_chargeLastPct = pct;
+        }
 
         int calY = clockY + clockSize * 8 + 6;
         int calH = barY - calY - 3;
-        if (calH >= 36) {
-            clockFaceDrawMonthCalendar(4, calY, tftWidth - 8, calH, t, color, bg);
+        if (layoutChange || dateChanged) {
+            if (calH >= 36) {
+                clockFaceDrawMonthCalendar(4, calY, tftWidth - 8, calH, t, color, bg);
+            }
         }
     } else {
-        tft.setTextSize(FM);
-        tft.setTextColor(color, bg);
-        tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
+        if (layoutChange || dateChanged) {
+            tft.fillRect(0, topY, tftWidth, FM * LH + 4, bg);
+            tft.setTextSize(FM);
+            tft.setTextColor(color, bg);
+            tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
+            strncpy(s_chargeLastDate, dateBuf, sizeof(s_chargeLastDate) - 1);
+            s_chargeLastDate[sizeof(s_chargeLastDate) - 1] = '\0';
+        }
 
         uint8_t clockSize = 4;
-        int clockLen = timeStr ? (int)strlen(timeStr) : 8;
+        int clockLen = (int)strlen(s);
         if (clockLen < 1) clockLen = 8;
         while (clockSize > 1 && clockSize * 6 * clockLen > tftWidth - 8) clockSize--;
         int clockY = topY + FM * LH + 6;
-        tft.setTextSize(clockSize);
-        tft.setTextColor(color, bg);
-        tft.drawCentreString(timeStr ? timeStr : "--:--", tftWidth / 2, clockY, 1);
-
-        tft.setTextSize(FM);
-        tft.drawCentreString(pctBuf, tftWidth / 2, clockY + clockSize * 8 + 4, 1);
+        if (layoutChange || timeChanged) {
+            tft.fillRect(0, clockY, tftWidth, clockSize * 8 + 2, bg);
+            tft.setTextSize(clockSize);
+            tft.setTextColor(color, bg);
+            tft.drawCentreString(s, tftWidth / 2, clockY, 1);
+            strncpy(s_chargeLastTime, s, sizeof(s_chargeLastTime) - 1);
+            s_chargeLastTime[sizeof(s_chargeLastTime) - 1] = '\0';
+        }
+        if (layoutChange || pctChanged) {
+            int pctY = clockY + clockSize * 8 + 4;
+            tft.fillRect(0, pctY, tftWidth, FM * LH + 2, bg);
+            tft.setTextSize(FM);
+            tft.setTextColor(color, bg);
+            tft.drawCentreString(pctBuf, tftWidth / 2, pctY, 1);
+            s_chargeLastPct = pct;
+        }
     }
 
-    clockFaceDrawChargeBar(8, barY, tftWidth - 16, kBarH, pct, color, bg);
+    if (layoutChange || pctChanged) {
+        clockFaceDrawChargeBar(8, barY, tftWidth - 16, kBarH, pct, color, bg);
+    }
+
+    s_chargeLastTop = topY;
+    s_chargeLastCal = showCalendar;
+    s_chargeLastColor = color;
 }
 
 void clockFaceDrawDigital(int topY, const char *timeStr, uint16_t color) {
     const uint16_t bg = kvxConfig.bgColor;
-    tft.fillRect(0, topY, tftWidth, tftHeight - topY, bg);
-
-    tft.drawRect(
-        BORDER_PAD_X,
-        topY + 4,
-        tftWidth - 2 * BORDER_PAD_X,
-        tftHeight - topY - 8,
-        color
-    );
-
     const char *s = timeStr ? timeStr : "--:--";
-    uint8_t f_size = 4;
-    for (uint8_t i = 4; i > 0; i--) {
-        if (i * LW * (int)strlen(s) < (tftWidth - BORDER_PAD_X * 2)) {
-            f_size = i;
-            break;
-        }
+    const bool layoutChange = (s_digitalLastTop != topY || s_digitalLastColor != color || s_digitalLastTime[0] == '\0');
+    const bool timeChanged = (strncmp(s, s_digitalLastTime, sizeof(s_digitalLastTime)) != 0);
+
+    if (layoutChange) {
+        tft.fillRect(0, topY, tftWidth, tftHeight - topY, bg);
+        tft.drawRect(
+            BORDER_PAD_X,
+            topY + 4,
+            tftWidth - 2 * BORDER_PAD_X,
+            tftHeight - topY - 8,
+            color
+        );
     }
-    tft.setTextSize(f_size);
-    tft.setTextColor(color, bg);
-    int midY = topY + (tftHeight - topY) / 2 - f_size * LH / 2;
-    tft.drawCentreString(s, tftWidth / 2, midY, 1);
+
+    if (layoutChange || timeChanged) {
+        uint8_t f_size = 4;
+        for (uint8_t i = 4; i > 0; i--) {
+            if (i * LW * (int)strlen(s) < (tftWidth - BORDER_PAD_X * 2)) {
+                f_size = i;
+                break;
+            }
+        }
+        int midY = topY + (tftHeight - topY) / 2 - f_size * LH / 2;
+        tft.fillRect(BORDER_PAD_X + 2, midY - 2, tftWidth - 2 * BORDER_PAD_X - 4, f_size * LH + 4, bg);
+        tft.setTextSize(f_size);
+        tft.setTextColor(color, bg);
+        tft.drawCentreString(s, tftWidth / 2, midY, 1);
+        strncpy(s_digitalLastTime, s, sizeof(s_digitalLastTime) - 1);
+        s_digitalLastTime[sizeof(s_digitalLastTime) - 1] = '\0';
+    }
+
+    s_digitalLastTop = topY;
+    s_digitalLastColor = color;
 }

@@ -21,7 +21,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #ifdef HAS_RGB_LED
-void ledEffects(bool enable);
+#include "root/hal/led_control.h"
 #endif
 // Declared in sd_functions.h; avoid pulling FS headers into every radio caller.
 void closeSdCard();
@@ -31,8 +31,10 @@ extern bool sdcardMounted;
 // reclaim the contiguous internal-DRAM block it occupies on no-PSRAM boards.
 #if defined(HAS_SCREEN)
 void tftReleaseFrameCanvas();
+void tftSuppressCanvas(bool suppress);
 #else
 static inline void tftReleaseFrameCanvas() {}
+static inline void tftSuppressCanvas(bool suppress) { (void)suppress; }
 #endif
 
 // Largest contiguous DMA-capable internal block, in bytes. This is the number
@@ -46,11 +48,42 @@ constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 // Minimum contiguous DMA block required before bringing the BLE stack up.
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
 
+// Session-level RAM gate: drop the UI canvas and FastLED effect task while a
+// heavy app (Wi-Fi/BLE/media) holds DRAM. Nested enter/leave is refcounted.
+static inline int &uiRamHeavyDepth() {
+    static int depth = 0;
+    return depth;
+}
+
+static inline void uiRamEnterHeavy() {
+    if (uiRamHeavyDepth()++ > 0) return;
+    tftReleaseFrameCanvas();
+    tftSuppressCanvas(true);
+#ifdef HAS_RGB_LED
+    ledEffects(false);
+#endif
+}
+
+static inline void uiRamLeaveHeavy() {
+    if (uiRamHeavyDepth() <= 0) return;
+    if (--uiRamHeavyDepth() > 0) return;
+    tftSuppressCanvas(false);
+#ifdef HAS_RGB_LED
+    if (!ledIsStatusSuppressed()) ledSetup();
+#endif
+}
+
 static inline bool radioHasMemForWifi() {
     // return true; // uncomment to disable it
     auto enough = []() { return radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK; };
     if (enough()) return true;
     tftReleaseFrameCanvas();
+    if (enough()) return true;
+#ifdef HAS_RGB_LED
+    // Match BLE: Battery Status / other effects keep a 2KB task in internal RAM.
+    ledEffects(false);
+    delay(30);
+#endif
     return enough();
 }
 

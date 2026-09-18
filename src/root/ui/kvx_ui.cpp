@@ -1,6 +1,7 @@
 #include "kvx_ui.h"
 #include "root/ui/display.h"
 #include "root/ui/theme.h"
+#include "root/app/utils.h"
 #include "root/net/wg.h"
 #include <WiFi.h>
 #include <interface.h>
@@ -28,9 +29,14 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     const bool showBLE = BLEConnected;
     const bool showWG = isConnectedWireguard;
 
+    // Top-bar labels stay compact (half of body FP after the FP bump).
+    const int barSize = max(1, FP / 2);
+    const int barTextY = max(4, (KVX_TOPBAR_H - barSize * LH) / 2);
+
     const int IW = 16;
     const int GAP = 4;
-    int rightEdge = (bat > 0) ? (tftWidth - 85) : (tftWidth - 6);
+    const int batReserve = (bat > 0) ? (42 + max(42, 4 * barSize * LW + 4)) : 6;
+    int rightEdge = tftWidth - batReserve;
 
     int iconCount = 0;
     if (showSD) iconCount++;
@@ -44,34 +50,55 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     if (iconCount > 0) iconsWidth = iconCount * IW + (iconCount - 1) * GAP;
     int iconsLeft = rightEdge - iconsWidth;
 
-    String status = (statusLabel && statusLabel[0]) ? String(statusLabel) : String();
+    // Compact HH:MM to the left of icons (or battery) when the clock is set.
     int statusRight = iconsLeft - 4;
+    if (clock_set) {
+#if defined(HAS_RTC)
+        updateTimeStr(_rtc.getTimeStruct());
+#else
+        updateTimeStr(rtc.getTimeStruct());
+#endif
+        char hhmm[6];
+        // timeStr is HH:MM:SS or h:MM:SS AM — take first 5 chars of HH:MM when 24h.
+        if (kvxConfig.clock24hr) {
+            snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
+        } else {
+            // 12h: "HH:MM:SS AM" → "HH:MM"
+            snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
+        }
+        tft.setTextSize(barSize);
+        tft.setTextColor(purple, bg);
+        tft.drawRightString(hhmm, statusRight, barTextY, 1);
+        statusRight -= (int)strlen(hhmm) * barSize * LW + 6;
+    }
+
+    String status = (statusLabel && statusLabel[0]) ? String(statusLabel) : String();
     if (status.length()) {
-        int maxStatusChars = max(4, (statusRight - 70) / (FP * LW));
+        int maxStatusChars = max(4, (statusRight - 70) / (barSize * LW));
         if ((int)status.length() > maxStatusChars) {
             status = status.substring(0, max(1, maxStatusChars - 1)) + ".";
         }
-        tft.setTextSize(FP);
+        tft.setTextSize(barSize);
         tft.setTextColor(purple, bg);
-        tft.drawRightString(status, statusRight, 6, 1);
-        statusRight -= (int)status.length() * FP * LW + 4;
+        tft.drawRightString(status, statusRight, barTextY, 1);
+        statusRight -= (int)status.length() * barSize * LW + 4;
     }
 
     int titleMaxX = statusRight;
     if (titleMaxX < 16) titleMaxX = 16;
 
-    tft.setTextSize(FP);
+    tft.setTextSize(barSize);
     tft.setTextColor(green, bg);
     String label = (leftLabel && leftLabel[0] != '\0') ? String(leftLabel) : String("Menu");
-    int maxChars = max(1, (titleMaxX - 8) / (FP * LW));
+    int maxChars = max(1, (titleMaxX - 8) / (barSize * LW));
     if ((int)label.length() > maxChars) {
         if (maxChars > 1) label = label.substring(0, maxChars - 1) + ".";
         else label = label.substring(0, maxChars);
     }
-    tft.drawString(label, 8, 6, 1);
+    tft.drawString(label, 8, barTextY, 1);
 
     int x = iconsLeft;
-    int iy = 4;
+    int iy = max(4, (KVX_TOPBAR_H - IW) / 2);
     if (showWG) {
         drawWireguardStatus(x, iy);
         x += IW + GAP;

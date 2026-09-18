@@ -293,11 +293,12 @@ void InputHandler(void) {
         }
     } groveMerge;
 
-    // G0: tap = fake-off display; hold (>=700ms) = force home once.
+    // G0: tap = fake-off display; hold (>=G0_HOLD_HOME_MS) = force home once.
     // Do NOT re-assert forceHome every poll while held — that starves the
     // mainscreen loop (forceHome → continue forever) and freezes input.
     // While forceHome is still true, keep EscPress/returnToMenu sticky so
     // nested apps that only check Esc unwind all the way to the main grid.
+    static constexpr unsigned long G0_HOLD_HOME_MS = 3000;
     static bool g0WasLow = false;
     static unsigned long g0PressAt = 0;
     static bool g0HoldFired = false;
@@ -307,7 +308,7 @@ void InputHandler(void) {
         g0HoldFired = false;
         AnyKeyPress = true;
     }
-    if (g0Low && !g0HoldFired && (millis() - g0PressAt >= 700)) {
+    if (g0Low && !g0HoldFired && (millis() - g0PressAt >= G0_HOLD_HOME_MS)) {
         g0HoldFired = true;
         if (kvxConfig.g0HoldHome) {
             forceHome = true;
@@ -337,9 +338,11 @@ void InputHandler(void) {
                 }
             } else if (chargeModeActive) {
                 // Charge owns blanking: allow brightness 0 via chargeUserSleep.
+                // Match non-Charge fake-off: LED off until wake.
                 chargeUserSleep = true;
                 isScreenOff = true;
                 turnOffDisplay();
+                ledSetStatus(LED_STATUS_OFF);
             } else {
                 isScreenOff = true;
                 turnOffDisplay();

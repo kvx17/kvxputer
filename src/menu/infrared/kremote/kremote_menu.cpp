@@ -32,9 +32,9 @@ static void kremoteAbout() {
     padprintln("See NOTICE / LICENSE");
     padprintln("");
     padprintln("Press any key...");
-    while (!check(AnyKeyPress) && !check(EscPress) && !check(SelPress)) delay(20);
+    while (!check(AnyKeyPress) && !check(EscPress) && !check(SelPress) && !forceHome) delay(20);
     delay(150);
-    while (check(AnyKeyPress) || check(EscPress) || check(SelPress)) delay(10);
+    while (!forceHome && (check(AnyKeyPress) || check(EscPress) || check(SelPress))) delay(10);
 }
 
 void kremoteMenu() {

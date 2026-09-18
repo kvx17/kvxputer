@@ -174,56 +174,60 @@ void BLE_Sniffer() {
             int scrollOffset = 0;
             bool viewing = true;
 
+            bool redraw = true;
             while (viewing) {
-                if (check(EscPress)) {
+                if (check(EscPress) || forceHome) {
                     viewing = false;
                     break;
                 }
-
-                tft.fillScreen(kvxConfig.bgColor);
-                drawMainBorderWithTitle("CAPTURED PACKETS");
 
                 int y = BORDER_PAD_Y + FM * LH + 4;
                 int lineH = max(14, tftHeight / 12);
                 int visibleItems = (tftHeight - y - 50) / lineH;
 
-                tft.setTextSize(FP);
-                tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-                tft.setCursor(10, y);
-                tft.println("Packets: " + String(snifferPacketCount));
-                y += lineH;
+                if (redraw) {
+                    tft.fillScreen(kvxConfig.bgColor);
+                    drawMainBorderWithTitle("CAPTURED PACKETS");
 
-                for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5; i++) {
-                    int idx = scrollOffset + i;
-                    SnifferPacket &pkt = snifferPackets[idx];
-                    bool selectedItem = (idx == selected);
-                    uint16_t fg = selectedItem ? kvxConfig.bgColor : TFT_WHITE;
-                    uint16_t bg = selectedItem ? kvxConfig.priColor : kvxConfig.bgColor;
-
-                    tft.fillRect(10, y, tftWidth - 20, lineH - 2, bg);
-                    tft.setTextColor(fg, bg);
-                    String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " +
-                                     String(pkt.rssi) + "dB";
-                    if (display.length() > 35) display = display.substring(0, 32) + "...";
-                    tft.drawString(display, 15, y + 2, 1);
-                    y += lineH;
-                }
-
-                if (snifferPacketCount > visibleItems) {
+                    tft.setTextSize(FP);
                     tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-                    tft.setCursor(tftWidth - 30, BORDER_PAD_Y + FM * LH + 4 + lineH);
-                    if (scrollOffset > 0)
-                        tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
-                    if (scrollOffset + visibleItems < snifferPacketCount) {
-                        tft.drawString(
-                            "v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1
-                        );
-                    }
-                }
+                    tft.setCursor(10, y);
+                    tft.println("Packets: " + String(snifferPacketCount));
+                    y += lineH;
 
-                tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
-                tft.setCursor(10, tftHeight - 20);
-                tft.drawString("PREV/NEXT: Navigate  SEL: View Details  ESC: Back", 10, tftHeight - 20, 1);
+                    for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5; i++) {
+                        int idx = scrollOffset + i;
+                        SnifferPacket &pkt = snifferPackets[idx];
+                        bool selectedItem = (idx == selected);
+                        uint16_t fg = selectedItem ? kvxConfig.bgColor : TFT_WHITE;
+                        uint16_t bg = selectedItem ? kvxConfig.priColor : kvxConfig.bgColor;
+
+                        tft.fillRect(10, y, tftWidth - 20, lineH - 2, bg);
+                        tft.setTextColor(fg, bg);
+                        String display = String(idx + 1) + ". " + pkt.name + " | " + pkt.address + " | " +
+                                         String(pkt.rssi) + "dB";
+                        if (display.length() > 35) display = display.substring(0, 32) + "...";
+                        tft.drawString(display, 15, y + 2, 1);
+                        y += lineH;
+                    }
+
+                    if (snifferPacketCount > visibleItems) {
+                        tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
+                        tft.setCursor(tftWidth - 30, BORDER_PAD_Y + FM * LH + 4 + lineH);
+                        if (scrollOffset > 0)
+                            tft.drawString("^", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH, 1);
+                        if (scrollOffset + visibleItems < snifferPacketCount) {
+                            tft.drawString(
+                                "v", tftWidth - 25, BORDER_PAD_Y + FM * LH + 4 + lineH * (visibleItems - 1), 1
+                            );
+                        }
+                    }
+
+                    tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
+                    tft.setCursor(10, tftHeight - 20);
+                    tft.drawString("PREV/NEXT: Navigate  SEL: View Details  ESC: Back", 10, tftHeight - 20, 1);
+                    redraw = false;
+                }
 
                 if (check(NextPress)) {
                     if (selected < snifferPacketCount - 1) {
@@ -231,12 +235,14 @@ void BLE_Sniffer() {
                         if (selected >= scrollOffset + visibleItems) {
                             scrollOffset = selected - visibleItems + 1;
                         }
+                        redraw = true;
                     }
                 }
                 if (check(PrevPress)) {
                     if (selected > 0) {
                         selected--;
                         if (selected < scrollOffset) { scrollOffset = selected; }
+                        redraw = true;
                     }
                 }
                 if (check(SelPress)) {
@@ -276,9 +282,11 @@ void BLE_Sniffer() {
                     tft.setCursor(10, tftHeight - 20);
                     tft.drawString("Press any key to continue", 10, tftHeight - 20, 1);
 
-                    while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) {
+                    while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress) &&
+                           !forceHome) {
                         delay(50);
                     }
+                    redraw = true;
                 }
                 delay(100);
             }

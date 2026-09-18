@@ -169,9 +169,11 @@ void rf_waterfall_run() {
                     case 1: f_end -= step; break;
                     case 2: return;
                 }
+                if (forceHome) return;
                 if (EscPress) EscPress = false; // Reset for StickCs
                 delay(100);
             }
+            if (forceHome || check(EscPress)) return;
         }
         tft.drawPixel(0, 0, 0); // Cardputer Case, need to call something to the tft.
         tft.pushImage(0, current_line, screen_width, 1, frameBuffer);
@@ -201,7 +203,7 @@ void rf_waterfall_run() {
             tft.print("EXIT");
         }
 
-        if (check(EscPress)) break;
+        if (check(EscPress) || forceHome) break;
 
         current_line++;
         if (current_line >= screen_height) current_line = display_top;

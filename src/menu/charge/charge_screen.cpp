@@ -157,19 +157,21 @@ static constexpr uint8_t CHARGE_SLEEP_LED_BRIGHT = 12;
 
 static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) {
     ledPauseEffects(true);
+    // G0 / idle blank: LED fully off unless the user re-enabled it (L)
+    // while the panel is blank (ledOn starts false on blank).
     if (!ledOn) {
         ledShowApp(0, 0, 0, 0);
         return;
     }
-    uint8_t bright = screenOff ? CHARGE_SLEEP_LED_BRIGHT
-                               : (kvxConfig.ledBright > 0 ? (uint8_t)(255 * kvxConfig.ledBright / 100) : 128);
+    if (screenOff) {
+        CRGB base = batteryStatusLedColor(info.percent);
+        ledShowApp(base.r, base.g, base.b, CHARGE_SLEEP_LED_BRIGHT);
+        return;
+    }
+    uint8_t bright = kvxConfig.ledBright > 0 ? (uint8_t)(255 * kvxConfig.ledBright / 100) : 128;
     CRGB base = batteryStatusLedColor(info.percent);
     if (info.percent <= 5 && ((millis() / 500) % 2 == 0)) {
         ledShowApp(0, 0, 0, bright);
-        return;
-    }
-    if (screenOff) {
-        ledShowApp(base.r, base.g, base.b, CHARGE_SLEEP_LED_BRIGHT);
         return;
     }
     float phase = (sinf(millis() / 1400.0f * PI) + 1.0f) * 0.5f;
@@ -187,8 +189,10 @@ static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) 
 static void chargeGoIdleOff(bool *ledOn) {
 #ifdef HAS_RGB_LED
     ledPauseEffects(true);
+    ledShowApp(0, 0, 0, 0);
 #endif
-    (void)ledOn;
+    // Match G0 fake-off: LED off until wake (or L while blanked).
+    if (ledOn) *ledOn = false;
     chargeUserSleep = true;
     isScreenOff = true;
     dimmer = false;
@@ -298,11 +302,15 @@ void runChargeLoop() {
         const bool ignoreDown = millis() < ignoreDownUntil;
 
         // G0 tap (InputHandler) sets chargeUserSleep — join after grace only.
-        // Sleep blanks the panel; LED stays dim unless L toggled it off.
+        // Sleep blanks the panel; LED off until wake (or L while blanked).
         if (!screenOff && pastGrace && chargeUserSleep) {
             screenOff = true;
             isScreenOff = true;
             dimmer = false;
+            ledOn = false;
+#ifdef HAS_RGB_LED
+            ledShowApp(0, 0, 0, 0);
+#endif
             setBrightness(0, false);
             resetHeldNavKeys();
             ignoreDownUntil = millis() + 600;

@@ -67,7 +67,7 @@
   #define LED_OFF 0
 #endif
 #ifndef FP                  // Small Font -> Font Pequena
-  #define FP 1
+  #define FP 2
 #endif
 #ifndef FM                  // Medium Font -> Fonte Media
   #define FM 2

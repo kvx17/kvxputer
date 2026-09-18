@@ -184,6 +184,7 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         displayError("Low RAM: free WiFi/SD first", true);
         return false;
     }
+    uiRamEnterHeavy();
 
     setHidRemoteBleMac();
 

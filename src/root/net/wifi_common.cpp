@@ -168,6 +168,7 @@ void wifiDisconnect() {
 
     wifiConnected = false;
     wifiTransitioning = false;
+    uiRamLeaveHeavy();
 }
 
 bool wifiConnectMenu(wifi_mode_t mode) {
@@ -197,6 +198,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 displayError("Low RAM: free BLE/SD first", true);
                 return false;
             }
+            uiRamEnterHeavy();
             WiFi.mode(WIFI_MODE_STA);
 
             // wifiMACMenu();
@@ -303,6 +305,7 @@ void wifiConnectTask(void *pvParameters) {
         vTaskDelete(NULL);
         return;
     }
+    uiRamEnterHeavy();
 
     WiFi.mode(WIFI_MODE_STA);
     int nets = WiFi.scanNetworks();
@@ -358,6 +361,7 @@ bool wifiConnecttoKnownNet(void) {
         displayError("Low RAM: free BLE/SD first", true);
         return false;
     }
+    uiRamEnterHeavy();
 
     bool result = false;
     int nets;
