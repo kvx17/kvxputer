@@ -71,6 +71,7 @@ void ConfigMenu::displayUIMenu() {
             {"Dim Time",    [this]() { setDimmerTimeMenu(); }               },
             {"Orientation", [this]() { lambdaHelper(gsetRotation, true)(); }},
             {"UI Color",             [this]() { setUIColor(); }                      },
+            {"Accent Color",         [this]() { setAccentColor(); }                  },
             {"UI Theme",             [this]() { setTheme(); }                        },
             {"G0 Hold = Home",
              []() {

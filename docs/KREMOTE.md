@@ -10,6 +10,7 @@ Infrared → kvxputer universal remote:
 |-------|--------|
 | Learn Remote | New or update a named profile |
 | Use Remote | Pad control for a saved profile |
+| Browse IR | SD / LittleFS / Recent `.ir` picker (same as Custom IR: Choose cmd / Spam all) |
 | Delete Remote | Remove a profile |
 | Button Map | Short / hold reference |
 | Settings | Portrait/Landscape, Normal/Swapped buttons |

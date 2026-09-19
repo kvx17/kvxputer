@@ -402,7 +402,7 @@ void renderJammerUI(JammerState &state) {
     // Calculate layout dimensions based on screen size
     int contentWidth = tftWidth - 20;
     int yStart = 35;
-    int ySpacing = 10;
+    int ySpacing = uiRowH(FP);
     int rightColumnX = tftWidth / 2 + 10;
 
     // Full screen redraw only when necessary
@@ -459,11 +459,11 @@ void renderJammerUI(JammerState &state) {
     displayStats(state, rightColumnX, tftHeight / 2 - 25);
 
     // Display user instructions at the bottom of the screen
-    int instructionsY = tftHeight - 20;
+    int instructionsY = uiFooterY(uiDenseFont());
     tft.setCursor(10, instructionsY);
-    tft.setTextSize(FP);
+    tft.setTextSize(uiDenseFont());
     tft.setTextColor(TFT_BLUE, kvxConfig.bgColor);
-    padprintln("[SEL] Change Set. | [NEXT/PREV] Adjust Val. ");
+    padprintln("[SEL] set | [NEXT/PREV] adj");
 
     // Display exit instruction in top-right corner
     tft.setTextColor(TFT_RED, kvxConfig.bgColor);

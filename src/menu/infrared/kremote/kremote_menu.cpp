@@ -42,6 +42,7 @@ void kremoteMenu() {
         std::vector<Option> opts = {
             {"Learn Remote", []() { kremoteLearnFlow(); }},
             {"Use Remote", []() { kremoteUseFlow(); }},
+            {"Browse IR", []() { kremoteBrowseIr(); }},
             {"Delete Remote", []() { kremoteDeleteFlow(); }},
             {"Button Map", []() { kremoteShowButtonMap(); }},
             {"Settings", []() { kremoteSettingsMenu(); }},

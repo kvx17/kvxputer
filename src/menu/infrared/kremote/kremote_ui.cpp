@@ -54,7 +54,7 @@ void kremoteDrawFooter(const char *hints) {
     const int y = tftHeight - KR_FOOTER_H;
     tft.fillRect(0, y, tftWidth, KR_FOOTER_H, KR_BG);
     tft.drawFastHLine(0, y, tftWidth, KR_PURPLE);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* kRemote pad/footer labels stay dense */;
     tft.setTextColor(KR_GREEN, KR_BG);
     if (hints == nullptr) hints = "hold Back=exit  x2=Power";
     tft.drawCentreString(hints, tftWidth / 2, y + 4, 1);
@@ -120,7 +120,7 @@ void kremoteDrawPad(bool portrait, bool swapped, int flashId) {
     const char *olLab = swapped ? "LT" : "C-";
     const char *orLab = swapped ? "RT" : "C+";
 
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* kRemote pad/footer labels stay dense */;
     tft.setTextColor(KR_GREEN, KR_BG);
     tft.drawCentreString(upLab, cx, cy - (rMid + rInner) / 2 - 4, 1);
     tft.drawCentreString(dnLab, cx, cy + (rMid + rInner) / 2 - 4, 1);

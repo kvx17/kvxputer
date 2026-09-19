@@ -147,7 +147,7 @@ On Cardputer / Adv, the side **G0** button (GPIO0 — same as the download/boot 
 
 | Action | What happens |
 |--------|----------------|
-| **Tap** (release before ~3 s) | **Fake-off** — blanks the display and turns the status LED off. The device stays awake; Wi‑Fi/BLE/apps keep running. Tap **G0** again to wake the screen (restores brightness). In **Charge**, tap also blanks via the charge sleep path and wakes the same way. |
+| **Tap** (release before ~3 s) | **Fake-off** — blanks the display and turns the status LED off. The device stays awake; Wi‑Fi/BLE/apps keep running. Tap **G0** again to wake the screen (restores brightness). In **Charge**, tap blanks the panel but keeps a dim (~20%) battery-colored LED on (purple at 95–100%). |
 | **Hold** (≥ 3 s) | **Force home** — escapes the current app/submenu and returns to the main channel grid (fires once per hold; keep holding does not spam). If the screen was fake-off, it wakes first. |
 
 Notes:
@@ -530,7 +530,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 
 | Tool | Purpose |
 |------|---------|
-| **Calculator** | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD, Fn function picker; `*` multiplies, `x` solves linear equations (`2x=4`). |
+| **Calculator** | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD; letter shortcuts (`s`/`c`/`t`…), Fn overlay; Esc/` clear, fn+Ok exit; `*` multiplies (drawn as green `x`), `x` solves linear equations (`2x=4`). |
 | **Media Player** *(speaker)* | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL). |
 | **PDA** *(lite off)* | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
 | **QRCodes** | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll. |
@@ -543,7 +543,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 | Tool | Purpose |
 |------|---------|
 | **Clock** | Full-screen clock; submenu opens Timer. |
-| **Charge** | Charge-friendly UI with restrained input. |
+| **Charge** | Charge-friendly UI with restrained input. Sleep (S / Down / G0) blanks the panel; LED stays on at ~20% brightness showing battery color (purple at 95–100%). |
 
 ### Config
 

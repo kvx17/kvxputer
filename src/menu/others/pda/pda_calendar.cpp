@@ -114,16 +114,20 @@ static void pdaDrawCalendar(FS *fs, int year, int month, int curDay, const struc
     const int gridX = margin;
     const int gridW = tftWidth - 2 * margin;
     const int cw = gridW / 7;
+    // Day cells and weekday letters stay dense — FP body glyphs overflow 6-row cells on 135px.
+    const int dayFont = uiDenseFont();
+    const int dayLH = uiLineH(dayFont);
 
     const char *wd[] = {"S", "M", "T", "W", "T", "F", "S"};
-    int wdY = 18;
-    tft.setTextSize(FP);
+    int wdY = uiLineH(FM) + 4;
+    tft.setTextSize(dayFont);
     tft.setTextColor(sec, bg);
     for (int i = 0; i < 7; i++) tft.drawCentreString(wd[i], gridX + cw * i + cw / 2, wdY, 1);
 
-    const int gridTop = 28;
+    const int gridTop = wdY + dayLH + 2;
     const int rows = 6;
-    const int ch = (tftHeight - gridTop - 10) / rows;
+    const int footerY = uiFooterY(dayFont);
+    const int ch = max(dayLH + 2, (footerY - gridTop - 2) / rows);
 
     int firstDow = pdaDayOfWeek(year, month, 1); // 0=Sun
     int dim = pdaDaysInMonth(year, month);
@@ -142,14 +146,16 @@ static void pdaDrawCalendar(FS *fs, int year, int month, int curDay, const struc
         if (isCursor) tft.fillRoundRect(x + 1, y + 1, cw - 2, ch - 2, 3, sec);
         else if (isToday) tft.drawRoundRect(x + 1, y + 1, cw - 2, ch - 2, 3, sec);
 
+        tft.setTextSize(dayFont);
         tft.setTextColor(isCursor ? bg : pri, isCursor ? sec : bg);
-        tft.drawCentreString(String(day), x + cw / 2, y + 2, 1);
+        tft.drawCentreString(String(day), x + cw / 2, y + max(1, (ch - dayLH) / 2), 1);
 
         if (eventCount[day] > 0) tft.fillCircle(x + cw / 2, y + ch - 3, 1, isCursor ? bg : sec);
     }
 
+    tft.setTextSize(dayFont);
     tft.setTextColor(sec, bg);
-    tft.drawCentreString("Fn+;/. year  [] month  arrows day", tftWidth / 2, tftHeight - 9, 1);
+    tft.drawCentreString("Fn+;/. year  [] month  arrows day", tftWidth / 2, footerY, 1);
 }
 
 void pdaCalendar() {

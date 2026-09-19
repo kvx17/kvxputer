@@ -56,7 +56,7 @@ void sipScan() {
             }
         }
         tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString(ip.toString() + " hits " + String(hits), 10, 40);
+        tft.drawString(ip.toString() + " hits " + String(hits), 10, uiStatusY(0));
     }
     udp.stop();
     displayInfo("SIP hits: " + String(hits), true);

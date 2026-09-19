@@ -58,13 +58,15 @@ void clockFaceDrawMonthCalendar(
 
     tft.fillRect(x, y, w, h, bg);
     const char *hdr[] = {"S", "M", "T", "W", "T", "F", "S"};
+    const int dense = uiDenseFont();
+    const int glyphH = uiLineH(dense);
     int cellW = w / 7;
-    int headerH = 10;
+    int headerH = max(8, glyphH + 2);
     int rows = h >= 54 ? 6 : 5;
     int cellH = (h - headerH) / rows;
     if (cellW < 8 || cellH < 6) return;
 
-    tft.setTextSize(FP);
+    tft.setTextSize(dense);
     tft.setTextColor(color, bg);
     for (int c = 0; c < 7; c++) {
         tft.drawCentreString(hdr[c], x + c * cellW + cellW / 2, y, 1);
@@ -86,7 +88,7 @@ void clockFaceDrawMonthCalendar(
             int cy = y + headerH + r * cellH;
             char buf[4];
             snprintf(buf, sizeof(buf), "%d", d);
-            int ty = cy + (cellH > 8 ? (cellH - 8) / 2 : 0);
+            int ty = cy + (cellH > glyphH ? (cellH - glyphH) / 2 : 0);
             if (d == mday) {
                 int rw = cellW - 2;
                 int rh = cellH - 1;

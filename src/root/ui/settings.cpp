@@ -268,6 +268,51 @@ void setUIColor() {
     }
 }
 
+/*********************************************************************
+**  Function: setAccentColor
+**  Set and store accent (secondary) UI color only
+**********************************************************************/
+void setAccentColor() {
+    while (1) {
+        options.clear();
+        int idx = UI_COLOR_COUNT;
+        int i = 0;
+        for (const auto &mapping : UI_COLORS) {
+            if (kvxConfig.secColor == mapping.secColor) { idx = i; }
+
+            options.emplace_back(
+                mapping.name,
+                [=, &mapping]() {
+                    uint16_t secColor = mapping.secColor;
+                    uint16_t bgColor = kvxConfig.bgColor;
+                    kvxConfig.setUiColor(kvxConfig.priColor, &secColor, &bgColor);
+                },
+                idx == i
+            );
+            ++i;
+        }
+
+        options.push_back(
+            {"Custom Color",
+             [=]() {
+                 uint16_t oldSecColor = kvxConfig.secColor;
+                 setCustomUIColorChoiceMenu(2);
+                 if (kvxConfig.secColor != oldSecColor) {
+                     uint16_t bgColor = kvxConfig.bgColor;
+                     kvxConfig.setUiColor(kvxConfig.priColor, &kvxConfig.secColor, &bgColor);
+                 }
+                 tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+             },
+             idx == UI_COLOR_COUNT}
+        );
+
+        addOptionToMainMenu();
+
+        int selectedOption = loopOptions(options, "Accent Color", idx);
+        if (selectedOption == -1 || selectedOption == options.size() - 1) return;
+    }
+}
+
 uint16_t alterOneColorChannel565(uint16_t color, int newR, int newG, int newB) {
     uint8_t r = (color >> 11) & 0x1F;
     uint8_t g = (color >> 5) & 0x3F;
@@ -1047,7 +1092,7 @@ void runClockLoop(bool showMenuHint) {
 
             // "OK to show menu" hint management
             if (hintVisible && (millis() - hintStartTime < 5000)) {
-                tft.setTextSize(1);
+                tft.setTextSize(uiDenseFont()) /* Clock HUD hint stays dense */;
                 tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
                 tft.drawCentreString("OK menu  [] face", tftWidth / 2, tftHeight - 12, 1);
             } else if (hintVisible && (millis() - hintStartTime >= 5000)) {

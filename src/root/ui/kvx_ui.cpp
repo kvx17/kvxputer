@@ -30,7 +30,7 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     const bool showWG = isConnectedWireguard;
 
     // Top-bar labels stay compact (half of body FP after the FP bump).
-    const int barSize = max(1, FP / 2);
+    const int barSize = uiDenseFont();
     const int barTextY = max(4, (KVX_TOPBAR_H - barSize * LH) / 2);
 
     const int IW = 16;

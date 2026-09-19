@@ -22,11 +22,12 @@ struct PdaChannel {
 };
 
 // Wii-style channel grid: soft rounded tiles, glyph icon, label in footer.
+// Captions stay at uiDenseFont() — FP body glyphs won't fit a 4x2 tile grid on 135px.
 static constexpr int PDA_COLS = 4;
 static constexpr int PDA_ROWS = 2;
 static constexpr int PDA_SLOTS = PDA_COLS * PDA_ROWS;
-static constexpr int PDA_FOOTER_H = 22;
-static constexpr int PDA_TOP_H = 18;
+static int pdaTopH() { return uiLineH(uiDenseFont()) + 10; }
+static int pdaFooterH() { return uiLineH(uiDenseFont()) + 14; }
 
 enum {
     PDA_CH_NOTES = 0,
@@ -134,9 +135,7 @@ static void drawGlyph(int id, int cx, int cy, uint16_t color) {
     }
 }
 
-// Hub captions stay at the pre-FP-bump size so tiles/footer fit the grid.
-static constexpr int PDA_FONT = 1;
-
+// Hub captions stay dense so tiles/footer fit the 4x2 grid.
 static void drawChannelTile(int x, int y, int w, int h, int id, bool selected) {
     const uint16_t pri = kvxConfig.priColor;
     const uint16_t sec = kvxConfig.secColor;
@@ -146,6 +145,7 @@ static void drawChannelTile(int x, int y, int w, int h, int id, bool selected) {
     const uint16_t fill = selected ? getColorVariation(sec, 6, -1) : idleFill;
     const uint16_t border = selected ? sec : getColorVariation(pri, 6, -1);
     const int radius = 10;
+    const int dense = uiDenseFont();
 
     tft.fillRoundRect(x, y, w, h, radius, fill);
     tft.drawRoundRect(x, y, w, h, radius, border);
@@ -162,7 +162,7 @@ static void drawChannelTile(int x, int y, int w, int h, int id, bool selected) {
             break;
         }
     }
-    tft.setTextSize(PDA_FONT);
+    tft.setTextSize(dense);
     tft.setTextColor(selected ? pri : sec, fill);
     tft.setCursor(x + 4, y + 3);
     tft.print(digit);
@@ -170,19 +170,19 @@ static void drawChannelTile(int x, int y, int w, int h, int id, bool selected) {
     drawGlyph(id, x + w / 2, y + h / 2 - 2, selected ? pri : sec);
 
     // Tiny label under the glyph inside the tile (Wii-like channel caption).
-    tft.setTextSize(PDA_FONT);
+    tft.setTextSize(dense);
     tft.setTextColor(selected ? pri : sec, fill);
     String shortLabel = kChannels[id].label;
     if (shortLabel.length() > 8) shortLabel = shortLabel.substring(0, 8);
-    tft.drawCentreString(shortLabel, x + w / 2, y + h - PDA_FONT * LH - 3, 1);
+    tft.drawCentreString(shortLabel, x + w / 2, y + h - uiLineH(dense) - 3, 1);
     (void)bg;
 }
 
 static int s_pdaLastIndex = -1;
 
 static void pdaHubGeom(int &top, int &marginX, int &gap, int &cellW, int &cellH) {
-    top = PDA_TOP_H + 2;
-    const int bottom = tftHeight - PDA_FOOTER_H;
+    top = pdaTopH() + 2;
+    const int bottom = tftHeight - pdaFooterH();
     const int gridH = bottom - top - 2;
     marginX = 6;
     gap = 4;
@@ -208,11 +208,13 @@ static void pdaTileXY(int id, int marginX, int gap, int cellW, int cellH, int to
 static void drawPdaFooter(int index) {
     const uint16_t pri = kvxConfig.priColor;
     const uint16_t sec = kvxConfig.secColor;
-    tft.fillRoundRect(0, tftHeight - PDA_FOOTER_H, tftWidth, PDA_FOOTER_H, 0, sec);
-    tft.setTextSize(PDA_FONT);
+    const int dense = uiDenseFont();
+    const int footH = pdaFooterH();
+    tft.fillRoundRect(0, tftHeight - footH, tftWidth, footH, 0, sec);
+    tft.setTextSize(dense);
     tft.setTextColor(pri, sec);
     String foot = String(kChannels[index].label) + "  1-8 open  9 bind";
-    tft.drawCentreString(foot, tftWidth / 2, tftHeight - PDA_FOOTER_H + 6, 1);
+    tft.drawCentreString(foot, tftWidth / 2, tftHeight - footH + (footH - uiLineH(dense)) / 2, 1);
 }
 
 static void invalidatePdaHubCache() { s_pdaLastIndex = -1; }
@@ -231,10 +233,10 @@ static void drawPdaHub(int index) {
     if (fullRedraw) {
         tft.fillScreen(bg);
 
-        tft.setTextSize(PDA_FONT + 1); // was FM when FP=1; keep title one step above hub captions
+        tft.setTextSize(uiDenseFont() + 1); // one step above dense hub captions
         tft.setTextColor(pri, bg);
         tft.drawCentreString("PDA", tftWidth / 2, 3, 1);
-        tft.drawFastHLine(8, PDA_TOP_H - 1, tftWidth - 16, getColorVariation(pri, 8, -1));
+        tft.drawFastHLine(8, pdaTopH() - 1, tftWidth - 16, getColorVariation(pri, 8, -1));
 
         for (int slot = 0; slot < PDA_SLOTS; slot++) {
             int row = 0, col = 0;

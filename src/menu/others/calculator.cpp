@@ -13,6 +13,16 @@
 #include <globals.h>
 #include <math.h>
 #include <vector>
+#if defined(HAS_KEYBOARD)
+#include <Keyboard.h>
+extern Keyboard_Class Keyboard;
+#endif
+
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
+// Defined in tools/porting/boards/m5stack-cardputer/interface.cpp (file scope).
+extern bool UseTCA8418;
+extern bool fn_key_pressed;
+#endif
 
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_alarms.h"
@@ -663,6 +673,64 @@ struct Hist {
 
 // ---- UI --------------------------------------------------------------------
 
+static bool isOpGlyph(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^' || c == '=' || c == '(' ||
+           c == ')';
+}
+
+static char displayGlyph(char c) { return (c == '*') ? 'x' : c; }
+
+// Draw expression right-aligned; operators in accent green; '*' shown as 'x'.
+// Returns pixel x of the caret cell (left edge) for blink updates; -1 if none.
+static int drawColoredExprRight(
+    const String &expr, int caret, bool showCaret, bool blinkOn, uint8_t size, int y, int xRight
+) {
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t pri = kvxConfig.priColor;
+    const uint16_t sec = kvxConfig.secColor;
+    const int cw = uiCharW(size);
+    const int maxChars = max(1, (xRight - 8) / cw);
+
+    String shown = expr;
+    int caretShown = caret;
+    if (shown.length() == 0) {
+        shown = " ";
+        caretShown = 0;
+    }
+    if ((int)shown.length() > maxChars) {
+        int start = caretShown - maxChars + 1;
+        if (start < 0) start = 0;
+        if (start + maxChars > (int)shown.length()) start = (int)shown.length() - maxChars;
+        shown = shown.substring(start, start + maxChars);
+        caretShown = caretShown - start;
+    }
+
+    const int blockW = (int)shown.length() * cw + (showCaret ? cw : 0);
+    int x = xRight - blockW;
+    if (x < 4) x = 4;
+
+    tft.setTextSize(size);
+    int caretX = -1;
+    for (int i = 0; i <= (int)shown.length(); i++) {
+        if (showCaret && i == caretShown) {
+            caretX = x;
+            char ch = blinkOn ? '|' : ' ';
+            tft.setTextColor(pri, bg);
+            tft.setCursor(x, y);
+            tft.print(ch);
+            x += cw;
+        }
+        if (i >= (int)shown.length()) break;
+        char raw = shown[i];
+        char d = displayGlyph(raw);
+        tft.setTextColor(isOpGlyph(raw) ? sec : pri, bg);
+        tft.setCursor(x, y);
+        tft.print(d);
+        x += cw;
+    }
+    return caretX;
+}
+
 static void drawCalcChrome() {
     tft.fillScreen(kvxConfig.bgColor);
     drawKvxTopBar("Calculator");
@@ -681,15 +749,15 @@ static void drawHelpOverlay() {
         auto line = [&](const char *s) {
             tft.setCursor(4, y);
             tft.print(s);
-            y += FP * LH + 1;
+            y += uiLineH(FP) + 1;
         };
-        line("Enter=eval  Del=bksp  `=clr");
-        line("Fn=funcs  Fn+arrows=caret");
-        line("Fn+up/dn=history  Opt=help");
-        line("*=mul  x=unknown  /=div");
+        line("Enter=eval  Del=bksp");
+        line("Esc/`=clear  fn+Ok=exit");
+        line("Fn=shortcuts  M=DEG/RAD");
+        line("s/c/t=trig  *=mul  x=unknown");
         line("ex: sin(30)  2^10  2x=4");
         tft.setTextColor(kvxConfig.secColor, bg);
-        tft.drawCentreString("any key = back", tftWidth / 2, tftHeight - FP * LH - 2, 1);
+        tft.drawCentreString("any key = back", tftWidth / 2, uiFooterY(FP), 1);
     }
 
     for (;;) {
@@ -704,105 +772,175 @@ static void drawHelpOverlay() {
     consumeNavFlags();
 }
 
-static void drawCalcBodyInner(
-    const String &expr, int caret, const String &status, uint16_t statusColor, bool blinkOn
-) {
-    const uint16_t bg = kvxConfig.bgColor;
-    const uint16_t pri = kvxConfig.priColor;
-    const uint16_t sec = kvxConfig.secColor;
-    const int bodyY = KVX_TOPBAR_H + 4;
-    const int bodyH = tftHeight - bodyY - 14;
+struct Shortcut {
+    char key;
+    const char *label;
+    const char *ins; // nullptr = mode toggle
+    int caretBack;
+};
 
-    tft.fillRect(0, bodyY, tftWidth, bodyH + 14, bg);
+static const Shortcut kShortcuts[] = {
+    {'m', "MODE", nullptr, 0}, {'s', "sin", "sin()", 1}, {'c', "cos", "cos()", 1},
+    {'t', "tan", "tan()", 1}, {'i', "asin", "asin()", 1}, {'o', "acos", "acos()", 1},
+    {'n', "atan", "atan()", 1}, {'l', "ln", "ln()", 1}, {'g', "log", "log()", 1},
+    {'w', "log2", "log2()", 1}, {'y', "exp", "exp()", 1}, {'a', "abs", "abs()", 1},
+    {'q', "sqrt", "sqrt()", 1}, {'f', "fact", "fact()", 1}, {'p', "pi", "pi", 0},
+    {'e', "e", "e", 0}, {'r', "ans", "ans", 0},
+};
 
-    // Expression with caret (right-aligned, keep caret visible).
-    String shown = expr;
-    int caretShown = caret;
-    if (shown.length() == 0) {
-        shown = " ";
-        caretShown = 0;
+static const Shortcut *findShortcut(char c) {
+    char lc = (char)tolower((unsigned char)c);
+    for (const Shortcut &s : kShortcuts) {
+        if (s.key == lc) return &s;
     }
-    int maxChars = max(1, (tftWidth - 16) / (FP * LW));
-    if ((int)shown.length() > maxChars) {
-        // Prefer keeping caret near the right end.
-        int start = caretShown - maxChars + 1;
-        if (start < 0) start = 0;
-        if (start + maxChars > (int)shown.length()) start = (int)shown.length() - maxChars;
-        shown = shown.substring(start, start + maxChars);
-        caretShown = caretShown - start;
-    }
+    return nullptr;
+}
 
-    tft.setTextSize(FP);
-    int xRight = tftWidth - 8;
-    int yExpr = bodyY + 4;
-    // Draw left of caret, caret glyph, right of caret — right-aligned as a block.
-    String left = shown.substring(0, caretShown);
-    String right = shown.substring(caretShown);
-    char caretCh = blinkOn ? '|' : ' ';
-    String block = left + caretCh + right;
-    tft.setTextColor(pri, bg);
-    tft.drawRightString(block, xRight, yExpr, 1);
-
-    // DEG/RAD chip (left) + pending-op chip (right).
-    const int chipY = bodyY + FP * LH + 8;
-    const int chipH = FM * LH + 4;
-    {
-        const char *mode = gDegMode ? "DEG" : "RAD";
-        const int chipW = 3 * FM * LW + 6;
-        tft.fillRoundRect(8, chipY, chipW, chipH, 3, sec);
-        tft.setTextSize(FM);
-        tft.setTextColor(bg, sec);
-        tft.drawCentreString(mode, 8 + chipW / 2, chipY + 2, 1);
-    }
-    char pending = 0;
-    if (expr.length() && caret == (int)expr.length() && isBinaryOp(expr[expr.length() - 1]))
-        pending = expr[expr.length() - 1];
-    if (pending) {
-        char chip[2] = {pending, 0};
-        const int chipW = FM * LW + 6;
-        const int chipX = tftWidth - 8 - chipW;
-        tft.fillRoundRect(chipX, chipY, chipW, chipH, 3, sec);
-        tft.setTextSize(FM);
-        tft.setTextColor(bg, sec);
-        tft.drawCentreString(chip, chipX + chipW / 2, chipY + 2, 1);
-    }
-
-    const int statusY = bodyY + FP * LH + FM * LH + 18;
-    tft.setTextSize(FG);
-    tft.setTextColor(statusColor, bg);
-    String st = status.length() ? status : " ";
-    int stMax = max(1, (tftWidth - 16) / (FG * LW));
-    if ((int)st.length() > stMax) st = st.substring(st.length() - stMax);
-    tft.drawRightString(st, tftWidth - 8, statusY, 1);
-
-    tft.setTextSize(FP);
-    tft.setTextColor(sec, bg);
-#ifdef HAS_KEYBOARD
-    tft.drawCentreString("Enter=eval Fn=fn `=clr ESC", tftWidth / 2, tftHeight - FP * LH - 2, 1);
+static bool pollFnHeld(const keyStroke &key) {
+    if (key.fn) return true;
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
+    if (UseTCA8418) return fn_key_pressed;
+    Keyboard.update();
+    return Keyboard.keysState().fn;
+#elif defined(HAS_KEYBOARD)
+    Keyboard.update();
+    return Keyboard.keysState().fn;
 #else
-    tft.drawCentreString("OK=edit  Dn=fn  hold=back", tftWidth / 2, tftHeight - FP * LH - 2, 1);
+    (void)key;
+    return false;
 #endif
 }
 
+static void drawFnOverlay() {
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t pri = kvxConfig.priColor;
+    const uint16_t sec = kvxConfig.secColor;
+    const int top = KVX_TOPBAR_H + 2;
+    const int bot = uiFooterY(FP) - 2;
+    tft.fillRect(0, top, tftWidth, bot - top, bg);
+
+    const int margin = 2;
+    const int cols = 6;
+    const int rows = 3;
+    const int hgap = 2;
+    const int vgap = 2;
+    const size_t n = sizeof(kShortcuts) / sizeof(kShortcuts[0]);
+    int colW = (tftWidth - margin * 2 - hgap * (cols - 1)) / cols;
+    int rowH = (bot - top - vgap * (rows - 1)) / rows;
+    if (rowH > 22) rowH = 22;
+    if (rowH < 14) rowH = 14;
+
+    for (size_t i = 0; i < n; i++) {
+        const int col = (int)(i % cols);
+        const int row = (int)(i / cols);
+        if (row >= rows) break;
+        const int x = margin + col * (colW + hgap);
+        const int y = top + row * (rowH + vgap);
+        tft.fillRoundRect(x, y, colW, rowH, 2, pri);
+        tft.drawRoundRect(x, y, colW, rowH, 2, sec);
+        tft.setTextSize(1);
+        char keyBuf[2] = {kShortcuts[i].key, 0};
+        tft.setTextColor(sec, pri);
+        tft.drawCentreString(keyBuf, x + colW / 2, y + 1, 1);
+        tft.setTextColor(bg, pri);
+        tft.drawCentreString(kShortcuts[i].label, x + colW / 2, y + rowH - 9, 1);
+    }
+}
+
+static int gCaretPixelX = -1;
+static int gCaretPixelY = -1;
+static uint8_t gCaretSize = FG;
+
+static void drawModeChip(int chipY) {
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t sec = kvxConfig.secColor;
+    const char *mode = gDegMode ? "DEG" : "RAD";
+    const int chipH = uiLineH(FM) + 4;
+    const int chipW = 3 * uiCharW(FM) + 6;
+    tft.fillRoundRect(8, chipY, chipW, chipH, 3, sec);
+    tft.setTextSize(FM);
+    tft.setTextColor(bg, sec);
+    tft.drawCentreString(mode, 8 + chipW / 2, chipY + 2, 1);
+}
+
+static void drawCalcFooter() {
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t sec = kvxConfig.secColor;
+    tft.setTextSize(FP);
+    tft.setTextColor(sec, bg);
+#ifdef HAS_KEYBOARD
+    tft.drawCentreString("Enter=eval Fn=keys `=clr fn+Ok", tftWidth / 2, uiFooterY(FP), 1);
+#else
+    tft.drawCentreString("OK=edit  Dn=fn  hold=back", tftWidth / 2, uiFooterY(FP), 1);
+#endif
+}
+
+static void drawCalcBodyInner(
+    const String &expr, int caret, const String &histLine, const String &status, uint16_t statusColor,
+    bool blinkOn
+) {
+    const uint16_t bg = kvxConfig.bgColor;
+    const int bodyY = KVX_TOPBAR_H + 2;
+    tft.fillRect(0, bodyY, tftWidth, tftHeight - bodyY, bg);
+
+    const int chipY = bodyY + 2;
+    drawModeChip(chipY);
+
+    const int exprY = chipY + uiLineH(FM) + 10;
+    gCaretSize = FG;
+    gCaretPixelY = exprY;
+    gCaretPixelX = drawColoredExprRight(expr, caret, true, blinkOn, FG, exprY, tftWidth - 8);
+
+    const int histY = exprY + uiLineH(FG) + 4;
+    if (histLine.length()) {
+        drawColoredExprRight(histLine, (int)histLine.length(), false, false, FM, histY, tftWidth - 8);
+    }
+
+    const int statusY = histY + uiLineH(FM) + 4;
+    tft.setTextSize(FM);
+    tft.setTextColor(statusColor, bg);
+    String st = status.length() ? status : " ";
+    int stMax = max(1, (tftWidth - 16) / uiCharW(FM));
+    if ((int)st.length() > stMax) st = st.substring(st.length() - stMax);
+    tft.drawRightString(st, tftWidth - 8, statusY, 1);
+
+    drawCalcFooter();
+}
+
+static void blinkCaretOnly(bool blinkOn) {
+    if (gCaretPixelX < 0 || gCaretPixelY < 0) return;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t pri = kvxConfig.priColor;
+    const int cw = uiCharW(gCaretSize);
+    const int ch = uiLineH(gCaretSize);
+    tft.fillRect(gCaretPixelX, gCaretPixelY, cw, ch, bg);
+    tft.setTextSize(gCaretSize);
+    tft.setTextColor(pri, bg);
+    tft.setCursor(gCaretPixelX, gCaretPixelY);
+    tft.print(blinkOn ? '|' : ' ');
+}
+
 static void drawCalcBody(
-    const String &expr, int caret, const String &status, uint16_t statusColor, bool blinkOn
+    const String &expr, int caret, const String &histLine, const String &status, uint16_t statusColor,
+    bool blinkOn
 ) {
     TftFrame frame;
-    drawCalcBodyInner(expr, caret, status, statusColor, blinkOn);
+    drawCalcBodyInner(expr, caret, histLine, status, statusColor, blinkOn);
 }
 
 static void drawCalcScreen(
-    const String &expr, int caret, const String &status, uint16_t statusColor, bool blinkOn
+    const String &expr, int caret, const String &histLine, const String &status, uint16_t statusColor,
+    bool blinkOn
 ) {
     TftFrame frame;
     drawCalcChrome();
-    drawCalcBodyInner(expr, caret, status, statusColor, blinkOn);
+    drawCalcBodyInner(expr, caret, histLine, status, statusColor, blinkOn);
 }
 
 struct PickerResult {
     bool toggledDeg = false;
     String insert;
-    int caretBack = 0; // move caret left this many after insert (before ')')
+    int caretBack = 0;
 };
 
 static PickerResult runFunctionPicker() {
@@ -919,27 +1057,35 @@ static void applySolveToUi(
 void calculatorApp() {
     String expr = "";
     int caret = 0;
+    String histLine = "";
     String status = "";
     uint16_t statusColor = kvxConfig.secColor;
     bool showedResult = false;
     Hist hist;
     bool blinkOn = true;
     unsigned long lastBlink = millis();
+    bool fnOverlay = false;
+    bool prevFnHeld = false;
 
-    drawCalcScreen(expr, caret, status, statusColor, blinkOn);
+    drawCalcScreen(expr, caret, histLine, status, statusColor, blinkOn);
 
-    auto redraw = [&]() { drawCalcBody(expr, caret, status, statusColor, blinkOn); };
-    auto redrawFull = [&]() { drawCalcScreen(expr, caret, status, statusColor, blinkOn); };
+    auto redraw = [&]() { drawCalcBody(expr, caret, histLine, status, statusColor, blinkOn); };
+    auto redrawFull = [&]() { drawCalcScreen(expr, caret, histLine, status, statusColor, blinkOn); };
 
     auto doEval = [&]() {
+        if (expr.length()) histLine = expr;
         SolveOut so = solveExpression(expr);
         applySolveToUi(so, expr, caret, status, statusColor, showedResult, hist);
     };
 
+    auto clearAll = [&]() {
+        expr = "";
+        caret = 0;
+        status = "";
+        showedResult = false;
+    };
+
     auto insertText = [&](const String &ins, int caretBack) {
-        if (showedResult) {
-            // Digits / letters / '(' start fresh; operators chain — handled by callers.
-        }
         insertAtCaret(expr, caret, ins);
         if (caretBack > 0) {
             caret -= caretBack;
@@ -948,37 +1094,87 @@ void calculatorApp() {
         status = "";
     };
 
+    auto applyShortcut = [&](const Shortcut &sc) -> bool {
+        if (sc.ins == nullptr) {
+            gDegMode = !gDegMode;
+            return true;
+        }
+        if (showedResult) {
+            expr = "";
+            caret = 0;
+            showedResult = false;
+            status = "";
+        }
+        insertText(String(sc.ins), sc.caretBack);
+        return true;
+    };
+
     for (;;) {
-        if (check(EscPress) || forceHome) break;
+        if (forceHome) break;
+
+#ifdef HAS_KEYBOARD
+        if (check(EscPress)) {
+            clearAll();
+            if (fnOverlay) {
+                fnOverlay = false;
+                prevFnHeld = false;
+            }
+            redraw();
+            continue;
+        }
+#else
+        if (check(EscPress)) break;
+#endif
 
 #ifndef LITE_VERSION
         if (pdaAlarmsPoll()) {
+            fnOverlay = false;
+            prevFnHeld = false;
             redrawFull();
         }
 #endif
 
-        unsigned long now = millis();
-        if (now - lastBlink >= kBlinkMs) {
-            lastBlink = now;
-            blinkOn = !blinkOn;
-            redraw();
-        }
-
 #ifdef HAS_KEYBOARD
         keyStroke key = _getKeyPress();
+        const bool fnHeld = pollFnHeld(key);
+
+        if (fnHeld != prevFnHeld) {
+            prevFnHeld = fnHeld;
+            fnOverlay = fnHeld;
+            if (fnOverlay) {
+                TftFrame frame;
+                drawFnOverlay();
+            } else {
+                redraw();
+            }
+        }
+
+        unsigned long now = millis();
+        if (!fnOverlay && now - lastBlink >= kBlinkMs) {
+            lastBlink = now;
+            blinkOn = !blinkOn;
+            blinkCaretOnly(blinkOn);
+        }
+
         if (!key.pressed) {
             delay(20);
             continue;
         }
 
+        // Fn+Ok exits (before overlay-only handling).
+        if (key.fn && key.exit_key) break;
+
         bool changed = false;
 
-        // Opt (gui) → help
-        if (key.gui) {
+        if (key.gui && !key.fn) {
             drawHelpOverlay();
+            fnOverlay = false;
+            prevFnHeld = false;
             redrawFull();
-            changed = false;
-        } else if (key.fn) {
+            continue;
+        }
+
+        if (key.fn) {
             bool hidArrow = false;
             bool helpH = false;
             for (char raw : key.word) {
@@ -992,14 +1188,12 @@ void calculatorApp() {
                     hidArrow = true;
                     changed = true;
                 } else if (c == 0xDA) {
-                    // Fn+up → older history
                     hist.move(1, expr, caret);
                     showedResult = false;
                     status = "";
                     hidArrow = true;
                     changed = true;
                 } else if (c == 0xD9) {
-                    // Fn+down → newer history
                     hist.move(-1, expr, caret);
                     showedResult = false;
                     status = "";
@@ -1011,32 +1205,24 @@ void calculatorApp() {
             }
             if (helpH) {
                 drawHelpOverlay();
+                fnOverlay = false;
+                prevFnHeld = false;
                 redrawFull();
-                changed = false;
-            } else if (!hidArrow) {
-                // Fn alone → function picker
-                PickerResult pr = runFunctionPicker();
-                if (pr.toggledDeg) {
-                    changed = true;
-                } else if (pr.insert.length()) {
-                    if (showedResult) {
-                        char c0 = pr.insert[0];
-                        if (!isBinaryOp(c0)) {
-                            expr = "";
-                            caret = 0;
-                        }
-                        showedResult = false;
-                        status = "";
-                    }
-                    insertText(pr.insert, pr.caretBack);
-                    changed = true;
-                } else {
-                    changed = true; // redraw after picker
-                }
-                redrawFull();
-                changed = false;
+                continue;
             }
-        } else if (key.enter) {
+            if (hidArrow) {
+                fnOverlay = false;
+                redraw();
+                if (fnHeld) {
+                    fnOverlay = true;
+                    TftFrame frame;
+                    drawFnOverlay();
+                }
+                continue;
+            }
+        }
+
+        if (key.enter && !key.fn) {
             check(SelPress);
             doEval();
             changed = true;
@@ -1052,22 +1238,38 @@ void calculatorApp() {
                 char c = (char)uc;
 
                 if (c == '`') {
-                    expr = "";
-                    caret = 0;
-                    status = "";
-                    showedResult = false;
+                    clearAll();
                     changed = true;
                     continue;
                 }
 
-                bool isLetter = isalpha((unsigned char)c);
+                if (isalpha((unsigned char)c)) {
+                    char lc = (char)tolower((unsigned char)c);
+                    if (lc == 'x') {
+                        if (showedResult) {
+                            expr = "";
+                            caret = 0;
+                            showedResult = false;
+                            status = "";
+                        }
+                        insertAtCaret(expr, caret, "x");
+                        changed = true;
+                        continue;
+                    }
+                    const Shortcut *sc = findShortcut(c);
+                    if (sc) {
+                        applyShortcut(*sc);
+                        changed = true;
+                    }
+                    continue;
+                }
+
                 bool valid = isdigit((unsigned char)c) || c == '.' || isBinaryOp(c) || c == '(' ||
-                             c == ')' || c == '=' || isLetter;
-                // Allow lowercase/uppercase letters for names and x.
+                             c == ')' || c == '=';
                 if (!valid) continue;
 
                 if (showedResult) {
-                    if (isdigit((unsigned char)c) || c == '.' || c == '(' || isLetter) {
+                    if (isdigit((unsigned char)c) || c == '.' || c == '(') {
                         expr = "";
                         caret = 0;
                     }
@@ -1078,8 +1280,6 @@ void calculatorApp() {
                 if (isBinaryOp(c)) {
                     insertOrReplaceOp(expr, caret, c);
                 } else {
-                    // Normalize X → x for the unknown.
-                    if (c == 'X') c = 'x';
                     char buf[2] = {c, 0};
                     insertAtCaret(expr, caret, String(buf));
                 }
@@ -1087,10 +1287,21 @@ void calculatorApp() {
             }
         }
 
-        if (changed) redraw();
+        if (changed) {
+            if (!(fnOverlay && fnHeld)) {
+                fnOverlay = false;
+                redraw();
+            }
+        }
 
 #else
-        // StickS3 / no keyboard: Sel = edit via keyboard(), Down = function picker.
+        unsigned long now = millis();
+        if (now - lastBlink >= kBlinkMs) {
+            lastBlink = now;
+            blinkOn = !blinkOn;
+            blinkCaretOnly(blinkOn);
+        }
+
         if (check(SelPress)) {
             String prev = expr;
             String edited = keyboard(expr, kMaxExpr, "Expression");

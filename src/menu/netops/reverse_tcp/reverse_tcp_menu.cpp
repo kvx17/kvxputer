@@ -24,8 +24,8 @@ void reverseTcpMenu() {
     if (port <= 0 || port > 65535) port = 4444;
 
     drawMainBorderWithTitle("Reverse TCP");
-    tft.drawString(host + ":" + String(port), 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString(host + ":" + String(port), 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     WiFiClient client;
     unsigned long lastTry = 0;
@@ -35,9 +35,9 @@ void reverseTcpMenu() {
             if (millis() - lastTry > 4000) {
                 lastTry = millis();
                 tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-                tft.drawString("Connecting...", 10, 56);
+                tft.drawString("Connecting...", 10, uiStatusY(1));
                 client.connect(host.c_str(), port);
-                if (client.connected()) tft.drawString("Connected", 10, 56);
+                if (client.connected()) tft.drawString("Connected", 10, uiStatusY(1));
             }
         } else {
             while (client.available()) {

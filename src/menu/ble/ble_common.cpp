@@ -66,11 +66,12 @@ char strAddl[200];
 void ble_info(const String &name, const String &address, const String &signal) {
     drawMainBorder();
     tft.setTextColor(kvxConfig.priColor);
-    tft.drawCentreString("-=Information=-", tftWidth / 2, 28, SMOOTH_FONT);
-    tft.drawString("Name: " + name, 10, 48);
-    tft.drawString("Adresse: " + address, 10, 66);
-    tft.drawString("Signal: " + String(signal) + " dBm", 10, 84);
-    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, tftHeight - 20, 1);
+    tft.setTextSize(FP);
+    tft.drawCentreString("-=Information=-", tftWidth / 2, uiStatusY(0) - uiRowH(FP), SMOOTH_FONT);
+    tft.drawString("Name: " + name, 10, uiStatusY(0));
+    tft.drawString("Adresse: " + address, 10, uiStatusY(1));
+    tft.drawString("Signal: " + String(signal) + " dBm", 10, uiStatusY(2));
+    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, uiFooterY(FP), 1);
 
     delay(300);
     while (!check(SelPress)) {

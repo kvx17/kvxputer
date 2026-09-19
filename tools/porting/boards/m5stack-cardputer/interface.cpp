@@ -338,11 +338,10 @@ void InputHandler(void) {
                 }
             } else if (chargeModeActive) {
                 // Charge owns blanking: allow brightness 0 via chargeUserSleep.
-                // Match non-Charge fake-off: LED off until wake.
+                // Keep dim battery LED on (Charge loop drives it); do not LED_STATUS_OFF.
                 chargeUserSleep = true;
                 isScreenOff = true;
                 turnOffDisplay();
-                ledSetStatus(LED_STATUS_OFF);
             } else {
                 isScreenOff = true;
                 turnOffDisplay();

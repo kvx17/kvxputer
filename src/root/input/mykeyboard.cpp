@@ -16,7 +16,7 @@
 #endif
 
 int max_FM_size = tftWidth / (LW * FM) - 1;
-int max_FP_size = tftWidth / (LW)-2;
+int max_FP_size = tftWidth / (LW * FP) - 2;
 
 // QWERTY KEYSET
 const int qwerty_keyboard_width = 12;
@@ -451,7 +451,7 @@ String generalKeyboard(
     bool mask_input = false
 ) {
     max_FM_size = tftWidth / (LW * FM) - 1;
-    max_FP_size = tftWidth / (LW)-2;
+    max_FP_size = tftWidth / (LW * FP) - 2;
     resetTftDisplay();
     touchPoint.Clear();
 
@@ -524,8 +524,10 @@ String generalKeyboard(
 
     const int key_width = tftWidth / KeyboardWidth;
     const int key_height = (tftHeight - keyboard_start_y) / KeyboardHeight;
-    const int text_offset_x = key_width / 2 - LW * FM / 2;
-    const int text_offset_y = key_height / 2 - LH * FM / 2;
+    // Prefer menu font on keys; fall back to dense if the key cell is shorter than FM glyphs.
+    const int keyFont = (key_height < uiLineH(FM)) ? uiDenseFont() : uiMenuFont();
+    const int text_offset_x = key_width / 2 - uiCharW(keyFont) / 2;
+    const int text_offset_y = key_height / 2 - uiLineH(keyFont) / 2;
 
 #if defined(HAS_TOUCH) // filling touch box list
     // Calculate actual box count
@@ -746,7 +748,7 @@ String generalKeyboard(
             tft.drawRect(3, textbox_y, tftWidth - 3, KBLH, kvxConfig.priColor); // typed string border
 
             tft.setTextColor(getComplementaryColor2(kvxConfig.bgColor), kvxConfig.bgColor);
-            tft.setTextSize(FM);
+            tft.setTextSize(keyFont);
 
             // Draw the actual keyboard
             for (int i = 0; i < KeyboardHeight; i++) {

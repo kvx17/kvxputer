@@ -15,7 +15,7 @@ static bool spectrum_rmt_rx_done_callback(
 }
 
 void draw_tf_spectrum_grid() {
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* Spectrum axis/HUD overlays stay dense */;
     tft.setCursor(3, 2);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
     tft.printf(" RF - Spectrum (%.2f Mhz)", kvxConfigPins.rfFreq);
@@ -141,7 +141,7 @@ void rf_SquareWave() {
 PRINT:
     tft.drawPixel(0, 0, 0);
     tft.fillScreen(kvxConfig.bgColor);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* Spectrum axis/HUD overlays stay dense */;
     tft.setCursor(3, 2);
     tft.printf("  RF - SquareWave (%.2f Mhz)", kvxConfigPins.rfFreq);
 
@@ -200,7 +200,7 @@ void rf_CC1101_rssi() {
             redraw = false;
             tft.drawPixel(0, 0, 0);
             tft.fillScreen(kvxConfig.bgColor);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Spectrum axis/HUD overlays stay dense */;
             tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
             tft.setCursor(3, 2);
             // Fixed frequency sees a dot running grafic, showing RSSI over time
@@ -209,12 +209,14 @@ void rf_CC1101_rssi() {
                     displayError("Error setting frequency", true);
                 tft.printf(" RF - RSSI spectrum (%.2f Mhz)", kvxConfigPins.rfFreq);
                 tft.drawFastVLine(20, 20, tftHeight, kvxConfig.priColor);
-                tft.drawString("-95", 0, (tftHeight - 120) + 95);
-                tft.drawString("-80", 0, (tftHeight - 120) + 80);
-                tft.drawString("-65", 0, (tftHeight - 120) + 65);
-                tft.drawString("-50", 0, (tftHeight - 120) + 50);
-                tft.drawString("-35", 0, (tftHeight - 120) + 35);
-                tft.drawString("-20", 0, (tftHeight - 120) + 20);
+                // Axis: y = base_y - rssi (rssi is negative). Fit on short screens.
+                const int base_y = max(20, tftHeight - 100);
+                tft.drawString("-95", 0, base_y - (-95));
+                tft.drawString("-80", 0, base_y - (-80));
+                tft.drawString("-65", 0, base_y - (-65));
+                tft.drawString("-50", 0, base_y - (-50));
+                tft.drawString("-35", 0, base_y - (-35));
+                tft.drawString("-20", 0, base_y - (-20));
                 // resets signal array
                 std::fill(signal.begin(), signal.end(), -95);
             }
@@ -244,7 +246,7 @@ void rf_CC1101_rssi() {
         if (kvxConfigPins.rfFxdFreq) {
             int rssi = ELECHOUSE_cc1101.getRssi();
             tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
-            const int base_y = tftHeight - 120;
+            const int base_y = max(20, tftHeight - 100);
             int prev = signal[0];
             for (int i = 1; i < graph_size; i++) {
                 if (EscPress || SelPress) break;

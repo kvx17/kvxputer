@@ -167,8 +167,8 @@ void handshakeMasterRun() {
     uint8_t expectFrag = 0;
 
     drawMainBorderWithTitle("Handshake Master");
-    tft.drawString("Waiting ESP-NOW slaves", 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("Waiting ESP-NOW slaves", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
 
     while (!check(EscPress) && !returnToMenu) {

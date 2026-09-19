@@ -47,7 +47,7 @@ void dhcpStarvationMenu() {
     }
     int sent = 0;
     drawMainBorderWithTitle("DHCP Starvation");
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         uint8_t mac[6];
@@ -58,7 +58,7 @@ void dhcpStarvationMenu() {
         sent++;
         if (sent % 5 == 0) {
             tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Discovers: " + String(sent), 10, 40);
+            tft.drawString("Discovers: " + String(sent), 10, uiStatusY(0));
         }
         delay(40);
     }

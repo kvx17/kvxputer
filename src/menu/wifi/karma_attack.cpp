@@ -2430,7 +2430,8 @@ void updateKarmaDisplay() {
         last_time = currentTime;
 
         tft.fillRect(10, 45, tftWidth - 20, tftHeight - 70, kvxConfig.bgColor);
-        tft.setTextSize(1);
+        // Multi-column live stats need dense HUD chrome — FP body won't fit.
+        tft.setTextSize(uiDenseFont());
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
 
         int y = 45;
@@ -3161,31 +3162,31 @@ void karma_setup() {
                      broadcastOptions.push_back(
                          {"Show Stats", [&]() {
                               drawMainBorderWithTitle("BROADCAST STATS");
-                              int y = 40;
-                              tft.setTextSize(1);
+                              int y = uiStatusY(0);
+                              tft.setTextSize(FP);
                               size_t totalSSIDs = SSIDDatabase::getCount();
                               size_t currentPos = broadcastAttack.getCurrentPosition();
                               float progress = broadcastAttack.getProgressPercent();
                               BroadcastStats stats = broadcastAttack.getStats();
 
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Total SSIDs: " + String(totalSSIDs));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Progress: " + String(progress, 1) + "%");
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Broadcasts: " + String(stats.totalBroadcasts));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Responses: " + String(stats.totalResponses));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print(
                                   "Status: " + String(broadcastAttack.isActive() ? "ACTIVE" : "INACTIVE")
                               );
-                              tft.setCursor(10, tftHeight - 20);
+                              tft.setCursor(10, uiFooterY(FP));
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) {
                                   if (check(PrevPress)) break;

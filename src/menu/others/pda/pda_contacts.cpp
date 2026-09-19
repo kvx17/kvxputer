@@ -121,13 +121,13 @@ static void buildContactBodyRows(const Contact &c, int fieldMax, std::vector<Str
 static int contactCardMaxScroll(const Contact &c) {
     const int cardW = tftWidth - 16;
     const int cardH = tftHeight - (KVX_TOPBAR_H + 4) - 16;
-    const int fieldMax = max(8, (cardW - 20) / (FP * LW));
+    const int fieldMax = max(8, (cardW - 20) / uiCharW(FP));
     std::vector<String> rows;
     buildContactBodyRows(c, fieldMax, rows);
-    const int headerH = 40;
-    const int footerReserve = FP * LH + 4;
+    const int headerH = uiLineH(FM) + 12;
+    const int footerReserve = uiLineH(FP) + 4;
     const int bodyH = cardH - headerH - footerReserve;
-    const int rowH = FP * LH + 2;
+    const int rowH = uiLineH(FP) + 2;
     const int maxVisible = max(1, bodyH / rowH);
     return max(0, (int)rows.size() - maxVisible);
 }
@@ -149,32 +149,33 @@ static void drawContactCard(const Contact &c, int scroll) {
     tft.fillRoundRect(cardX, cardY, cardW, cardH, 8, cardBg);
     tft.drawRoundRect(cardX, cardY, cardW, cardH, 8, sec);
 
-    const int cx = cardX + 22;
-    const int cy = cardY + 22;
-    tft.fillCircle(cx, cy, 14, sec);
+    const int cx = cardX + 18;
+    const int cy = cardY + uiLineH(FM) / 2 + 6;
+    const int avR = uiLineH(FM) / 2 + 2;
+    tft.fillCircle(cx, cy, avR, sec);
     tft.setTextSize(FM);
     tft.setTextColor(bg, sec);
     char init[2] = {contactInitial(c), 0};
-    tft.drawCentreString(init, cx, cy - FM * LH / 2, 1);
+    tft.drawCentreString(init, cx, cy - uiLineH(FM) / 2, 1);
 
     tft.setTextSize(FM);
     tft.setTextColor(pri, cardBg);
     String name = c.name.length() ? c.name : String("(no name)");
-    int nameMax = max(1, (cardW - 50) / (FM * LW));
+    int nameMax = max(1, (cardW - 50) / uiCharW(FM));
     if ((int)name.length() > nameMax) name = name.substring(0, nameMax);
-    tft.setCursor(cardX + 42, cardY + 14);
+    tft.setCursor(cardX + 42, cardY + 6);
     tft.print(name);
 
     // FP body so Phone + number share one line and both fields fit the card.
-    const int fieldMax = max(8, (cardW - 20) / (FP * LW));
+    const int fieldMax = max(8, (cardW - 20) / uiCharW(FP));
     std::vector<String> rows;
     buildContactBodyRows(c, fieldMax, rows);
 
-    const int headerH = 40;
+    const int headerH = uiLineH(FM) + 12;
     const int bodyY = cardY + headerH;
-    const int footerReserve = FP * LH + 4;
+    const int footerReserve = uiLineH(FP) + 4;
     const int bodyH = cardH - headerH - footerReserve;
-    const int rowH = FP * LH + 2;
+    const int rowH = uiLineH(FP) + 2;
     const int maxVisible = max(1, bodyH / rowH);
     int maxScroll = max(0, (int)rows.size() - maxVisible);
     if (scroll < 0) scroll = 0;
@@ -195,7 +196,7 @@ static void drawContactCard(const Contact &c, int scroll) {
     tft.drawCentreString(
         maxScroll > 0 ? "Arrows scroll  E edit  D del  ESC" : "E edit  D delete  ESC back",
         tftWidth / 2,
-        tftHeight - FP * LH - 2,
+        uiFooterY(FP),
         1
     );
 }
@@ -399,8 +400,9 @@ static void pdaContactsKeyboard(FS *fs) {
             tft.print(sub);
 
             const int listY = KVX_TOPBAR_H + FP * LH + 8;
-            const int rowH = FM * LH + FP * LH + 4;
-            const int footerY = tftHeight - FP * LH - 2;
+            // Single-line rows so more than one contact fits on 135px (was dual-line → maxRows≈1).
+            const int rowH = uiRowH(FP);
+            const int footerY = uiFooterY(FP);
             const int maxRows = max(1, (footerY - listY) / rowH);
             int start = highlight - maxRows + 1;
             if (start < 0) start = 0;
@@ -417,26 +419,17 @@ static void pdaContactsKeyboard(FS *fs) {
                 } else {
                     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
                 }
-                tft.setTextSize(FM);
+                tft.setTextSize(FP);
                 tft.setCursor(BORDER_PAD_X, y);
                 if (idx == 0) {
                     tft.print("New Contact");
                 } else {
                     const Contact &ct = contacts[matches[idx - 1]];
                     String line = ct.name;
-                    int maxN = max(1, (tftWidth - 2 * BORDER_PAD_X) / (FM * LW) - 1);
+                    if (ct.phone.length()) line += "  " + ct.phone;
+                    int maxN = max(1, (tftWidth - 2 * BORDER_PAD_X) / uiCharW(FP));
                     if ((int)line.length() > maxN) line = line.substring(0, maxN);
                     tft.print(line);
-                    if (ct.phone.length()) {
-                        tft.setTextSize(FP);
-                        String ph = ct.phone;
-                        int maxP = max(1, (tftWidth - 2 * BORDER_PAD_X) / (FP * LW));
-                        if ((int)ph.length() > maxP) ph = ph.substring(0, maxP);
-                        tft.setCursor(BORDER_PAD_X, y + FM * LH);
-                        if (sel) tft.setTextColor(kvxConfig.bgColor, kvxConfig.secColor);
-                        else tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-                        tft.print(ph);
-                    }
                 }
             }
             tft.setTextSize(FP);

@@ -42,8 +42,8 @@ struct UILayout {
         PROGRESS_HEIGHT = isLarge ? 12 : 8;
         CONTROLS_HEIGHT = isLarge ? 70 : 50;
         BUTTON_SIZE = isLarge ? 50 : 36;
-        TEXT_SIZE_LARGE = isLarge ? 2 : 1;
-        TEXT_SIZE_SMALL = 1;
+        TEXT_SIZE_LARGE = isLarge ? FG : FP;
+        TEXT_SIZE_SMALL = isLarge ? FP : uiDenseFont();
     }
 };
 
@@ -122,7 +122,7 @@ void drawVectorIcon(int x, int y, int size, IconType icon, uint16_t color) {
             // Arrow tip to indicate loop
             tft.fillTriangle(cx + r - 3, cy - 3, cx + r + 3, cy - 3, cx + r, cy + 3, color);
             tft.setTextColor(color);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Audio loop icon / dense chrome */;
             tft.setCursor(cx - 2, cy - 3);
             tft.print("1");
             break;
@@ -134,7 +134,7 @@ void drawVectorIcon(int x, int y, int size, IconType icon, uint16_t color) {
             // Arrow tip to indicate loop direction
             tft.fillTriangle(cx + r - 3, cy - 3, cx + r + 3, cy - 3, cx + r, cy + 3, TFT_DARKGREY);
             tft.setTextColor(TFT_DARKGREY);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Audio loop icon / dense chrome */;
             tft.setCursor(cx - 2, cy - 3);
             tft.print("1");
             break;
@@ -221,7 +221,7 @@ bool showVolumeControl(uint8_t &currentVolume) {
 
         // Volume percentage text
         tft.setTextColor(TFT_WHITE, TFT_BLACK);
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* Audio loop icon / dense chrome */;
         tft.setCursor(BAR_X + 10, BAR_Y + BAR_HEIGHT - 15);
         tft.printf("%3d%%", tempVolume);
     };

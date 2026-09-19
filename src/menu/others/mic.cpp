@@ -772,7 +772,7 @@ void mic_record_app() {
             setBrightness(10, false);
             tft.fillScreen(TFT_BLACK);
             tft.setTextColor(TFT_RED);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Mic stealth/waveform overlay stays dense */;
             tft.setCursor(5, 5);
             tft.print(".");
         } else {

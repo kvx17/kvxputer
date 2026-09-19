@@ -29,9 +29,9 @@ void wpadMenu() {
     String pac = "function FindProxyForURL(url, host) {\n  return \"PROXY " + ip.toString() +
                  ":8080; DIRECT\";\n}\n";
     drawMainBorderWithTitle("WPAD Abuse");
-    tft.drawString("AP " + ssid + "  " + ip.toString(), 10, 40);
-    tft.drawString("Run Responder for NTLM", 10, 56);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("AP " + ssid + "  " + ip.toString(), 10, uiStatusY(0));
+    tft.drawString("Run Responder for NTLM", 10, uiStatusY(1));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         dns.processNextRequest();
@@ -47,7 +47,7 @@ void wpadMenu() {
             c.print(body);
             c.stop();
             tft.fillRect(10, 72, tftWidth - 20, 14, kvxConfig.bgColor);
-            tft.drawString("Hits: " + String(hits), 10, 72);
+            tft.drawString("Hits: " + String(hits), 10, uiStatusY(2));
             (void)req;
         }
         delay(10);

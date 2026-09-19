@@ -30,7 +30,7 @@ IPAddress detectPrinter() {
     for (int i = 1; i < 40 && !check(EscPress); i++) {
         IPAddress ip(gw[0], gw[1], gw[2], i);
         tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("Probe " + ip.toString(), 10, 40);
+        tft.drawString("Probe " + ip.toString(), 10, uiStatusY(0));
         if (probePort(ip, 9100) || probePort(ip, 631)) {
             found = ip;
             break;

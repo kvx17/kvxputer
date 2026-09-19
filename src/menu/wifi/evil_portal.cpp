@@ -440,25 +440,31 @@ void EvilPortal::drawScreen() {
     printSubtitle(subtitle);
 
     String apIp = WiFi.softAPIP().toString();
-    padprintln("");
+    const bool shortScreen = tftHeight <= 135;
+    if (!shortScreen) padprintln("");
     if (kvxConfig.evilPortalEndpoints.showEndpoints) {
         if (kvxConfig.evilPortalEndpoints.allowGetCreds) {
-            padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.getCredsEndpoint + " -> get creds");
+            String line = "-> " + apIp + kvxConfig.evilPortalEndpoints.getCredsEndpoint;
+            if (shortScreen && line.length() > 28) line = line.substring(0, 28);
+            else if (!shortScreen) line += " -> get creds";
+            padprintln(line);
         } else {
             padprintln("-> cred access disabled");
         }
-        if (kvxConfig.evilPortalEndpoints.allowSetSsid) {
-            padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.setSsidEndpoint + " -> set ssid");
-        } else {
-            padprintln("-> SSID change disabled");
+        if (!shortScreen) {
+            if (kvxConfig.evilPortalEndpoints.allowSetSsid) {
+                padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.setSsidEndpoint + " -> set ssid");
+            } else {
+                padprintln("-> SSID change disabled");
+            }
         }
     } else {
         padprintln("Endpoints hidden");
     }
-    padprintln("");
+    if (!shortScreen) padprintln("");
 
     padprintln("Captive Portal: ACTIVE");
-    padprintln("Notifications: ENABLED");
+    if (!shortScreen) padprintln("Notifications: ENABLED");
 
     if (!_verifyPwd) {
         padprint("Victims: " + String(totalCapturedCredentials));

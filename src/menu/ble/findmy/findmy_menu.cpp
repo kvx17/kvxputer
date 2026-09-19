@@ -51,8 +51,8 @@ void findMyMenu() {
     size_t plen = 0;
     unsigned long last = 0, count = 0;
     drawMainBorderWithTitle("FindMyEvil");
-    tft.drawString(keys.empty() ? "Random lab keys" : "SD keys loaded", 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString(keys.empty() ? "Random lab keys" : "SD keys loaded", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
 
     while (!check(EscPress) && !returnToMenu) {
@@ -66,7 +66,7 @@ void findMyMenu() {
             adv->start();
             count++;
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Adv: " + String((unsigned)count), 10, 56);
+            tft.drawString("Adv: " + String((unsigned)count), 10, uiStatusY(1));
         }
         delay(20);
     }

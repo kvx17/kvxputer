@@ -184,7 +184,7 @@ void fm_spectrum() {
     int SIGNAL_STRENGTH_THRESHOLD = 35;
 
     tft.fillScreen(kvxConfig.bgColor);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* FM spectrum overlay stays dense */;
 
     fm_options(f_min, f_max, false);
     delay(10);

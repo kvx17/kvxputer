@@ -38,9 +38,6 @@ const City kCities[] = {
 };
 constexpr int kCityCount = sizeof(kCities) / sizeof(kCities[0]);
 
-const char *kMon[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-
 enum { FACE_CITIES = 0, FACE_CHARGE = 1, FACE_DIGITAL = 2, FACE_COUNT = 3 };
 
 int32_t localUtcOffsetSec() {
@@ -82,15 +79,10 @@ struct tm cityTm(float utcOffset) {
 
 String cityLine(const City &c) {
     struct tm t = cityTm(c.utcOffset);
-    char dateBuf[12];
-    int mon = t.tm_mon;
-    if (mon < 0 || mon > 11) mon = 0;
-    snprintf(dateBuf, sizeof(dateBuf), "%02d%s", t.tm_mday, kMon[mon]);
-
+    // Compact: "NY 14:30 +1" — fits ~18 FP / dense chars on 240px.
     String name = String(c.name);
-    while (name.length() < 9) name += ' ';
-    if (name.length() > 9) name = name.substring(0, 9);
-    return name + " " + formatHm(t) + " " + formatOffset(c.utcOffset) + " " + dateBuf;
+    if (name.length() > 6) name = name.substring(0, 6);
+    return name + " " + formatHm(t) + " " + formatOffset(c.utcOffset);
 }
 
 void drawChromeOnce() {
@@ -135,7 +127,7 @@ void drawCitiesFace(int sel, bool full) {
     tft.setCursor(BORDER_PAD_X, bodyY + FP * LH);
     tft.print(tzBuf);
 
-    const int rowH = FP * LH + 2;
+    const int rowH = uiRowH(uiDenseFont());
     const int listY = bodyY + FP * LH * 2 + 4;
     const int maxRows = max(1, (tftHeight - listY - FP * LH - 4) / rowH);
 
@@ -146,7 +138,8 @@ void drawCitiesFace(int sel, bool full) {
     if (sel >= start + maxRows) start = sel - maxRows + 1;
 
     tft.fillRect(0, listY - 1, tftWidth, maxRows * rowH + 2, bg);
-    const int maxChars = max(1, (tftWidth - 2 * BORDER_PAD_X) / (FP * LW));
+    const int listFont = uiDenseFont(); // dense list so more cities fit on 135px
+    const int maxChars = max(1, (tftWidth - 2 * BORDER_PAD_X) / uiCharW(listFont));
     for (int i = 0; i < maxRows && start + i < kCityCount; i++) {
         int idx = start + i;
         const City &c = kCities[idx];
@@ -160,7 +153,7 @@ void drawCitiesFace(int sel, bool full) {
         } else {
             tft.setTextColor(pri, bg);
         }
-        tft.setTextSize(FP);
+        tft.setTextSize(listFont);
         tft.setCursor(BORDER_PAD_X, y);
         tft.print(line);
     }
@@ -183,10 +176,6 @@ void drawChargeFace(int sel) {
     int bat = (int)getBattery();
     if (bat <= 0) bat = 50;
     clockFaceDrawChargeStyle(KVX_TOPBAR_H + 1, t, timeBuf, bat, kvxConfig.priColor, true);
-    // City caption
-    tft.setTextSize(FP);
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawString(c.name, 6, KVX_TOPBAR_H + 2, 1);
     drawFooter();
 }
 
@@ -202,9 +191,6 @@ void drawDigitalFace(int sel) {
         snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d%s", hour12, t.tm_min, ampm);
     }
     clockFaceDrawDigital(KVX_TOPBAR_H + 1, timeBuf, kvxConfig.priColor);
-    tft.setTextSize(FP);
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawCentreString(c.name, tftWidth / 2, KVX_TOPBAR_H + 6, 1);
     drawFooter();
 }
 
@@ -218,7 +204,8 @@ void drawFace(int face, int sel, bool full) {
     if (full) {
         tft.fillRect(0, KVX_TOPBAR_H + 1, tftWidth, tftHeight - KVX_TOPBAR_H - 1, kvxConfig.bgColor);
     }
-    drawKvxTopBar("World Clock");
+    // City name in top-bar status avoids overlapping the digital/charge face date.
+    drawKvxTopBar("World Clock", kCities[sel].name);
     if (face == FACE_CHARGE) drawChargeFace(sel);
     else drawDigitalFace(sel);
 }

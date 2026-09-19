@@ -196,7 +196,7 @@ void rawMonitor() {
     for (int i = 0; i < MAX_LINES; ++i) lines[i][0] = 0;
     gRxpos = 0;
     drawMainBorderWithTitle("C5 RAW MONITOR");
-    tft.drawString("ESC to exit", 10, tftHeight - 20);
+    tft.drawString("ESC to exit", 10, uiFooterY(FP));
     EscPress = false;
     uint32_t lastDraw = 0;
     while (!check(EscPress) && !returnToMenu) {
@@ -218,13 +218,17 @@ void rawMonitor() {
         }
         if (millis() - lastDraw > 120) {
             lastDraw = millis();
-            tft.fillRect(8, 36, tftWidth - 16, tftHeight - 60, kvxConfig.bgColor);
+            // Dense UART monitor — FP body cannot fit ~10 lines on 135px.
+            const int dense = uiDenseFont();
+            tft.setTextSize(dense);
+            tft.fillRect(8, 36, tftWidth - 16, uiFooterY(dense) - 36, kvxConfig.bgColor);
             int y = 36;
+            const int rowH = uiLineH(dense) + 2;
             for (int i = 0; i < MAX_LINES; ++i) {
                 uint8_t idx = (head + i) % MAX_LINES;
                 if (lines[idx][0]) {
                     tft.drawString(lines[idx], 8, y);
-                    y += 10;
+                    y += rowH;
                 }
             }
         }
@@ -270,7 +274,7 @@ bool runListCommand(const char *cmdLine) {
         pollUart();
         if (check(EscPress) || returnToMenu) break;
         tft.fillRect(10, 40, tftWidth - 20, 24, kvxConfig.bgColor);
-        tft.drawString("AP:" + String(gApCount), 10, 40);
+        tft.drawString("AP:" + String(gApCount), 10, uiStatusY(0));
         tft.drawString(gSeenHeader ? "Parsing OK" : "Parsing...", 10, 52);
         if (gApCount > 0 && gLastUseful > 0 && millis() - gLastUseful > C5_IDLE_DONE_MS) break;
         delay(5);
@@ -312,7 +316,7 @@ void listCompanions() {
 void c5SerialMenu() {
     uartBegin();
     drawMainBorderWithTitle("ESP32C5 Serial");
-    tft.drawString("UART RX" + String(kvxConfigPins.gps_bus.rx) + " TX" + String(kvxConfigPins.gps_bus.tx), 10, 40);
+    tft.drawString("UART RX" + String(kvxConfigPins.gps_bus.rx) + " TX" + String(kvxConfigPins.gps_bus.tx), 10, uiStatusY(0));
     bool present = checkPresent();
     if (!present) displayInfo("No UART reply\nCheck C5 wiring", true);
 

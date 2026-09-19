@@ -39,8 +39,8 @@ static uint16_t chargeLevelColor(int percent) {
     if (percent < 25) return 0xF800;           // red
     if (percent < 50) return 0xFD20;           // orange
     if (percent < 75) return 0xFFE0;           // yellow
-    if (percent < 90) return 0x07E0;           // green
-    return DEFAULT_PRICOLOR;                  // purple
+    if (percent < 95) return 0x07E0;           // green
+    return DEFAULT_PRICOLOR;                  // purple (95–100%)
 }
 
 static void formatChargeDate(const struct tm &t, char *out, size_t outLen) {
@@ -76,13 +76,15 @@ static void drawMonthCalendar(int x, int y, int w, int h, const struct tm &t, ui
 
     tft.fillRect(x, y, w, h, bg);
     const char *hdr[] = {"S", "M", "T", "W", "T", "F", "S"};
+    const int dense = uiDenseFont();
+    const int glyphH = uiLineH(dense);
     int cellW = w / 7;
-    int headerH = 10;
+    int headerH = max(8, glyphH + 2);
     int rows = h >= 54 ? 6 : 5;
     int cellH = (h - headerH) / rows;
     if (cellW < 8 || cellH < 6) return;
 
-    tft.setTextSize(FP);
+    tft.setTextSize(dense);
     tft.setTextColor(color, bg);
     for (int c = 0; c < 7; c++) {
         tft.drawCentreString(hdr[c], x + c * cellW + cellW / 2, y, 1);
@@ -104,7 +106,7 @@ static void drawMonthCalendar(int x, int y, int w, int h, const struct tm &t, ui
             int cy = y + headerH + r * cellH;
             char buf[4];
             snprintf(buf, sizeof(buf), "%d", d);
-            int ty = cy + (cellH > 8 ? (cellH - 8) / 2 : 0);
+            int ty = cy + (cellH > glyphH ? (cellH - glyphH) / 2 : 0);
             if (d == mday) {
                 int rw = cellW - 2;
                 int rh = cellH - 1;
@@ -153,18 +155,21 @@ static void drawChargeBar(int x, int y, int w, int h, int percent, uint16_t col,
 }
 
 #ifdef HAS_RGB_LED
-static constexpr uint8_t CHARGE_SLEEP_LED_BRIGHT = 12;
+static constexpr uint8_t CHARGE_SLEEP_LED_BRIGHT = 51; // ~20% of 255
 
 static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) {
     ledPauseEffects(true);
-    // G0 / idle blank: LED fully off unless the user re-enabled it (L)
-    // while the panel is blank (ledOn starts false on blank).
+    // L toggles LED while blanked; otherwise sleep keeps dim battery color on.
     if (!ledOn) {
         ledShowApp(0, 0, 0, 0);
         return;
     }
     if (screenOff) {
         CRGB base = batteryStatusLedColor(info.percent);
+        if (info.percent <= 5 && ((millis() / 500) % 2 == 0)) {
+            ledShowApp(0, 0, 0, 0);
+            return;
+        }
         ledShowApp(base.r, base.g, base.b, CHARGE_SLEEP_LED_BRIGHT);
         return;
     }
@@ -187,12 +192,8 @@ static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) 
 #endif
 
 static void chargeGoIdleOff(bool *ledOn) {
-#ifdef HAS_RGB_LED
-    ledPauseEffects(true);
-    ledShowApp(0, 0, 0, 0);
-#endif
-    // Match G0 fake-off: LED off until wake (or L while blanked).
-    if (ledOn) *ledOn = false;
+    // Blank panel only; keep LED on at sleep brightness (L still toggles).
+    (void)ledOn;
     chargeUserSleep = true;
     isScreenOff = true;
     dimmer = false;
@@ -302,15 +303,11 @@ void runChargeLoop() {
         const bool ignoreDown = millis() < ignoreDownUntil;
 
         // G0 tap (InputHandler) sets chargeUserSleep — join after grace only.
-        // Sleep blanks the panel; LED off until wake (or L while blanked).
+        // Sleep blanks the panel; LED stays dim battery-colored (L still toggles).
         if (!screenOff && pastGrace && chargeUserSleep) {
             screenOff = true;
             isScreenOff = true;
             dimmer = false;
-            ledOn = false;
-#ifdef HAS_RGB_LED
-            ledShowApp(0, 0, 0, 0);
-#endif
             setBrightness(0, false);
             resetHeldNavKeys();
             ignoreDownUntil = millis() + 600;

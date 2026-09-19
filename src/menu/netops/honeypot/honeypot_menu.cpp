@@ -20,8 +20,8 @@ void honeypotMenu() {
     http.begin();
     int hits = 0;
     drawMainBorderWithTitle("HoneyPot");
-    tft.drawString("22 / 23 / 80 listening", 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("22 / 23 / 80 listening", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     auto accept = [&](WiFiServer &s, const char *tag) {
         WiFiClient c = s.available();
@@ -30,8 +30,8 @@ void honeypotMenu() {
         Serial.printf("[honeypot] %s from %s\n", tag, c.remoteIP().toString().c_str());
         c.println(String(tag) + " honeypot");
         c.stop();
-        tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("Hits: " + String(hits) + " last " + tag, 10, 56);
+        tft.fillRect(10, uiStatusY(1), tftWidth - 20, uiLineH(FP), kvxConfig.bgColor);
+        tft.drawString("Hits: " + String(hits) + " last " + tag, 10, uiStatusY(1));
     };
     while (!check(EscPress) && !returnToMenu) {
         accept(ssh, "ssh");

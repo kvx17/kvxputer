@@ -215,26 +215,21 @@ void IrRead::display_banner() {
 
     tft.setTextSize(FP);
     padprintln("--------------");
-    padprintln("Signals captured: " + String(signals_read));
-    tft.println("");
+    padprintln("Signals: " + String(signals_read));
 }
 
 void IrRead::display_btn_options() {
-    tft.println("");
-    tft.println("");
     if (_emulate_mode) {
-        padprintln("Press [OK]   to send again");
-        padprintln("Press [NEXT] for new signal");
-        padprintln("Press [PREV] to save signal");
+        padprintln("[OK] send again");
+        padprintln("[NEXT] new  [PREV] save");
     } else if (_read_signal) {
-        padprintln("Press [OK]   to emulate signal");
-        padprintln("Press [NEXT] to save signal");
-        padprintln("Press [PREV] to discard");
+        padprintln("[OK] emulate");
+        padprintln("[NEXT] save  [PREV] discard");
     } else {
-        if (quickloop) padprintln("Press [NEXT] to skip button");
-        if (signals_read > 0) { padprintln("Press [OK]   to save device"); }
+        if (quickloop) padprintln("[NEXT] skip button");
+        if (signals_read > 0) { padprintln("[OK] save device"); }
     }
-    padprintln("Press [ESC]  to exit");
+    padprintln("[ESC] exit");
 }
 
 void IrRead::read_signal() {

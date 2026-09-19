@@ -491,11 +491,14 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         }
     }
 
-    String priorBonds[KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT];
+    // NimBLE can store more bonds than UI slots (8 vs 6). Capture all of them
+    // so a parked host not shown in a slot still cannot steal a new-pair wait.
+    static const int kMaxPriorBonds = 8;
+    String priorBonds[kMaxPriorBonds];
     int priorBondCount = 0;
     if (acceptNewOnly && NimBLEDevice::isInitialized()) {
         const int n = NimBLEDevice::getNumBonds();
-        for (int i = 0; i < n && priorBondCount < KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT; i++) {
+        for (int i = 0; i < n && priorBondCount < kMaxPriorBonds; i++) {
             priorBonds[priorBondCount++] =
                 String(NimBLEDevice::getBondedAddress(i).toString().c_str());
         }
@@ -616,14 +619,22 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         priorBondCount
     );
 
+    // Menu confirm (Ok/Enter) and leftover Esc from the slot list must not
+    // abort pairing the instant the wait starts.
+    EscPress = false;
+    SelPress = false;
+    const unsigned long ignoreEscUntil = millis() + 400;
+
     if (acceptNewOnly || exclusiveHost) {
         resumeAdv();
         lastAdvKick = millis();
         lastAdvRefresh = millis();
     }
 
-    while (!check(EscPress)) {
+    while (true) {
         hidRemoteLedTick();
+        if (forceHome) break;
+        if (millis() >= ignoreEscUntil && check(EscPress)) break;
         NimBLEServer *server = NimBLEDevice::isInitialized() ? NimBLEDevice::getServer() : nullptr;
         const int gapLinks = (server != nullptr) ? (int)server->getConnectedCount() : 0;
 
@@ -728,7 +739,9 @@ bool HidRemoteTransportSession::waitConnectedExpected(
             if (knownRight && hidReady) {
                 BLEConnected = true;
                 connected = true;
-                rememberConnectedHost(wantSlot > 0 ? wantSlot : 0, true);
+                // New-pair must be allowed to occupy an empty slot. Exclusive
+                // reconnect must not invent a duplicate slot for the same host.
+                rememberConnectedHost(wantSlot > 0 ? wantSlot : 0, !acceptNewOnly);
                 advertiseStop();
                 refreshHostLabel();
                 hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
@@ -1219,11 +1232,15 @@ bool HidRemoteTransportSession::advertiseOpen() {
     delay(50);
     clearBleWhitelist();
     adv->setScanFilter(false, false);
-    buildHidAdvertisement(adv, false);
+    buildHidAdvertisement(adv, true);
 
     bool ok = adv->start();
     if (!ok || !adv->isAdvertising()) {
-        delay(50);
+        delay(80);
+        ok = adv->start();
+    }
+    if (!ok || !adv->isAdvertising()) {
+        delay(80);
         ok = adv->start();
     }
     HID_SLOT_LOG("adv open ok=%d", (int)(ok || adv->isAdvertising()));
@@ -1743,10 +1760,13 @@ bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeout
     if (bleHid == nullptr || !NimBLEDevice::isInitialized()) return false;
 
     disconnectHost(false);
-    delay(200);
+    delay(300);
     clearBleWhitelist();
 
-    if (!advertiseOpen()) return false;
+    // A single ADV start failure after disconnect used to abort pairing and
+    // dump the user back on the host-slot list. Keep waiting; the pair loop
+    // retries advertising.
+    (void)advertiseOpen();
     HID_SLOT_LOG("pairIntoSlot %d", slot1to8);
     if (!waitConnectedExpected(String(""), timeoutMs)) {
         advertiseStop();

@@ -34,8 +34,8 @@ void switchDnsMenu() {
         return;
     }
     drawMainBorderWithTitle("Switch DNS");
-    tft.drawString("Wildcard -> " + ip.toString(), 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("Wildcard -> " + ip.toString(), 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         dns.processNextRequest();

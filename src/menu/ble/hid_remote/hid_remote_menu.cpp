@@ -28,6 +28,14 @@ static HidRemoteTransport resolveTransport(HidRemoteLaunch launch) {
 static void hidRemoteDrawConnectScreen(HidRemoteTransport transport, const char *line1, const char *line2);
 static int hidRemoteWaitLink(HidRemoteTransport transport, unsigned long timeoutMs);
 static void hidRemoteSettingsMenu();
+static bool hidRemoteHostListScreen(bool fromSettings);
+
+static void hidRemoteClearMenuKeys() {
+    EscPress = false;
+    SelPress = false;
+    AnyKeyPress = false;
+    (void)_getKeyPress();
+}
 
 static void hidRemotePairWaitUi(int slot) {
     tft.fillScreen(0x0841);
@@ -44,6 +52,7 @@ static void hidRemoteSwitchWaitUi(int slot, const String &name) {
 }
 
 static bool hidRemoteRunPairIntoSlot(int slot) {
+    hidRemoteClearMenuKeys();
     hidRemotePairWaitUi(slot);
     hidRemoteLedSet(HID_REMOTE_LED_PAIRING);
     return gHidRemoteSession.pairIntoSlot(slot, 0);
@@ -168,12 +177,15 @@ static void hidRemoteConnectNewDevice() {
 // fromSettings=false (startup): success → continue to modes; ESC → exit app
 // fromSettings=true: ESC/Ok → return to settings (session stays up)
 static bool hidRemoteHostSlotScreen(bool fromSettings) {
+#if !defined(HAS_KEYBOARD)
+    return hidRemoteHostListScreen(fromSettings);
+#else
     gHidRemoteSession.syncHostSlotsWithBonds();
     hidRemoteIdleAdvertiseStop();
 
     bool wasConnected = gHidRemoteSession.isConnected();
     String lastLiveAddr = wasConnected ? gHidRemoteSession.getConnectedAddress() : String("");
-    (void)_getKeyPress(); // drain menu key
+    hidRemoteClearMenuKeys();
 
     const char *footer = fromSettings
                              ? "1-6 connect  hold=opts  S settings  U=USB  ESC"
@@ -348,6 +360,25 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
                     hidRemoteLedSet(HID_REMOTE_LED_DISCONNECTED);
                     hidRemoteIdleAdvertiseStop();
                 }
+            } else {
+                int slot = kvxConfig.findEmptyHidRemoteHostSlot();
+                if (slot > 0) {
+                    if (hidRemoteRunPairIntoSlot(slot)) {
+                        hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
+                        if (!fromSettings) return true;
+                        String name = gHidRemoteSession.getHostLabel();
+                        if (name.isEmpty()) {
+                            name = gHidRemoteSession.displayNameForAddr(
+                                gHidRemoteSession.getConnectedAddress()
+                            );
+                        }
+                        displaySuccess(String("Slot ") + String(slot) + ":\n" + name, true);
+                    } else {
+                        hidRemoteIdleAdvertiseStop();
+                    }
+                } else {
+                    displayWarning("All 6 host slots full.\nForget a host first.", true);
+                }
             }
             redrawSlots();
             continue;
@@ -356,15 +387,18 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
         delay(40);
     }
     return false;
+#endif
 }
 
-static void hidRemoteHostsMenu() {
+static bool hidRemoteHostListScreen(bool fromSettings) {
     if (gHidRemoteSession.transport != HID_REMOTE_BLE) {
         displayInfo("Switch transport to BLE first", true);
-        return;
+        return fromSettings;
     }
 
     gHidRemoteSession.syncHostSlotsWithBonds();
+    const bool startedConnected = gHidRemoteSession.isConnected();
+    const String startedAddr = startedConnected ? gHidRemoteSession.getConnectedAddress() : String("");
 
     while (true) {
         const String live = gHidRemoteSession.getConnectedAddress();
@@ -404,9 +438,22 @@ static void hidRemoteHostsMenu() {
         opts.push_back({"Connect to new device", []() { hidRemoteConnectNewDevice(); }});
         opts.push_back({"Back", []() {}});
 
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "BLE Hosts");
-        if (sel < 0 || sel == (int)opts.size() - 1) return;
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Select host");
+        // Leave this list once a host actually comes up. Rebuilding "Select host"
+        // after pair/switch looked like the new connection was rejected.
+        if (gHidRemoteSession.isConnected()) {
+            const String now = gHidRemoteSession.getConnectedAddress();
+            const bool newLink =
+                !startedConnected || (now.length() && !hidRemoteAddrEqual(now, startedAddr));
+            if (newLink) return true;
+            if (!fromSettings) return true;
+        }
+        if (sel < 0 || sel == (int)opts.size() - 1) return fromSettings;
     }
+}
+
+static void hidRemoteHostsMenu() {
+    (void)hidRemoteHostListScreen(true);
 }
 
 static void hidRemoteRenameHostsMenu() {

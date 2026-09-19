@@ -387,7 +387,7 @@ void Pn532ble::hf14aMfReadDumpMode() {
     padprintln("UID:  " + tagInfo.uid_hex);
     delay(200);
     drawMainBorder(true);
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
 
     if (tagInfo.sak == 0x08 || tagInfo.sak == 0x09 || tagInfo.sak == 0x18) {
         if (pn532_ble.isGen1A()) {
@@ -568,7 +568,7 @@ void Pn532ble::hf14aMfuReadDumpMode() {
     delay(200);
     drawMainBorder(true);
 
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
 
     if (tagInfo.sak == 0x00) {
         mfud.clear();
@@ -663,7 +663,7 @@ void Pn532ble::hf14aMfuWriteDumpMode() {
     delay(200);
     drawMainBorder(true);
 
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     if (tagInfo.sak == 0x00) {
         area.addLine("Write Mifare Ultralight");
         area.addLine("------------");
@@ -726,7 +726,7 @@ void Pn532ble::hf14aMfWriteDumpMode() {
     padprintln("Type: " + tagInfo.type);
     delay(200);
     drawMainBorder(true);
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     if (mfd.size() == 1024 && pn532_ble.isGen1A()) {
         area.addLine("Write Mifare Classic");
         area.addLine("------------");
@@ -917,7 +917,7 @@ void Pn532ble::hf15ReadDumpMode() {
     padprintln("UID:  " + tagInfo.uid_hex);
     padprintln("Checking Tag...");
     tagInfo = pn532_ble.hf15Info();
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
 
     iso15dump.clear();
     if (tagInfo.blockSize > 0) {
@@ -973,7 +973,7 @@ void Pn532ble::hf15WriteDumpMode() {
     padprintln("UID:  " + tagInfo.uid_hex);
     padprintln("Checking Tag...");
     tagInfo = pn532_ble.hf15Info();
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
 
     iso15dump.clear();
     if (tagInfo.blockSize > 0) {
@@ -1048,7 +1048,7 @@ void Pn532ble::loadMifareClassicDumpFile() {
 
     displayBanner();
 
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     area.addLine("Dump: " + filePath);
     area.addLine("Size: " + String(mfd.size()));
     area.addLine("------------");
@@ -1105,7 +1105,7 @@ void Pn532ble::loadMifareUltralightDumpFile() {
 
     displayBanner();
 
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     area.addLine("Dump: " + filePath);
     area.addLine("Size: " + String(mfd.size()));
     area.addLine("------------");
@@ -1162,7 +1162,7 @@ void Pn532ble::loadIso15693DumpFile() {
 
     displayBanner();
 
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     area.addLine("Dump: " + filePath);
     area.addLine("Size: " + String(iso15dump.size()));
     area.addLine("------------");
@@ -1196,7 +1196,7 @@ void Pn532ble::loadIso15693DumpFile() {
 }
 
 void Pn532ble::ntagEmulationMode() {
-    ScrollableTextArea area(FP, 10, 28, tftWidth - 20, tftHeight - 38);
+    ScrollableTextArea area(FP, 10, BORDER_PAD_Y + uiLineH(FM), tftWidth - 20, tftHeight - (BORDER_PAD_Y + uiLineH(FM)) - 8);
     area.addLine("Emulate Tag");
     area.addLine(emulationNdefData);
     area.addLine("------------");

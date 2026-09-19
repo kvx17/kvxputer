@@ -3023,7 +3023,7 @@ String selectFileFromSD() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - strlen("SD CARD FILES") * 12) / 2, 15);
             tft.print("SD CARD FILES");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
             tft.setCursor(20, 40);
@@ -3157,7 +3157,7 @@ String getScriptFromUser() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - strlen("SELECT SCRIPT") * 12) / 2, 15);
             tft.print("SELECT SCRIPT");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < scriptCount; i++) {
                 int scriptIdx = scrollOffset + i;
@@ -4196,7 +4196,7 @@ String selectTargetFromScan(const char *title) {
     }
     tft.setCursor(10, 15);
     tft.print(titleStr);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
@@ -4301,7 +4301,7 @@ String selectTargetFromScan(const char *title) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("NO DEVICES")) / 2, 15);
         tft.print("NO DEVICES");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setCursor(20, 60);
         tft.print("No BLE devices found!");
         tft.setCursor(20, 80);
@@ -4358,7 +4358,7 @@ String selectTargetFromScan(const char *title) {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("SELECT DEVICE")) / 2, 15);
             tft.print("SELECT DEVICE");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
             tft.setCursor(20, 40);
@@ -4490,7 +4490,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
             tft.print(title);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
             tft.setCursor(20, 40);
@@ -4963,7 +4963,7 @@ void BleSuiteMenu() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
             tft.print("BLE SUITE");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             for (int i = 0; i < maxVisible && (scrollOffset + i) < MENU_ITEMS; i++) {
                 int idx = scrollOffset + i;
@@ -5112,7 +5112,7 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
     tft.setTextWrap(true, true);
     tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
     tft.print(title);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     int selected = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
@@ -5806,7 +5806,7 @@ void runAudioControlTest(NimBLEAddress target) {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("AUDIO CONTROL TEST")) / 2, 15);
             tft.print("AUDIO CONTROL TEST");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
             tft.setCursor(20, 60);
@@ -5972,7 +5972,7 @@ void showAttackProgress(const char *message, uint16_t color) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
     tft.print("BLE SUITE");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setTextColor(color, kvxConfig.bgColor);
 
@@ -5987,7 +5987,7 @@ void showAttackProgress(const char *message, uint16_t color) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msg.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6025,7 +6025,7 @@ void showAttackResult(bool success, const char *message) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
         tft.print("SUCCESS");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setTextColor(TFT_BLACK, TFT_GREEN);
     } else {
         tft.fillScreen(TFT_RED);
@@ -6035,7 +6035,7 @@ void showAttackResult(bool success, const char *message) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("FAILED")) / 2, 15);
         tft.print("FAILED");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setTextColor(TFT_WHITE, TFT_RED);
     }
 
@@ -6053,7 +6053,7 @@ void showAttackResult(bool success, const char *message) {
             int end = start;
             int lastSpace = -1;
 
-            while (end < len && (end - start) * 6 < maxWidth) {
+            while (end < len && (end - start) * LW < maxWidth) {
                 if (msg.charAt(end) == ' ') lastSpace = end;
                 end++;
             }
@@ -6092,7 +6092,7 @@ bool confirmAttack(const char *targetName) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("CONFIRM ATTACK")) / 2, 15);
     tft.print("CONFIRM ATTACK");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setCursor(20, 60);
     tft.print("Target: ");
@@ -6128,7 +6128,7 @@ bool requireSimpleConfirmation(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("CONFIRM")) / 2, 15);
     tft.print("CONFIRM");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.fillRect(20, 50, tftWidth - 40, 80, kvxConfig.bgColor);
     tft.setCursor(20, 60);
@@ -6144,7 +6144,7 @@ bool requireSimpleConfirmation(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6193,7 +6193,7 @@ int8_t showAdaptiveMessage(
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("MESSAGE")) / 2, 15);
     tft.print("MESSAGE");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setTextColor(color, kvxConfig.bgColor);
 
@@ -6208,7 +6208,7 @@ int8_t showAdaptiveMessage(
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (lineStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6287,7 +6287,7 @@ void showWarningMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("WARNING")) / 2, 15);
     tft.print("WARNING");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_BLACK, TFT_YELLOW);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_YELLOW);
 
@@ -6302,7 +6302,7 @@ void showWarningMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6341,7 +6341,7 @@ void showErrorMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("ERROR")) / 2, 15);
     tft.print("ERROR");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_WHITE, TFT_RED);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_RED);
 
@@ -6356,7 +6356,7 @@ void showErrorMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6394,7 +6394,7 @@ void showSuccessMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
     tft.print("SUCCESS");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_BLACK, TFT_GREEN);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_GREEN);
 
@@ -6409,7 +6409,7 @@ void showSuccessMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }

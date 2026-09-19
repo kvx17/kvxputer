@@ -157,7 +157,7 @@ void probeAttack() {
     size_t chIdx = 0;
     drawMainBorderWithTitle("Probe Attack");
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     SelPress = false;
     EscPress = false;
 
@@ -170,9 +170,9 @@ void probeAttack() {
         sendProbeRequest(ssid.c_str());
         probeCount++;
         if (probeCount % 10 == 0) {
-            tft.fillRect(10, 40, tftWidth - 20, 40, kvxConfig.bgColor);
-            tft.drawString("Sent: " + String(probeCount), 10, 40);
-            tft.drawString(ssid, 10, 58);
+            tft.fillRect(10, uiStatusY(0), tftWidth - 20, 2 * uiRowH(FP), kvxConfig.bgColor);
+            tft.drawString("Sent: " + String(probeCount), 10, uiStatusY(0));
+            tft.drawString(ssid, 10, uiStatusY(1));
         }
         delay(20);
     }
@@ -201,7 +201,7 @@ void probeSniff() {
     size_t chIdx = 0;
     unsigned long lastHop = millis();
     drawMainBorderWithTitle("Probe Sniff");
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
 
     while (!check(EscPress) && !returnToMenu) {
@@ -219,8 +219,8 @@ void probeSniff() {
             chIdx = (chIdx + 1) % 3;
             lastHop = millis();
         }
-        tft.fillRect(10, 40, tftWidth - 20, 20, kvxConfig.bgColor);
-        tft.drawString("Unique SSIDs: " + String((int)gSniffCount), 10, 40);
+        tft.fillRect(10, uiStatusY(0), tftWidth - 20, uiRowH(FP), kvxConfig.bgColor);
+        tft.drawString("Unique SSIDs: " + String((int)gSniffCount), 10, uiStatusY(0));
         delay(80);
     }
 
@@ -247,9 +247,9 @@ void karmaSpear() {
     EscPress = false;
     for (size_t i = 0; i < list.size(); i++) {
         if (check(EscPress)) break;
-        tft.fillRect(10, 40, tftWidth - 20, 40, kvxConfig.bgColor);
-        tft.drawString(String(i + 1) + "/" + String(list.size()), 10, 40);
-        tft.drawString(list[i], 10, 58);
+        tft.fillRect(10, uiStatusY(0), tftWidth - 20, 2 * uiRowH(FP), kvxConfig.bgColor);
+        tft.drawString(String(i + 1) + "/" + String(list.size()), 10, uiStatusY(0));
+        tft.drawString(list[i], 10, uiStatusY(1));
         WiFi.mode(WIFI_AP);
         WiFi.softAP(list[i].c_str(), nullptr, 6, 0, 4);
         unsigned long until = millis() + 4000;

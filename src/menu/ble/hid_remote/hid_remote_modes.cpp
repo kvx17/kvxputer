@@ -1034,7 +1034,7 @@ static bool runShorts(HidRemoteTransportSession &s) {
 static void drawClickerPanel(bool running, unsigned long clicks, bool full) {
     if (full) {
         hidClearContentArea();
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
         tft.drawString("Delay (-/=): " + String(kvxConfig.hidRemoteClickerDelay) + "ms", 8, 32);
         const char *btn = "LEFT";
@@ -1100,7 +1100,7 @@ static bool runClicker(HidRemoteTransportSession &s) {
 static void drawJigglerPanel(bool stealth, bool running, bool full) {
     if (full) {
         hidClearContentArea();
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
         if (stealth) {
             tft.drawString("Min (-/=): " + String(kvxConfig.hidRemoteStealthMin) + "s", 8, 32);

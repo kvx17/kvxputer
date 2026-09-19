@@ -207,7 +207,7 @@ void aircrackMenu() {
         return;
     }
     drawMainBorderWithTitle("Aircrack");
-    tft.drawString(parsed ? "MIC verify ON" : "No full HS, PMK only", 10, 40);
+    tft.drawString(parsed ? "MIC verify ON" : "No full HS, PMK only", 10, uiStatusY(0));
     int tried = 0;
     uint8_t pmk[32];
     String found;
@@ -224,7 +224,7 @@ void aircrackMenu() {
         }
         if (tried % 2 == 0) {
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Tried " + String(tried) + " " + pass, 10, 56);
+            tft.drawString("Tried " + String(tried) + " " + pass, 10, uiStatusY(1));
         }
     }
     wl.close();

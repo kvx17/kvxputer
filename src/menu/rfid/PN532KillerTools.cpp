@@ -85,7 +85,7 @@ void PN532KillerTools::displayInitialScreen() {
     int leftX = (tftWidth - line1.length() * 6 * FP) / 2;
     tft.setCursor(leftX, baseY);
     tft.println(line1);
-    tft.setCursor(leftX, baseY + FP * 12);
+    tft.setCursor(leftX, baseY + uiLineH(FP) + 4);
     tft.println(line2);
     tft.setCursor(leftX, baseY + FP * 24);
     tft.println(line3);
@@ -562,7 +562,7 @@ void PN532KillerTools::setSnifferMode() {
     tft.setTextSize(FM);
     tft.setCursor(tftWidth / 2 - 20, tftHeight / 2 + 5);
     tft.print(tagType);
-    tft.setCursor(tftWidth / 2 - 20, tftHeight / 2 + FM * 10 + 5);
+    tft.setCursor(tftWidth / 2 - 20, tftHeight / 2 + uiLineH(FM) + 2 + 5);
     tft.print(snifferType);
 }
 
@@ -589,7 +589,7 @@ void PN532KillerTools::setReaderMode() {
     tft.setCursor(tftWidth / 2 - 20, tftHeight / 2);
     tft.print("ISO14443");
     if (_isPn532killer) { // Only enhanced version shows ISO15693 hint
-        tft.setCursor(tftWidth / 2 - 20, tftHeight / 2 + FM * 10);
+        tft.setCursor(tftWidth / 2 - 20, tftHeight / 2 + uiLineH(FM) + 2);
         tft.print("ISO15693");
     }
     printCenterFootnote("Press OK to select mode");
@@ -678,14 +678,14 @@ void PN532KillerTools::setEmulatorNextSlot(bool reverse, bool redrawTypeName) {
 
     String slotText = String(_pn532Killer.tagIndex + 1) + "/8";
     int slotLabelX = tftWidth / 2 - 20;
-    int slotLabelY = tftHeight / 2 + FM * 10 + 5;
+    int slotLabelY = tftHeight / 2 + uiLineH(FM) + 2 + 5;
     tft.setTextSize(FM);
     tft.setCursor(slotLabelX, slotLabelY);
     tft.print("Slot: ");
     int slotTextX = tft.getCursorX();
     int slotTextY = slotLabelY;
 
-    tft.fillRect(slotTextX, slotTextY, 40, FM * 10, TFT_BLACK);
+    tft.fillRect(slotTextX, slotTextY, 40, uiLineH(FM) + 2, TFT_BLACK);
     tft.setCursor(slotTextX, slotTextY);
     tft.print(slotText);
 }
@@ -839,7 +839,7 @@ bool PN532KillerTools::enableUdpDataTransfer() {
     tft.fillRect(margin - 4, baseY - 4, blockW + 8, FM * 24 + 8, TFT_BLACK);
     tft.setCursor(margin, baseY);
     tft.print(ipLine);
-    tft.setCursor(margin, baseY + FM * 12);
+    tft.setCursor(margin, baseY + uiLineH(FM) + 4);
     tft.print(portLine);
     printCenterFootnote("Waiting for UDP client...");
 
@@ -880,7 +880,7 @@ bool PN532KillerTools::enableTcpDataTransfer() {
     tft.fillRect(margin - 4, baseY - 4, tftWidth - margin * 2 + 8, FM * 24 + 8, TFT_BLACK);
     tft.setCursor(margin, baseY);
     tft.print(String("TCP:") + ip.toString());
-    tft.setCursor(margin, baseY + FM * 12);
+    tft.setCursor(margin, baseY + uiLineH(FM) + 4);
     tft.print("Port: 18889");
     printCenterFootnote("Waiting TCP client...");
     delay(150);

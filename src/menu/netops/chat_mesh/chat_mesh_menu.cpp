@@ -59,7 +59,8 @@ void chatMeshMenu() {
     msgs.push_back("Mesh chat ready");
 
     drawMainBorderWithTitle("EvilChatMesh");
-    tft.drawString("Enter to type, ESC quit", 10, tftHeight - 20);
+    tft.setTextSize(FP);
+    tft.drawString("Enter to type, ESC quit", 10, uiFooterY(FP));
     EscPress = false;
     SelPress = false;
     bool dirty = true;
@@ -72,12 +73,14 @@ void chatMeshMenu() {
         }
         if (dirty) {
             dirty = false;
-            tft.fillRect(10, 40, tftWidth - 20, tftHeight - 70, kvxConfig.bgColor);
-            int y = 40;
-            int start = msgs.size() > 5 ? (int)msgs.size() - 5 : 0;
+            tft.fillRect(10, uiStatusY(0), tftWidth - 20, uiFooterY(FP) - uiStatusY(0), kvxConfig.bgColor);
+            int y = uiStatusY(0);
+            const int rowH = uiRowH(FP);
+            int maxVisible = max(1, (uiFooterY(FP) - y) / rowH);
+            int start = msgs.size() > maxVisible ? (int)msgs.size() - maxVisible : 0;
             for (int i = start; i < (int)msgs.size(); i++) {
-                tft.drawString(msgs[i].substring(0, 30), 10, y);
-                y += 12;
+                tft.drawString(msgs[i].substring(0, max(1, (tftWidth - 20) / uiCharW(FP))), 10, y);
+                y += rowH;
             }
         }
         if (check(SelPress)) {

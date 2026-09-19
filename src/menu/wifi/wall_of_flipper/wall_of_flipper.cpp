@@ -147,13 +147,13 @@ void wallOfFlipperMenu() {
             tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
             tft.drawString("Flippers: " + String((int)hits.size()), 10, 30);
             int y = 46;
-            int nchars = max(1, (tftWidth - 16) / (FP * LW));
-            for (size_t i = 0; i < hits.size() && y < tftHeight - 22; i++) {
+            int nchars = max(1, (tftWidth - 16) / uiCharW(FP));
+            for (size_t i = 0; i < hits.size() && y < uiFooterY(FP); i++) {
                 String label = hits[i].name.length() ? hits[i].name : hits[i].mac;
                 String line = label + " " + String(hits[i].rssi);
                 if ((int)line.length() > nchars) line = line.substring(0, nchars);
                 tft.drawString(line, 10, y);
-                y += 12;
+                y += uiRowH(FP);
             }
         }
         delay(40);

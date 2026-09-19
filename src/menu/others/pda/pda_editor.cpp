@@ -120,16 +120,18 @@ void drawKeyChip(int &x, int y, const char *keyLabel, const char *hint) {
     const uint16_t bg = kvxConfig.bgColor;
     const uint16_t pri = kvxConfig.priColor;
     const uint16_t sec = kvxConfig.secColor;
-    tft.setTextSize(FP);
-    int keyW = (int)strlen(keyLabel) * FP * LW + 4;
-    int chipH = FP * LH + 2;
+    // Dense chips so Ent/Fn+OK/ESC fit on 240px; body text stays FM/FP below.
+    const int chipFont = uiDenseFont();
+    tft.setTextSize(chipFont);
+    int keyW = (int)strlen(keyLabel) * uiCharW(chipFont) + 4;
+    int chipH = uiLineH(chipFont) + 2;
     tft.fillRoundRect(x, y, keyW, chipH, 2, sec);
     tft.setTextColor(bg, sec);
     tft.drawCentreString(keyLabel, x + keyW / 2, y + 1, 1);
     x += keyW + 2;
     tft.setTextColor(pri, bg);
     tft.drawString(hint, x, y + 1, 1);
-    x += (int)strlen(hint) * FP * LW + 6;
+    x += (int)strlen(hint) * uiCharW(chipFont) + 6;
 }
 
 void drawChrome(const char *title, bool multiline) {
@@ -149,7 +151,7 @@ void drawChrome(const char *title, bool multiline) {
         drawKeyChip(x, y, "Enter", "save");
         drawKeyChip(x, y, "ESC", "cancel");
     }
-    tft.drawFastHLine(4, KVX_TOPBAR_H + FP * LH + 6, tftWidth - 8, getColorVariation(pri, 10, -1));
+    tft.drawFastHLine(4, KVX_TOPBAR_H + uiLineH(uiDenseFont()) + 6, tftWidth - 8, getColorVariation(pri, 10, -1));
     (void)bg;
 }
 
@@ -160,7 +162,7 @@ void drawBody(
     const uint16_t pri = kvxConfig.priColor;
     const uint16_t bg = kvxConfig.bgColor;
     const int x0 = BORDER_PAD_X;
-    const int y0 = KVX_TOPBAR_H + FP * LH + 10;
+    const int y0 = KVX_TOPBAR_H + uiLineH(uiDenseFont()) + 10;
     const int w = tftWidth - 2 * BORDER_PAD_X;
     const int rowH = FM * LH;
     const int h = maxRows * rowH;
@@ -232,7 +234,7 @@ static int runCaretEditor(String &text, const char *title, int maxLen, bool mult
 
     int cols = (tftWidth - 2 * BORDER_PAD_X) / (FM * LW);
     if (cols < 8) cols = 8;
-    const int y0 = KVX_TOPBAR_H + FP * LH + 10;
+    const int y0 = KVX_TOPBAR_H + uiLineH(uiDenseFont()) + 10;
     int maxRows = (tftHeight - 2 - y0) / (FM * LH);
     if (maxRows < 1) maxRows = 1;
 

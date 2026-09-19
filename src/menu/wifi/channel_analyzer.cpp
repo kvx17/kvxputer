@@ -78,17 +78,19 @@ ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t cu
     drawMainBorder(false);
 
     const int x0 = 8;
-    const int top = 26;                         // below title
-    const int labelH = 10;                      // channel numbers under bars
-    const int bottom = tftHeight - 2 * LH * FP; // leave room for footer
-    const int baseline = bottom - labelH;       // bars grow up from here
+    const int top = 26; // below title
+    // Channel numbers under bars stay dense — FP glyphs overflow the label band.
+    const int labelFont = uiDenseFont();
+    const int labelH = uiLineH(labelFont) + 2;
+    const int bottom = uiFooterY(labelFont);
+    const int baseline = bottom - labelH; // bars grow up from here
     const int plotH = baseline - top;
     const int plotW = tftWidth - 2 * x0;
-    const int slot = plotW / CA_NCH;            // horizontal space per channel
-    const int barW = (slot * 2) / 3;            // bar narrower than its slot
+    const int slot = plotW / CA_NCH; // horizontal space per channel
+    const int barW = (slot * 2) / 3; // bar narrower than its slot
     const int barOff = (slot - barW) / 2;
 
-    tft.setTextSize(FP);
+    tft.setTextSize(labelFont);
     tft.drawFastHLine(x0, baseline, plotW, kvxConfig.priColor); // axis
 
     for (int i = 0; i < CA_NCH; i++) {

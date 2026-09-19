@@ -14,7 +14,7 @@
 #include <interface.h> //for charging ischarging to print charging indicator
 #include <memory>
 
-#define MAX_MENU_SIZE (int)(tftHeight / 25)
+#define MAX_MENU_SIZE max(1, (int)(tftHeight / uiRowH(FM)))
 
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
@@ -204,14 +204,15 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
 
     // Calculate max chars per line based on font size
-    int maxCharsFM = (tftWidth - 20) / (LW * FM);
-    int maxCharsFP = (tftWidth - 20) / (LW * FP);
+    int maxCharsFM = (tftWidth - 20) / uiCharW(FM);
+    int maxCharsFP = (tftWidth - 20) / uiCharW(FP);
 
     // Determine if we need to wrap the text
     std::vector<String> wrappedLines;
-    int boxHeight = 26; // Default height for single line
+    int lineHeight;
+    int boxHeight;
 
-    if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) {
+    if (text.length() * uiCharW(FM) < (tftWidth - 2 * uiCharW(FM))) {
         // Text fits with FM font
         size = FM;
         wrappedLines = wrapText(text, maxCharsFM);
@@ -221,8 +222,8 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
         wrappedLines = wrapText(text, maxCharsFP);
     }
 
-    // Adjust box height based on number of lines
-    if (wrappedLines.size() > 1) { boxHeight = 13 + (wrappedLines.size() * (size == FM ? 8 : 10)); }
+    lineHeight = uiLineH(size) + 2;
+    boxHeight = max(uiLineH(size) + 10, 6 + (int)wrappedLines.size() * lineHeight);
 
     tft.drawPixel(0, 0, 0);
     tft.fillRoundRect(10, tftHeight / 2 - boxHeight / 2, tftWidth - 20, boxHeight, 7, bgcolor);
@@ -230,10 +231,9 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     tft.setTextSize(size);
 
     // Draw each line centered
-    int lineHeight = size == FM ? 8 : 10;
-    int startY = tftHeight / 2 - (wrappedLines.size() * lineHeight) / 2;
+    int startY = tftHeight / 2 - ((int)wrappedLines.size() * lineHeight) / 2;
     for (size_t i = 0; i < wrappedLines.size(); i++) {
-        tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + i * lineHeight);
+        tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + (int)i * lineHeight);
     }
 }
 
@@ -270,7 +270,7 @@ int8_t displayMessage(
 
     while (end != -1) {
         tft.drawString(msg.substring(start, end), tftWidth / 2, y);
-        y += FM * 8;
+        y += uiLineH(FM);
         start = end + 1;
         end = msg.indexOf('\n', start);
     }
@@ -473,7 +473,8 @@ void padprintln(const String &s, int16_t padx) {
 
     String buff;
     size_t start = 0;
-    int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
+    const int sz = max(1, (int)tft.getTextSize());
+    int _maxCharsInLine = max(1, (tftWidth - (padx + 1) * BORDER_PAD_X) / uiCharW(sz));
 
     // automatically split into multiple lines
     while (!(buff = s.substring(start, start + _maxCharsInLine)).isEmpty()) {
@@ -491,7 +492,8 @@ void padprintln(const char str[], int16_t padx) {
 
     String buff;
     size_t start = 0;
-    int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
+    const int sz = max(1, (int)tft.getTextSize());
+    int _maxCharsInLine = max(1, (tftWidth - (padx + 1) * BORDER_PAD_X) / uiCharW(sz));
 
     // automatically split into multiple lines
     while (!(buff = String(str).substring(start, start + _maxCharsInLine)).isEmpty()) {
@@ -586,9 +588,9 @@ int loopOptions(
     if (menuType == MENU_TYPE_REGULAR && index > 0)
         tft.fillRoundRect(
             tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
+            tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5,
             tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
+            uiRowH(FM) * menuSize + 10,
             5,
             kvxConfig.bgColor
         );
@@ -837,25 +839,25 @@ Opt_Coord drawOptions(
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
+    int32_t optionsTopY = tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5;
     TftFrame frame;
     tft.drawPixel(0, 0, kvxConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 8 + 4) * menuSize + 10, 5, bgcolor
+            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, uiRowH(FM) * menuSize + 10, 5, bgcolor
         );
         tft.drawRoundRect(
             tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
+            tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5,
             tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
+            uiRowH(FM) * menuSize + 10,
             5,
             fgcolor
         );
     }
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
-    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
+    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * uiRowH(FM) / 2);
 
     int i = 0;
     int init = 0;
@@ -938,7 +940,7 @@ void drawStatusBar() {
     }
 
     // Clock / version: compact top-strip size (half of body FP).
-    const int clockSize = max(1, FP / 2);
+    const int clockSize = uiDenseFont();
     const int clockY = max(4, (25 - clockSize * LH) / 2);
     if (clock_set) {
 #if defined(HAS_RTC)
@@ -975,7 +977,7 @@ void drawStatusBar() {
 
     if (iconCount > 0) {
         // Pack from the right: SD immediately left of battery (same as kvx top bar).
-        const int batReserve = (bat > 0) ? (42 + max(42, 4 * max(1, FP / 2) * LW + 4)) : 6;
+        const int batReserve = (bat > 0) ? (42 + max(42, 4 * uiDenseFont() * LW + 4)) : 6;
         int rightEdge = tftWidth - batReserve;
         int x = rightEdge - (iconCount * IW + (iconCount - 1) * GAP);
         int iy = 7;
@@ -1093,7 +1095,7 @@ void drawBatteryStatus(uint8_t bat) {
     if (bat < 16) barcolor = color = TFT_RED;
 
     // Percent / CHG: compact top-bar size (half of body FP).
-    const int batSize = max(1, FP / 2);
+    const int batSize = uiDenseFont();
     const int textY = max(4, (KVX_TOPBAR_H - batSize * LH) / 2);
     const int pctRight = tftWidth - 44;
     const int pctClearW = max(42, 4 * batSize * LW + 4);

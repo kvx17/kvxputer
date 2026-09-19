@@ -362,6 +362,7 @@ static void launchCfgDev() { mainMenu.configMenu.devMenu(); }
 static void launchBrightness() { setBrightnessMenu(); }
 static void launchDimmer() { setDimmerTimeMenu(); }
 static void launchUiColor() { setUIColor(); }
+static void launchAccentColor() { setAccentColor(); }
 static void launchTheme() { setTheme(); }
 static void launchSetClock() { setClock(); }
 static void launchStartupApp() { setStartupApp(); }
@@ -615,6 +616,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"brightness", "Brightness", "Settings", false, alwaysOn, launchBrightness},
         {"dim_time", "Dim Time", "Settings", false, alwaysOn, launchDimmer},
         {"ui_color", "UI Color", "Settings", false, alwaysOn, launchUiColor},
+        {"accent_color", "Accent Color", "Settings", false, alwaysOn, launchAccentColor},
         {"ui_theme", "UI Theme", "Settings", false, alwaysOn, launchTheme},
         {"set_clock", "Clock", "Settings", false, alwaysOn, launchSetClock},
         {"startup_app", "Startup App", "Settings", false, alwaysOn, launchStartupApp},

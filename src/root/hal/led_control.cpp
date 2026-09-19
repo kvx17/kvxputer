@@ -104,7 +104,8 @@ CRGB batteryStatusLedColor(int percent) {
     if (percent <= 62) return lerpRgb(orange, yellow, percent - 50, 12);
     if (percent <= 75) return lerpRgb(yellow, ygreen, percent - 62, 13);
     if (percent <= 90) return lerpRgb(ygreen, green, percent - 75, 15);
-    return lerpRgb(green, purple, percent - 90, 10);
+    if (percent < 95) return green;
+    return purple; // 95–100%
 }
 
 TaskHandle_t ledEffectTaskHandle = NULL;

@@ -41,7 +41,7 @@ void skimmerMenu() {
     scan->setDuplicateFilter(false);
 
     drawMainBorderWithTitle("Skimmer Detector");
-    tft.drawString("Scanning... ESC stop", 10, tftHeight - 20);
+    tft.drawString("Scanning... ESC stop", 10, uiFooterY(FP));
     EscPress = false;
     bool hit = false;
     String hitMsg;

@@ -28,8 +28,8 @@ void deadDropMenu() {
     http.begin();
     int hits = 0;
     drawMainBorderWithTitle("WiFi Dead Drop");
-    tft.drawString(ssid + "  " + ip.toString(), 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString(ssid + "  " + ip.toString(), 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         WiFiClient c = http.available();
@@ -58,7 +58,7 @@ void deadDropMenu() {
             c.print(body);
             c.stop();
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Hits: " + String(hits), 10, 56);
+            tft.drawString("Hits: " + String(hits), 10, uiStatusY(1));
             (void)req;
         }
         delay(10);

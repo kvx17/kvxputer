@@ -3,7 +3,7 @@
 
 // Scientific calculator: + - * / ^ % ( ), trig/logs, pi/e/Ans, DEG/RAD.
 // Multiply is '*'; letter x is the linear-equation unknown (e.g. 2x=4).
-// Cardputer: live keyboard + Fn function picker; ESC exits to Tools.
+// Cardputer: letter shortcuts, Fn overlay, Esc/` clear, fn+Ok exits.
 void calculatorApp();
 
 #endif

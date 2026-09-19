@@ -24,8 +24,8 @@ void uartShellMenu() {
 
     String log;
     drawMainBorderWithTitle("UART Shell");
-    tft.drawString("RX" + String(rx) + " TX" + String(tx) + " @" + String(baud), 10, 40);
-    tft.drawString("Type to send, ESC quit", 10, tftHeight - 20);
+    tft.drawString("RX" + String(rx) + " TX" + String(tx) + " @" + String(baud), 10, uiStatusY(0));
+    tft.drawString("Type to send, ESC quit", 10, uiFooterY(FP));
     EscPress = false;
 
     while (!check(EscPress) && !returnToMenu) {

@@ -215,3 +215,10 @@ void kremoteDeleteFlow() {
     if (kremoteDeleteProfile(list[idx])) displaySuccess("Deleted", true);
     else displayError("Delete failed", true);
 }
+
+void kremoteBrowseIr() {
+    // otherIRcodes / chooseCmdIrFile set returnToMenu; keep kremote open unless Home.
+    const bool wasReturn = returnToMenu;
+    otherIRcodes();
+    if (!forceHome) returnToMenu = wasReturn;
+}
