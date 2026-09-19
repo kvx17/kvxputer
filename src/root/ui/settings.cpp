@@ -4,11 +4,15 @@
 #include "root/net/wifi_common.h"
 #include "current_year.h"
 #include "root/ui/display.h"
+#include "menu/clock/clock_faces.h"
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "root/scripting/bjs_interpreter/interpreter.h"
 #endif
 #include "menu/ble/ble_api/ble_api.hpp"
 #include "menu/others/qrcode_menu.h"
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_alarms.h"
+#endif
 #include "menu/rf/rf_utils.h" // for initRfModule
 #include "root/input/mykeyboard.h"
 #include "root/app/powerSave.h"
@@ -18,6 +22,7 @@
 #include "root/hal/pahub.h"
 #include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <globals.h>
+#include <interface.h>
 
 int currentScreenBrightness = -1;
 
@@ -259,6 +264,51 @@ void setUIColor() {
         addOptionToMainMenu();
 
         int selectedOption = loopOptions(options, "UI Color", idx);
+        if (selectedOption == -1 || selectedOption == options.size() - 1) return;
+    }
+}
+
+/*********************************************************************
+**  Function: setAccentColor
+**  Set and store accent (secondary) UI color only
+**********************************************************************/
+void setAccentColor() {
+    while (1) {
+        options.clear();
+        int idx = UI_COLOR_COUNT;
+        int i = 0;
+        for (const auto &mapping : UI_COLORS) {
+            if (kvxConfig.secColor == mapping.secColor) { idx = i; }
+
+            options.emplace_back(
+                mapping.name,
+                [=, &mapping]() {
+                    uint16_t secColor = mapping.secColor;
+                    uint16_t bgColor = kvxConfig.bgColor;
+                    kvxConfig.setUiColor(kvxConfig.priColor, &secColor, &bgColor);
+                },
+                idx == i
+            );
+            ++i;
+        }
+
+        options.push_back(
+            {"Custom Color",
+             [=]() {
+                 uint16_t oldSecColor = kvxConfig.secColor;
+                 setCustomUIColorChoiceMenu(2);
+                 if (kvxConfig.secColor != oldSecColor) {
+                     uint16_t bgColor = kvxConfig.bgColor;
+                     kvxConfig.setUiColor(kvxConfig.priColor, &kvxConfig.secColor, &bgColor);
+                 }
+                 tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+             },
+             idx == UI_COLOR_COUNT}
+        );
+
+        addOptionToMainMenu();
+
+        int selectedOption = loopOptions(options, "Accent Color", idx);
         if (selectedOption == -1 || selectedOption == options.size() - 1) return;
     }
 }
@@ -1001,6 +1051,8 @@ void runClockLoop(bool showMenuHint) {
     int tmp = 0;
     unsigned long hintStartTime = millis();
     bool hintVisible = showMenuHint;
+    int face = 0; // 0=digital, 1=charge calendar
+    bool forceRedraw = true;
 
 #if defined(HAS_RTC)
 #if defined(HAS_RTC_BM8563)
@@ -1017,49 +1069,57 @@ void runClockLoop(bool showMenuHint) {
     delay(300);
 
     for (;;) {
-        if (millis() - tmp > 1000) {
+        if (millis() - tmp > 1000 || forceRedraw) {
 #if defined(HAS_RTC)
             updateTimeStr(_rtc.getTimeStruct());
+            struct tm nowTm = _rtc.getTimeStruct();
 #else
             updateTimeStr(rtc.getTimeStruct());
+            struct tm nowTm = rtc.getTimeStruct();
 #endif
             Serial.print("Current time: ");
             Serial.println(timeStr);
-            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-            tft.drawRect(
-                BORDER_PAD_X,
-                BORDER_PAD_X,
-                tftWidth - 2 * BORDER_PAD_X,
-                tftHeight - 2 * BORDER_PAD_X,
-                kvxConfig.priColor
-            );
-            uint8_t f_size = 4;
-            for (uint8_t i = 4; i > 0; i--) {
-                if (i * LW * strlen(timeStr) < (tftWidth - BORDER_PAD_X * 2)) {
-                    f_size = i;
-                    break;
-                }
+
+            if (forceRedraw) clockFaceInvalidate();
+
+            if (face == 1) {
+                int bat = getBattery();
+                if (bat <= 0) bat = 50;
+                clockFaceDrawChargeStyle(0, nowTm, timeStr, bat, kvxConfig.priColor, true);
+            } else {
+                clockFaceDrawDigital(0, timeStr, kvxConfig.priColor);
             }
-            tft.setTextSize(f_size);
-            tft.drawCentreString(timeStr, tftWidth / 2, tftHeight / 2 - 13, 1);
 
             // "OK to show menu" hint management
             if (hintVisible && (millis() - hintStartTime < 5000)) {
-                tft.setTextSize(1);
-                tft.drawCentreString("OK to show menu", tftWidth / 2, tftHeight / 2 + 25, 1);
+                tft.setTextSize(uiDenseFont()) /* Clock HUD hint stays dense */;
+                tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+                tft.drawCentreString("OK menu  [] face", tftWidth / 2, tftHeight - 12, 1);
             } else if (hintVisible && (millis() - hintStartTime >= 5000)) {
-                // Clear hint after 5 seconds
-                tft.fillRect(
-                    BORDER_PAD_X + 1,
-                    tftHeight / 2 + 20,
-                    tftWidth - 2 * BORDER_PAD_X - 2,
-                    20,
-                    kvxConfig.bgColor
-                );
                 hintVisible = false;
+                forceRedraw = true;
             }
             tmp = millis();
+            forceRedraw = false;
         }
+
+#ifndef LITE_VERSION
+        if (pdaAlarmsPoll()) forceRedraw = true;
+#endif
+
+#ifdef HAS_KEYBOARD
+        keyStroke key = _getKeyPress();
+        if (key.pressed) {
+            for (char raw : key.word) {
+                if (raw == '[' || raw == ']') {
+                    face = 1 - face;
+                    clockFaceInvalidate();
+                    forceRedraw = true;
+                    hintVisible = false;
+                }
+            }
+        }
+#endif
 
         // Checks to exit the loop
         if (check(SelPress)) {
@@ -1074,7 +1134,7 @@ void runClockLoop(bool showMenuHint) {
             }
         }
 
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             tft.fillScreen(kvxConfig.bgColor);
             returnToMenu = true;
             break;

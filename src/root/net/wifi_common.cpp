@@ -108,7 +108,12 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     RAM_LOG("wifi pre-mode"); // Wi-Fi is already up from the menu scan by this point
     drawMainBorderWithTitle("WiFi Connect");
     padprintln("");
-    padprint("Connecting to: " + ssid + ".");
+    tft.setTextSize(FP);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    padprintln("Connecting to:");
+    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+    padprint(ssid);
+    tft.print(".");
     WiFi.mode(WIFI_MODE_STA);
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -168,6 +173,7 @@ void wifiDisconnect() {
 
     wifiConnected = false;
     wifiTransitioning = false;
+    uiRamLeaveHeavy();
 }
 
 bool wifiConnectMenu(wifi_mode_t mode) {
@@ -197,6 +203,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 displayError("Low RAM: free BLE/SD first", true);
                 return false;
             }
+            uiRamEnterHeavy();
             WiFi.mode(WIFI_MODE_STA);
 
             // wifiMACMenu();
@@ -303,6 +310,7 @@ void wifiConnectTask(void *pvParameters) {
         vTaskDelete(NULL);
         return;
     }
+    uiRamEnterHeavy();
 
     WiFi.mode(WIFI_MODE_STA);
     int nets = WiFi.scanNetworks();
@@ -358,6 +366,7 @@ bool wifiConnecttoKnownNet(void) {
         displayError("Low RAM: free BLE/SD first", true);
         return false;
     }
+    uiRamEnterHeavy();
 
     bool result = false;
     int nets;

@@ -774,18 +774,24 @@ void startWebUi(bool mode_ap) {
     tft.setLogging();
     drawWebUiScreen(mode_ap);
 #ifdef HAS_SCREEN // Headless always run in the background!
-    while (!check(EscPress)) {
+    while (!check(EscPress) && !forceHome) {
         // nothing here, just to hold the screen until the server is on.
         vTaskDelay(pdMS_TO_TICKS(70));
     }
 
     bool closeServer = false;
 
-    options.clear();
-    options.emplace_back("Run in background", []() {});
-    options.emplace_back("Exit", [&closeServer]() { closeServer = true; });
+    // G0 Home: treat as Exit (do not default to "Run in background").
+    if (forceHome) {
+        closeServer = true;
+    } else {
+        options.clear();
+        options.emplace_back("Run in background", []() {});
+        options.emplace_back("Exit", [&closeServer]() { closeServer = true; });
 
-    loopOptions(options);
+        loopOptions(options);
+        if (forceHome) closeServer = true;
+    }
 
     if (closeServer) {
         stopWebUi();

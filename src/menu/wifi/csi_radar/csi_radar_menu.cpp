@@ -84,7 +84,7 @@ void runHopRssi() {
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_rx_cb(promiscCb);
     drawMainBorderWithTitle("CSI Radar RSSI");
-    tft.drawString("ESC stop  hop 1-13", 10, tftHeight - 20);
+    tft.drawString("ESC stop  hop 1-13", 10, uiFooterY(FP));
     EscPress = false;
     unsigned long hop = millis();
     while (!check(EscPress) && !returnToMenu) {
@@ -124,7 +124,7 @@ void runCsiSta() {
     esp_wifi_set_csi(true);
 #endif
     drawMainBorderWithTitle("CSI STA");
-    tft.drawString("Need CSI-enabled build", 8, tftHeight - 20);
+    tft.drawString("Need CSI-enabled build", 8, uiFooterY(FP));
     EscPress = false;
     WiFiUDP udp;
     unsigned long ping = 0;
@@ -157,7 +157,7 @@ void runEspNow() {
     memset((void *)gAmp, 0, sizeof(gAmp));
     gCsiFrames = 0;
     drawMainBorderWithTitle("CSI ESP-NOW");
-    tft.drawString("Need CSI-Beacon slave", 8, tftHeight - 20);
+    tft.drawString("Need CSI-Beacon slave", 8, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         drawScope("NOW");

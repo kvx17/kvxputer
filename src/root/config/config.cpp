@@ -107,6 +107,10 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteLedEnabled"] = hidRemoteLedEnabled;
     setting["kremotePortrait"] = kremotePortrait;
     setting["kremoteButtonsSwapped"] = kremoteButtonsSwapped;
+    setting["g0HoldHome"] = g0HoldHome;
+    setting["pdaWcFace"] = pdaWcFace;
+    JsonArray pdaBind = setting["pdaKeyBind"].to<JsonArray>();
+    for (int i = 0; i < 8; i++) pdaBind.add(pdaKeyBind[i]);
 
     JsonArray dm = setting["disabledMenus"].to<JsonArray>();
     for (int i = 0; i < disabledMenus.size(); i++) { dm.add(disabledMenus[i]); }
@@ -136,14 +140,22 @@ void KvxputerConfig::fromFile(bool checkFS) {
         else return;
     }
 
-    const char *loadPath = kvx::paths::configPath(*fs);
-    if (!fs->exists(loadPath)) {
-        log_i("Config file not found. Creating default config");
-        return saveFile();
+    // Prefer SD /kvxputer/userSettings.json when present (user-facing settings file).
+    const char *loadPath = nullptr;
+    FS *loadFs = fs;
+    if (sdcardMounted && SD.exists(kvx::paths::USER_SETTINGS)) {
+        loadFs = &SD;
+        loadPath = kvx::paths::USER_SETTINGS;
+    } else {
+        loadPath = kvx::paths::configPath(*fs);
+        if (!fs->exists(loadPath)) {
+            log_i("Config file not found. Creating default config");
+            return saveFile();
+        }
     }
 
     File file;
-    file = fs->open(loadPath, FILE_READ);
+    file = loadFs->open(loadPath, FILE_READ);
     if (!file) {
         log_i("Config file not found. Using default values");
         return;
@@ -390,6 +402,8 @@ void KvxputerConfig::fromFile(bool checkFS) {
 
     if (!setting["startupApp"].isNull()) {
         startupApp = setting["startupApp"].as<String>();
+        // Migration: the "Others" channel was renamed to "Tools".
+        if (startupApp == "Others") startupApp = "Tools";
     } else {
         count++;
         log_e("Fail");
@@ -584,6 +598,24 @@ void KvxputerConfig::fromFile(bool checkFS) {
     if (!setting["kremoteButtonsSwapped"].isNull()) {
         kremoteButtonsSwapped = setting["kremoteButtonsSwapped"].as<bool>();
     }
+    if (!setting["g0HoldHome"].isNull()) {
+        g0HoldHome = setting["g0HoldHome"].as<bool>();
+    }
+    if (!setting["pdaWcFace"].isNull()) {
+        pdaWcFace = setting["pdaWcFace"].as<int>();
+        if (pdaWcFace < 0 || pdaWcFace > 2) pdaWcFace = 0;
+    }
+    if (!setting["pdaKeyBind"].isNull()) {
+        JsonArray binds = setting["pdaKeyBind"].as<JsonArray>();
+        for (int i = 0; i < 8; i++) {
+            if (i < (int)binds.size()) {
+                int v = binds[i].as<int>();
+                pdaKeyBind[i] = (v >= 0 && v < 8) ? (uint8_t)v : (uint8_t)i;
+            } else {
+                pdaKeyBind[i] = (uint8_t)i;
+            }
+        }
+    }
 
     if (!setting["disabledMenus"].isNull()) {
         disabledMenus.clear();
@@ -624,8 +656,7 @@ void KvxputerConfig::fromFile(bool checkFS) {
 void KvxputerConfig::saveFile() {
     JsonDocument jsonDoc = toJson();
 
-    auto writeConfig = [&](FS &fs) -> bool {
-        const char *path = kvx::paths::configPath(fs);
+    auto writeConfig = [&](FS &fs, const char *path) -> bool {
         kvx::paths::ensureParentDirs(fs, path);
         File file = fs.open(path, FILE_WRITE);
         if (!file) {
@@ -637,11 +668,17 @@ void KvxputerConfig::saveFile() {
         return ok;
     };
 
-    if (!writeConfig(LittleFS)) log_e("Failed to write config to LittleFS");
+    if (!writeConfig(LittleFS, kvx::paths::configPath(LittleFS))) log_e("Failed to write config to LittleFS");
     else log_i("config file written to LittleFS");
 
-    if (sdcardMounted && !writeConfig(SD)) log_e("Failed to write config to SD");
-    else if (sdcardMounted) log_i("config file written to SD");
+    if (sdcardMounted) {
+        if (!writeConfig(SD, kvx::paths::configPath(SD))) log_e("Failed to write config to SD");
+        else log_i("config file written to SD");
+        // Always mirror to the user-facing path on SD.
+        if (!writeConfig(SD, kvx::paths::USER_SETTINGS))
+            log_e("Failed to write %s", kvx::paths::USER_SETTINGS);
+        else log_i("userSettings written to SD");
+    }
 }
 
 void KvxputerConfig::factoryReset() {
@@ -796,7 +833,7 @@ void KvxputerConfig::setLedEffect(int value) {
 }
 
 void KvxputerConfig::validateLedEffectValue() {
-    if (ledEffect < 0 || ledEffect > 9) ledEffect = 0;
+    if (ledEffect < 0 || ledEffect > 10) ledEffect = 0;
 }
 
 void KvxputerConfig::setLedEffectSpeed(int value) {
@@ -1235,6 +1272,25 @@ void KvxputerConfig::setKremotePortrait(bool value) {
 
 void KvxputerConfig::setKremoteButtonsSwapped(bool value) {
     kremoteButtonsSwapped = value;
+    saveFile();
+}
+
+void KvxputerConfig::setG0HoldHome(bool value) {
+    g0HoldHome = value;
+    saveFile();
+}
+
+void KvxputerConfig::setPdaKeyBind(int key1to8, uint8_t channelIndex) {
+    if (key1to8 < 1 || key1to8 > 8) return;
+    if (channelIndex > 7) channelIndex = 7;
+    pdaKeyBind[key1to8 - 1] = channelIndex;
+    saveFile();
+}
+
+void KvxputerConfig::setPdaWcFace(int value) {
+    if (value < 0) value = 0;
+    if (value > 2) value = 2;
+    pdaWcFace = value;
     saveFile();
 }
 

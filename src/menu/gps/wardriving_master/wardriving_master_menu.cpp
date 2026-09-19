@@ -68,8 +68,8 @@ void wardrivingMasterMenu() {
     esp_now_register_recv_cb(onSlaveRecv);
 
     drawMainBorderWithTitle("Wardriving Master");
-    tft.drawString("Listening for slaves", 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("Listening for slaves", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         while (gQTail != gQHead) {
@@ -81,7 +81,7 @@ void wardrivingMasterMenu() {
             last = String((char *)item.data).substring(0, item.len);
         }
         tft.fillRect(10, 56, tftWidth - 20, 32, kvxConfig.bgColor);
-        tft.drawString("Rows: " + String(lines), 10, 56);
+        tft.drawString("Rows: " + String(lines), 10, uiStatusY(1));
         tft.drawString(last.substring(0, 28), 10, 72);
         delay(40);
     }

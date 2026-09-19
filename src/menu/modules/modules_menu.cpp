@@ -110,8 +110,8 @@ static void waitGroveKeysIdle() {
 void ModulesMenu::unitScrollTestScreen() {
     waitGroveKeysIdle();
     drawMainBorderWithTitle("Test Scroll");
-    const int lineH = 10;
-    const int y0 = BORDER_PAD_Y + FM * 8 + 2;
+    const int lineH = uiLineH(FP);
+    const int y0 = BORDER_PAD_Y + uiLineH(FM) + 2;
     const int bodyH = tftHeight - y0 - 8;
     while (!check(EscPress)) {
         UnitScrollDebug d = unitScrollDebugSnapshot();
@@ -149,8 +149,8 @@ void ModulesMenu::unitScrollTestScreen() {
 void ModulesMenu::unitJoystick2TestScreen() {
     waitGroveKeysIdle();
     drawMainBorderWithTitle("Test Joystick");
-    const int lineH = 10;
-    const int y0 = BORDER_PAD_Y + FM * 8 + 2;
+    const int lineH = uiLineH(FP);
+    const int y0 = BORDER_PAD_Y + uiLineH(FM) + 2;
     const int bodyH = tftHeight - y0 - 8;
     const char *dirs[] = {"Up", "Down", "Left", "Right", "Enter", "Back"};
     while (!check(EscPress)) {

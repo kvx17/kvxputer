@@ -5,6 +5,7 @@
 #include "root/config/configPins.h"
 #include "root/ui/theme.h"
 #include "root/hal/led_control.h"
+#include "root/hal/radio_mem.h"
 #include <cstring>
 #include <globals.h>
 
@@ -72,7 +73,7 @@ void hidRemoteDrawFooter(const char *hints) {
     const int y = tftHeight - KVX_FOOTER_H;
     tft.fillRect(0, y, tftWidth, KVX_FOOTER_H, KVX_BG);
     tft.drawFastHLine(0, y, tftWidth, KVX_PURPLE);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
     tft.setTextColor(KVX_GREEN, KVX_BG);
     if (hints == nullptr) hints = "fn+Ok back";
     tft.drawCentreString(hints, tftWidth / 2, y + 4, 1);
@@ -97,7 +98,7 @@ static void hidContentBounds(int &top, int &bottom) {
 
 static int hidTextW(const char *s) {
     if (s == nullptr || s[0] == '\0') return 0;
-    return (int)strlen(s) * 6;
+    return (int)strlen(s) * LW; // dense pad glyphs
 }
 
 void hidDrawKeyBtn(int x, int y, int w, int h, const char *keyLabel, const char *desc, bool highlight) {
@@ -107,7 +108,7 @@ void hidDrawKeyBtn(int x, int y, int w, int h, const char *keyLabel, const char 
     tft.fillRoundRect(x, y, w, h, 3, fill);
     tft.drawRoundRect(x, y, w, h, 3, border);
     if (highlight) tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 2, KVX_GREEN);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
 
     const bool hasDesc = desc != nullptr && desc[0] != '\0';
     const bool twoLine = hasDesc && h >= 22 && hidTextW(keyLabel) <= w - 4 && hidTextW(desc) <= w - 4;
@@ -190,7 +191,6 @@ void hidDrawPresenterPad(bool portrait, int flashId) {
     int minGap = bw / 2 + pW / 2 + 2;
     if (gap < minGap) gap = minGap;
 
-    (void)portrait;
     const int ux = cx, uy = cy - gap;
     const int lx = cx - gap, ly = cy;
     const int dx = cx, dy = cy + gap;
@@ -207,15 +207,22 @@ void hidDrawPresenterPad(bool portrait, int flashId) {
         hidDrawKeyBtn(bx, by, bw, bh, "", nullptr, hi);
         const uint16_t iconC = hi ? KVX_GREEN : KVX_ORANGE;
         drawArrowGlyph(bx + bw / 2, by + (bh - 10) / 2, arrowDir, iconC, 5);
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
         tft.setTextColor(KVX_GREEN, KVX_PURPLE);
         tft.drawCentreString(keyHint, bx + bw / 2, by + bh - 10, 1);
     };
 
-    btn(0, ux, uy, 0, ";");
-    btn(1, dx, dy, 1, ".");
-    btn(2, lx, ly, 2, ",");
-    btn(3, rx, ry, 3, "/");
+    if (portrait) {
+        btn(0, ux, uy, 0, "/");
+        btn(1, dx, dy, 1, ",");
+        btn(2, lx, ly, 2, ";");
+        btn(3, rx, ry, 3, ".");
+    } else {
+        btn(0, ux, uy, 0, ";");
+        btn(1, dx, dy, 1, ".");
+        btn(2, lx, ly, 2, ",");
+        btn(3, rx, ry, 3, "/");
+    }
 
     int pbx = cx - pW / 2;
     int pby = cy - pH / 2;
@@ -223,7 +230,7 @@ void hidDrawPresenterPad(bool portrait, int flashId) {
     if (pby + pH > arrowBottom) pby = arrowBottom - pH;
     hidDrawKeyBtn(pbx, pby, pW, pH, "", nullptr, flashId == 9);
     hidDrawMediaIcon(cx - 8, cy, 1, flashId == 9 ? KVX_GREEN : KVX_ORANGE);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
     tft.setTextColor(KVX_GREEN, KVX_PURPLE);
     tft.drawString("P", cx + 2, cy - 4);
 }
@@ -294,7 +301,7 @@ void hidDrawMediaPad(int flashId) {
             hidDrawMediaIcon(tx + 5, y + rowH / 2, cells[i].icon, hi ? KVX_GREEN : KVX_ORANGE);
             tx += iconW;
         }
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
         tft.setTextColor(KVX_GREEN, fill);
         tft.drawString(cells[i].key, tx, midY);
         tx += keyW + 4;
@@ -336,7 +343,7 @@ void hidDrawMousePad(int flashId, bool joystickPresent) {
     btn(4, 18 + bw / 2, padBottom - bh / 2, "L");
     btn(5, tftWidth - 18 - bw / 2, padBottom - bh / 2, "'");
     tft.setTextColor(KVX_GREEN, KVX_BG);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
     tft.drawCentreString(joystickPresent ? "click=L  hold=R  D=invert Y" : "scroll=wheel", tftWidth / 2,
                          padBottom + 1, 1);
 }
@@ -437,7 +444,7 @@ void hidDrawShortsPad(char upKey, char downKey, int flashId, const char *prompt)
     const int y1 = y0 + rowH + 6;
     hidDrawKeyBtn(margin, y1, tftWidth - margin * 2, 22, "Ok", "Set up/down keys", flashId == 3);
 
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
     tft.setTextColor(KVX_ORANGE, KVX_BG);
     const char *hint = prompt != nullptr ? prompt : "Ok = remap keys";
     tft.drawCentreString(hint, tftWidth / 2, y1 + 26, 1);
@@ -462,7 +469,7 @@ void hidDrawPttPad(bool talking) {
         tft.drawLine(cx - 14, cy + 17, cx + 14, cy - 19, micC);
     }
 
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
     tft.setTextColor(talking ? KVX_GREEN : 0xF800, KVX_BG);
     tft.drawCentreString(talking ? "TALKING" : "MUTED", cx, cy + 22, 1);
     tft.setTextColor(KVX_ORANGE, KVX_BG);
@@ -507,7 +514,7 @@ void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected) {
         tft.drawRoundRect(x, y, colW, rowH, 3, border);
         tft.fillCircle(x + 8, y + rowH / 2, 3, border);
 
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
         tft.setTextColor(border, 0x1082);
         int maxChars = (colW - 18) / 6;
         if (maxChars < 4) maxChars = 4;
@@ -526,7 +533,7 @@ int hidRemotePickFromList(const char *title, const std::vector<String> &labels, 
 }
 
 bool hidRemoteWaitBack() {
-    while (!check(EscPress)) {
+    while (!check(EscPress) && !forceHome) {
         hidRemoteLedTick();
         delay(20);
     }
@@ -542,7 +549,9 @@ static bool hidLedHeld = false;
 
 static bool hidLedAllowed() {
     if (isScreenOff) return false;
+#ifdef HAS_RGB_LED
     if (kvxConfig.ledBright <= 0) return false;
+#endif
     if (!kvxConfig.hidRemoteLedEnabled) return false;
     return true;
 }
@@ -553,13 +562,22 @@ static void hidLedPaint(uint8_t r, uint8_t g, uint8_t b, bool dim) {
         return;
     }
     const int cap = dim ? 20 : 100;
+#ifdef HAS_RGB_LED
     uint8_t bright = (uint8_t)(255 * kvxConfig.ledBright * cap / 10000);
     if (dim && bright < 8 && kvxConfig.ledBright > 0) bright = 8;
+#else
+    uint8_t bright = (uint8_t)(255 * cap / 100);
+    if (dim && bright < 8) bright = 8;
+#endif
     ledShowApp(r, g, b, bright);
 }
 
 void hidRemoteLedBegin() {
     hidLedHeld = true;
+#ifdef HAS_RGB_LED
+    // Drop the LED effect task so BLE can claim a contiguous DMA block.
+    ledEffects(false);
+#endif
     ledSuppressStatus(true);
     hidLedMode = HID_REMOTE_LED_OFF;
     hidLedFlashUntil = 0;
@@ -573,6 +591,7 @@ void hidRemoteLedEnd() {
     hidLedHeld = false;
     ledSuppressStatus(false);
     ledSetStatus(LED_STATUS_IDLE);
+    uiRamLeaveHeavy();
 }
 
 void hidRemoteLedSet(HidRemoteLedMode mode) {

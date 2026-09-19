@@ -138,6 +138,14 @@ public:
     bool kremotePortrait = false;
     bool kremoteButtonsSwapped = false;
 
+    // G0 long-press returns to main menu (Cardputer); sticky Esc until home clears it.
+    bool g0HoldHome = true;
+
+    // PDA hub: key '1'..'8' → channel index 0..7 (default identity).
+    uint8_t pdaKeyBind[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    // World Clock face: 0=cities, 1=charge calendar, 2=digital clock.
+    int pdaWcFace = 0;
+
     std::vector<String> disabledMenus = {};
     std::map<String, String> mainscreenShortcuts = {};
 
@@ -284,6 +292,10 @@ public:
 
     void setKremotePortrait(bool value);
     void setKremoteButtonsSwapped(bool value);
+
+    void setG0HoldHome(bool value);
+    void setPdaKeyBind(int key1to8, uint8_t channelIndex);
+    void setPdaWcFace(int value);
 
     void addDisabledMenu(String value);
     void removeDisabledMenu(String value);

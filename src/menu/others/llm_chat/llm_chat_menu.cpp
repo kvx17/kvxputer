@@ -95,6 +95,7 @@ void uartLlm() {
         String resp;
         unsigned long until = millis() + 8000;
         while (millis() < until) {
+            if (check(EscPress) || forceHome) break;
             while (llm.available()) resp += (char)llm.read();
             delay(20);
         }

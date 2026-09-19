@@ -169,11 +169,12 @@ void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan
 void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
     drawMainBorder();
     tft.setTextColor(kvxConfig.priColor);
-    tft.drawCentreString("-=Information=-", tft.width() / 2, 28, SMOOTH_FONT);
-    tft.drawString("AP: " + tssid, 10, 48);
-    tft.drawString("Channel: " + String(channel), 10, 66);
-    tft.drawString(mac, 10, 84);
-    tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, tftHeight - 20);
+    tft.setTextSize(FP);
+    tft.drawCentreString("-=Information=-", tft.width() / 2, uiStatusY(0) - uiRowH(FP), SMOOTH_FONT);
+    tft.drawString("AP: " + tssid, 10, uiStatusY(0));
+    tft.drawString("Channel: " + String(channel), 10, uiStatusY(1));
+    tft.drawString(mac, 10, uiStatusY(2));
+    tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, uiFooterY(FP));
     vTaskDelay(200 / portTICK_PERIOD_MS);
     SelPress = false;
 
@@ -615,7 +616,7 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
                 padprintln("Handshake saved!        ");
                 tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
             }
-            tft.drawString("Press Esc to exit", 10, tftHeight - 20);
+            tft.drawString("Press Esc to exit", 10, uiFooterY(FP));
 
             needRedraw = false;
         }

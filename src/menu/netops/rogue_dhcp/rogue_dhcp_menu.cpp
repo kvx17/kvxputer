@@ -93,8 +93,8 @@ void runRogue(bool apMode) {
     }
     int offers = 0, acks = 0, suffix = 50;
     drawMainBorderWithTitle(apMode ? "Rogue DHCP AP" : "Rogue DHCP STA");
-    tft.drawString(server.toString(), 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString(server.toString(), 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     uint8_t buf[512];
 
@@ -113,7 +113,7 @@ void runRogue(bool apMode) {
                 suffix = 50 + ((suffix - 49) % 100);
             }
             tft.fillRect(10, 56, tftWidth - 20, 32, kvxConfig.bgColor);
-            tft.drawString("Offers " + String(offers) + "  ACKs " + String(acks), 10, 56);
+            tft.drawString("Offers " + String(offers) + "  ACKs " + String(acks), 10, uiStatusY(1));
         }
         delay(10);
     }

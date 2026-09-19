@@ -40,8 +40,15 @@
 #include "menu/rfid/chameleon.h"
 #include "menu/rfid/tag_o_matic.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
+#include "menu/others/calculator.h"
 #include "menu/others/qrcode_menu.h"
 #include "menu/others/timer.h"
+#if defined(HAS_NS4168_SPKR)
+#include "menu/others/media_player.h"
+#endif
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_menu.h"
+#endif
 #include "menu/charge/charge_screen.h"
 
 #ifndef LITE_VERSION
@@ -307,6 +314,13 @@ static void launchSdCard() {
     if (setupSdCard()) loopSD(SD);
 }
 static void launchQrcode() { qrcode_menu(); }
+static void launchCalculator() { calculatorApp(); }
+#if defined(HAS_NS4168_SPKR)
+static void launchMediaPlayer() { mediaPlayerApp(); }
+#endif
+#ifndef LITE_VERSION
+static void launchPda() { pdaMenu(); }
+#endif
 static void launchTimer() { Timer(); }
 static void launchClock() { runClockLoop(true); }
 static void launchCharge() { runChargeLoop(); }
@@ -348,6 +362,7 @@ static void launchCfgDev() { mainMenu.configMenu.devMenu(); }
 static void launchBrightness() { setBrightnessMenu(); }
 static void launchDimmer() { setDimmerTimeMenu(); }
 static void launchUiColor() { setUIColor(); }
+static void launchAccentColor() { setAccentColor(); }
 static void launchTheme() { setTheme(); }
 static void launchSetClock() { setClock(); }
 static void launchStartupApp() { setStartupApp(); }
@@ -558,18 +573,23 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #endif
 #endif
 
-        // Others
-        {"qrcode", "QRCodes", "Others", false, alwaysOn, launchQrcode},
+        // Tools
+        {"qrcode", "QRCodes", "Tools", false, alwaysOn, launchQrcode},
+        {"tools_calc", "Calculator", "Tools", false, alwaysOn, launchCalculator},
+#if defined(HAS_NS4168_SPKR)
+        {"media_player", "Media Player", "Tools", false, notLite, launchMediaPlayer},
+#endif
 #ifndef LITE_VERSION
-        {"ibutton", "iButton", "Others", false, notLite, launchIbutton},
+        {"pda", "PDA", "Tools", false, notLite, launchPda},
+        {"ibutton", "iButton", "Tools", false, notLite, launchIbutton},
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
-        {"mic_menu", "Microphone", "Others", false, notLite, launchMicMenu},
-        {"mic_test", "Mic Spectrum", "Others", false, notLite, launchMicTest},
-        {"mic_record", "Mic Record", "Others", false, notLite, launchMicRecord},
+        {"mic_menu", "Microphone", "Tools", false, notLite, launchMicMenu},
+        {"mic_test", "Mic Spectrum", "Tools", false, notLite, launchMicTest},
+        {"mic_record", "Mic Record", "Tools", false, notLite, launchMicRecord},
 #endif
 #endif
 #if defined(EVIL_EXTENSIONS)
-        {"llm_chat", "LLM Chat", "Others", false, evilOn, launchLlmChat},
+        {"llm_chat", "LLM Chat", "Tools", false, evilOn, launchLlmChat},
 #endif
 
         // Clock / Charge
@@ -596,6 +616,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"brightness", "Brightness", "Settings", false, alwaysOn, launchBrightness},
         {"dim_time", "Dim Time", "Settings", false, alwaysOn, launchDimmer},
         {"ui_color", "UI Color", "Settings", false, alwaysOn, launchUiColor},
+        {"accent_color", "Accent Color", "Settings", false, alwaysOn, launchAccentColor},
         {"ui_theme", "UI Theme", "Settings", false, alwaysOn, launchTheme},
         {"set_clock", "Clock", "Settings", false, alwaysOn, launchSetClock},
         {"startup_app", "Startup App", "Settings", false, alwaysOn, launchStartupApp},

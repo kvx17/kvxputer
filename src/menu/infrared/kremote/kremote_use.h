@@ -2,3 +2,4 @@
 
 void kremoteUseFlow();
 void kremoteDeleteFlow();
+void kremoteBrowseIr();

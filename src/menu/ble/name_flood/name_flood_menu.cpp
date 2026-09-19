@@ -38,7 +38,7 @@ void nameFloodMenu() {
     unsigned long last = 0;
     unsigned long count = 0;
     drawMainBorderWithTitle("BLE Name Flood");
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         if (millis() - last > 80) {
@@ -49,8 +49,8 @@ void nameFloodMenu() {
             adv->start();
             count++;
             tft.fillRect(10, 40, tftWidth - 20, 32, kvxConfig.bgColor);
-            tft.drawString(names[idx], 10, 40);
-            tft.drawString("Ads: " + String((unsigned)count), 10, 56);
+            tft.drawString(names[idx], 10, uiStatusY(0));
+            tft.drawString("Ads: " + String((unsigned)count), 10, uiStatusY(1));
         }
         delay(10);
     }

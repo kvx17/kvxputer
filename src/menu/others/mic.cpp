@@ -283,8 +283,8 @@ void mic_test_one_task() {
         }
 
         tft.pushImage(displayX, displayY, displayWidth, displayHeight, frameBuffer);
-        wakeUpScreen();
-        if (check(SelPress) || check(EscPress)) break;
+        resetPowerSaveTimer();
+        if (check(SelPress) || check(EscPress) || forceHome) break;
         vTaskDelay(pdMS_TO_TICKS(1));
     }
     i2s_channel_disable(i2s_chan);
@@ -655,7 +655,7 @@ void mic_record_app() {
     // ===== MAIN LOOP =====
     while (true) {
         InputHandler();
-        wakeUpScreen();
+        resetPowerSaveTimer();
 
         bool selection_changed = false;
         bool value_changed = false;
@@ -681,7 +681,7 @@ void mic_record_app() {
                 edit_mode_changed = true;
                 last_input = millis();
             }
-            if (check(EscPress)) { goto cleanup_and_exit; }
+            if (check(EscPress) || forceHome) { goto cleanup_and_exit; }
         } else {
             // Editing mode
             switch (selected_item) {
@@ -772,7 +772,7 @@ void mic_record_app() {
             setBrightness(10, false);
             tft.fillScreen(TFT_BLACK);
             tft.setTextColor(TFT_RED);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Mic stealth/waveform overlay stays dense */;
             tft.setCursor(5, 5);
             tft.print(".");
         } else {

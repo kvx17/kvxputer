@@ -57,7 +57,7 @@ void broadcastLoop(std::vector<Pay> &all, uint32_t rotMs) {
     size_t i = 0;
     unsigned long last = 0;
     drawMainBorderWithTitle("CIW Broadcast");
-    tft.drawString("ESC stop", 10, tftHeight - 20);
+    tft.drawString("ESC stop", 10, uiFooterY(FP));
     EscPress = false;
     WiFi.mode(WIFI_AP);
     while (!check(EscPress) && !returnToMenu) {

@@ -3,6 +3,7 @@
 #include "karma_attack.h"
 #include "FS.h"
 #include "root/ui/display.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/sd_functions.h"
 #include "root/net/webInterface.h"
@@ -2429,7 +2430,8 @@ void updateKarmaDisplay() {
         last_time = currentTime;
 
         tft.fillRect(10, 45, tftWidth - 20, tftHeight - 70, kvxConfig.bgColor);
-        tft.setTextSize(1);
+        // Multi-column live stats need dense HUD chrome — FP body won't fit.
+        tft.setTextSize(uiDenseFont());
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
 
         int y = 45;
@@ -2760,7 +2762,12 @@ void karma_setup() {
             }
         }
 
-        if (check(SelPress) || check(EscPress)) {
+        if (check(SelPress) || check(EscPress) || forceHome) {
+            // G0 Home: exit Karma immediately — do not open the options submenu.
+            if (forceHome) {
+                returnToMenu = true;
+                continue;
+            }
             check(SelPress);
             check(EscPress);
 
@@ -2769,25 +2776,18 @@ void karma_setup() {
             std::vector<Option> options = {
                 {"Enhanced Stats",
                  [&]() {
-                     drawMainBorderWithTitle("ADVANCED STATS");
-                     int y = 45;
-                     tft.setTextSize(1);
-                     tft.setCursor(10, y);
-                     padprint("Total: " + String(totalProbes));
-                     padprintln("Unique: " + String(uniqueClients), 10);
-                     padprint("Karma: " + String(karmaResponsesSent));
-                     padprintln("Beacons: " + String(beaconsSent), 10);
-                     padprint("Active: " + String(activeNetworks.size()));
-                     padprintln("Pending: " + String(pendingPortals.size()), 10);
-                     padprint("Portals: " + String(activePortalCount()));
-                     padprintln("Blacklist: " + String(macBlacklist.size()), 10);
-                     padprint("PMKID: " + String(pmkidCaptured));
-                     padprintln("Handshakes: " + String(handshakeBuffer.size()), 10);
-                     padprintln("Sel: Back");
-                     while (!check(SelPress) && !check(EscPress)) {
-                         if (check(PrevPress)) break;
-                         delay(50);
-                     }
+                     ScrollableTextArea area = ScrollableTextArea("ADVANCED STATS");
+                     area.addLine("Total: " + String(totalProbes));
+                     area.addLine("Unique: " + String(uniqueClients));
+                     area.addLine("Karma: " + String(karmaResponsesSent));
+                     area.addLine("Beacons: " + String(beaconsSent));
+                     area.addLine("Active: " + String(activeNetworks.size()));
+                     area.addLine("Pending: " + String(pendingPortals.size()));
+                     area.addLine("Portals: " + String(activePortalCount()));
+                     area.addLine("Blacklist: " + String(macBlacklist.size()));
+                     area.addLine("PMKID: " + String(pmkidCaptured));
+                     area.addLine("Handshakes: " + String(handshakeBuffer.size()));
+                     area.show();
                      screenNeedsRedraw = true;
                  }                   },
 
@@ -2983,23 +2983,12 @@ void karma_setup() {
                           }},
                          {"Database Info",
                  [&]() {
-                              drawMainBorderWithTitle("SSID DATABASE");
-                              int y = 60;
-                              tft.setTextSize(1);
-                              tft.fillRect(10, 40, tftWidth - 20, 100, kvxConfig.bgColor);
+                              ScrollableTextArea area = ScrollableTextArea("SSID DATABASE");
                               size_t total = SSIDDatabase::getCount();
-                              tft.setCursor(10, y);
-                              y += 15;
-                              tft.print("Total SSIDs: " + String(total));
-                              tft.setCursor(10, y);
-                              y += 15;
-                              tft.print("Cached: streaming");
-                              tft.setCursor(10, y);
-                              y += 15;
-                              tft.print("Progress: " + broadcastAttack.getProgressString());
-                              tft.setCursor(10, tftHeight - 20);
-                              tft.print("Sel: Back");
-                              while (!check(SelPress) && !check(EscPress)) delay(50);
+                              area.addLine("Total SSIDs: " + String(total));
+                              area.addLine("Cached: streaming");
+                              area.addLine("Progress: " + broadcastAttack.getProgressString());
+                              area.show();
                           }},
                          {"Set Speed",
                  [&]() {
@@ -3173,31 +3162,31 @@ void karma_setup() {
                      broadcastOptions.push_back(
                          {"Show Stats", [&]() {
                               drawMainBorderWithTitle("BROADCAST STATS");
-                              int y = 40;
-                              tft.setTextSize(1);
+                              int y = uiStatusY(0);
+                              tft.setTextSize(FP);
                               size_t totalSSIDs = SSIDDatabase::getCount();
                               size_t currentPos = broadcastAttack.getCurrentPosition();
                               float progress = broadcastAttack.getProgressPercent();
                               BroadcastStats stats = broadcastAttack.getStats();
 
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Total SSIDs: " + String(totalSSIDs));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Progress: " + String(progress, 1) + "%");
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Broadcasts: " + String(stats.totalBroadcasts));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print("Responses: " + String(stats.totalResponses));
                               tft.setCursor(10, y);
-                              y += 15;
+                              y += uiRowH(FP);
                               tft.print(
                                   "Status: " + String(broadcastAttack.isActive() ? "ACTIVE" : "INACTIVE")
                               );
-                              tft.setCursor(10, tftHeight - 20);
+                              tft.setCursor(10, uiFooterY(FP));
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) {
                                   if (check(PrevPress)) break;
@@ -3256,30 +3245,22 @@ void karma_setup() {
 
                 {"Show Stats",
                  [&]() {
-                     drawMainBorderWithTitle("KARMA STATS");
-                     int y = 45;
-                     tft.setTextSize(1);
-                     tft.setCursor(10, y);
-                     padprint("Probes: " + String(totalProbes));
-                     padprintln("Uniq Clients: " + String(uniqueClients), 11);
-                     padprint("Responses: " + String(karmaResponsesSent));
-                     padprintln("Portals: " + String(autoPortalsLaunched), 11);
-                     padprint("Clone Atks: " + String(cloneAttacksLaunched));
-                     padprintln("Deauth Pkt: " + String(deauthPacketsSent), 11);
                      int vulnCount = 0;
                      for (const auto &clientPair : clientBehaviors)
                          if (clientPair.second.isVulnerable) vulnCount++;
-                     padprint("Vulnerable: " + String(vulnCount));
-                     padprintln("Pend Atks: " + String(pendingPortals.size()), 11);
-                     padprint("Act Portal: " + String(activePortalCount()));
-                     padprintln("PMKID Capt: " + String(pmkidCaptured), 11);
-                     padprintln("Handshakes: " + String(handshakeBuffer.size()));
-                     padprintln("");
-                     padprintln("Sel: Back");
-                     while (!check(SelPress) && !check(EscPress)) {
-                         if (check(PrevPress)) break;
-                         delay(50);
-                     }
+                     ScrollableTextArea area = ScrollableTextArea("KARMA STATS");
+                     area.addLine("Probes: " + String(totalProbes));
+                     area.addLine("Uniq Clients: " + String(uniqueClients));
+                     area.addLine("Responses: " + String(karmaResponsesSent));
+                     area.addLine("Portals: " + String(autoPortalsLaunched));
+                     area.addLine("Clone Atks: " + String(cloneAttacksLaunched));
+                     area.addLine("Deauth Pkt: " + String(deauthPacketsSent));
+                     area.addLine("Vulnerable: " + String(vulnCount));
+                     area.addLine("Pend Atks: " + String(pendingPortals.size()));
+                     area.addLine("Act Portal: " + String(activePortalCount()));
+                     area.addLine("PMKID Capt: " + String(pmkidCaptured));
+                     area.addLine("Handshakes: " + String(handshakeBuffer.size()));
+                     area.show();
                      screenNeedsRedraw = true;
                  }},
 
@@ -3287,6 +3268,8 @@ void karma_setup() {
             };
 
             loopOptions(options);
+
+            if (forceHome || returnToMenu) continue;
 
             forceFullRedraw();
             drawMainBorderWithTitle("ENHANCED KARMA ATK");

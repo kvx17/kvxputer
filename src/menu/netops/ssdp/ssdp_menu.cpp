@@ -20,7 +20,7 @@ void ssdpMenu() {
         "SERVER: kvxputer/1.0 UPnP/1.0\r\nUSN: uuid:kvxputer::upnp:rootdevice\r\n\r\n";
     int sent = 0;
     drawMainBorderWithTitle("SSDP Poisoner");
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         udp.beginPacket(IPAddress(239, 255, 255, 250), 1900);
@@ -28,7 +28,7 @@ void ssdpMenu() {
         udp.endPacket();
         sent++;
         tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("NOTIFYs: " + String(sent), 10, 40);
+        tft.drawString("NOTIFYs: " + String(sent), 10, uiStatusY(0));
         delay(400);
     }
     udp.stop();

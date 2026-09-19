@@ -11,6 +11,8 @@ namespace paths {
 constexpr const char *ROOT              = "/root";
 constexpr const char *CONF              = "/root/kvxputer.conf";
 constexpr const char *CONF_LEGACY       = "/bruce.conf";
+// User-facing settings copy on SD (timezone, shortcuts, LED, PDA binds, …).
+constexpr const char *USER_SETTINGS     = "/kvxputer/userSettings.json";
 constexpr const char *BOOT_SOUND        = "/root/boot.wav";
 constexpr const char *BOOT_SOUND_LEGACY = "/boot.wav";
 constexpr const char *THEMES            = "/root/themes";
@@ -100,6 +102,15 @@ constexpr const char *COMPANIONS           = "/support_files/companions";
 constexpr const char *IBUTTON              = "/support_files/others/ibutton";
 constexpr const char *IBUTTON_LEGACY       = "/BruceIButton";
 
+// PDA (Pocket Device Assistant)
+constexpr const char *PDA                  = "/support_files/pda";
+constexpr const char *PDA_NOTES            = "/support_files/pda/notes";
+constexpr const char *PDA_MEMOS            = "/support_files/pda/memos";
+constexpr const char *PDA_TODO             = "/support_files/pda/todo";
+constexpr const char *PDA_CALENDAR         = "/support_files/pda/calendar";
+constexpr const char *PDA_CONTACTS         = "/support_files/pda/contacts";
+constexpr const char *PDA_ALARMS           = "/support_files/pda/alarms";
+
 // --- helpers ---
 bool exists(FS &fs, const char *path);
 bool resolveReadable(FS &fs, const char *canonical, const char *legacy, String &out);
@@ -107,6 +118,7 @@ bool resolveDir(FS &fs, const char *canonical, const char *legacy, String &out);
 void ensureDir(FS &fs, const char *path);
 void ensureParentDirs(FS &fs, const char *filePath);
 const char *configPath(FS &fs);
+const char *userSettingsPath();
 const char *bootSoundPath(FS &fs);
 const char *mifareKeysPath(FS &fs);
 String scriptsFolder(FS *&fs);

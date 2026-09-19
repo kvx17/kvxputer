@@ -211,7 +211,7 @@ void reciveMessage() {
 
 void render() {
     if (!update) return;
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* LoRa chat transcript stays dense */;
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(0x6DFC);
     if (!intlora) { tft.drawString("Lora Init Failed", 10, 13); }

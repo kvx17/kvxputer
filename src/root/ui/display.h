@@ -15,8 +15,37 @@
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
 
+// Font scale contract (Cardputer FP=FM=2, FG=3):
+//   uiDenseFont — top bar, HUD overlays, dense grids that cannot fit body glyphs
+//   uiBodyFont  — padprintln, ScrollableTextArea, form fields, footers
+//   uiMenuFont  — loopOptions / submenu rows / section titles
+//   uiHeroFont  — rare large callouts (calculator result, etc.)
+inline int uiDenseFont() { return max(1, FP / 2); }
+inline int uiBodyFont() { return FP; }
+inline int uiMenuFont() { return FM; }
+inline int uiHeroFont() { return FG; }
+inline int uiLineH(int sz = FP) { return sz * LH; }
+inline int uiCharW(int sz = FP) { return sz * LW; }
+inline int uiRowH(int sz = FP) { return sz * LH + 4; }
+inline int uiFooterY(int sz = FP) { return tftHeight - sz * LH - 2; }
+// Live-status line under drawMainBorder* title (replaces hardcoded Y 40/56/72).
+inline int uiStatusY(int line) { return BORDER_PAD_Y + uiLineH(FM) + 4 + line * uiRowH(FP); }
+
+// Draw offscreen (M5Canvas / TFT_eSprite) then blit once. Nested frames share one buffer.
+// No-PSRAM boards free the canvas after present so radio bring-up keeps a DMA block.
+struct TftFrame {
+    TftFrame() { tft.beginFrame(); }
+    ~TftFrame() { tft.endFrame(); }
+    TftFrame(const TftFrame &) = delete;
+    TftFrame &operator=(const TftFrame &) = delete;
+};
+
+void tftReleaseFrameCanvas();
+void tftSuppressCanvas(bool suppress);
+
 void panelSleep(bool on);
 void turnOffDisplay();
+void resetPowerSaveTimer();
 bool wakeUpScreen();
 
 struct Opt_Coord {
@@ -129,6 +158,7 @@ void setTftDisplay(
 );
 
 void turnOffDisplay();
+void resetPowerSaveTimer();
 bool wakeUpScreen();
 
 void displayRedStripe(const String &text, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_RED);

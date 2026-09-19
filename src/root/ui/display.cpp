@@ -7,11 +7,14 @@
 #include "root/ui/settings.h" //for timeStr
 #include "root/app/utils.h"
 #include "root/hal/led_control.h"
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_alarms.h"
+#endif
 #include <JPEGDecoder.h>
 #include <interface.h> //for charging ischarging to print charging indicator
 #include <memory>
 
-#define MAX_MENU_SIZE (int)(tftHeight / 25)
+#define MAX_MENU_SIZE max(1, (int)(tftHeight / uiRowH(FM)))
 
 // Send the ST7789 into or out of sleep mode
 void panelSleep(bool on) {
@@ -26,6 +29,20 @@ void panelSleep(bool on) {
 #endif
     // Disables tft writings on the display
     tft.setSleepMode(on);
+}
+
+void tftReleaseFrameCanvas() {
+#if defined(HAS_SCREEN)
+    tft.releaseCanvas();
+#endif
+}
+
+void tftSuppressCanvas(bool suppress) {
+#if defined(HAS_SCREEN)
+    tft.suppressCanvas(suppress);
+#else
+    (void)suppress;
+#endif
 }
 
 bool __attribute__((weak)) isCharging() { return false; }
@@ -116,6 +133,8 @@ void setTftDisplay(int x, int y, uint16_t fc, int size, uint16_t bg) {
 
 void turnOffDisplay() { setBrightness(0, false); }
 
+void resetPowerSaveTimer() { previousMillis = millis(); }
+
 bool wakeUpScreen() {
     previousMillis = millis();
     // Charge owns blanking while user-slept. If InputHandler woke us on the same
@@ -185,14 +204,15 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     if (fgcolor == bgcolor && fgcolor == TFT_WHITE) fgcolor = TFT_BLACK;
 
     // Calculate max chars per line based on font size
-    int maxCharsFM = (tftWidth - 20) / (LW * FM);
-    int maxCharsFP = (tftWidth - 20) / (LW * FP);
+    int maxCharsFM = (tftWidth - 20) / uiCharW(FM);
+    int maxCharsFP = (tftWidth - 20) / uiCharW(FP);
 
     // Determine if we need to wrap the text
     std::vector<String> wrappedLines;
-    int boxHeight = 26; // Default height for single line
+    int lineHeight;
+    int boxHeight;
 
-    if (text.length() * LW * FM < (tftWidth - 2 * FM * LW)) {
+    if (text.length() * uiCharW(FM) < (tftWidth - 2 * uiCharW(FM))) {
         // Text fits with FM font
         size = FM;
         wrappedLines = wrapText(text, maxCharsFM);
@@ -202,8 +222,8 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
         wrappedLines = wrapText(text, maxCharsFP);
     }
 
-    // Adjust box height based on number of lines
-    if (wrappedLines.size() > 1) { boxHeight = 13 + (wrappedLines.size() * (size == FM ? 8 : 10)); }
+    lineHeight = uiLineH(size) + 2;
+    boxHeight = max(uiLineH(size) + 10, 6 + (int)wrappedLines.size() * lineHeight);
 
     tft.drawPixel(0, 0, 0);
     tft.fillRoundRect(10, tftHeight / 2 - boxHeight / 2, tftWidth - 20, boxHeight, 7, bgcolor);
@@ -211,10 +231,9 @@ void displayRedStripe(const String &text, uint16_t fgcolor, uint16_t bgcolor) {
     tft.setTextSize(size);
 
     // Draw each line centered
-    int lineHeight = size == FM ? 8 : 10;
-    int startY = tftHeight / 2 - (wrappedLines.size() * lineHeight) / 2;
+    int startY = tftHeight / 2 - ((int)wrappedLines.size() * lineHeight) / 2;
     for (size_t i = 0; i < wrappedLines.size(); i++) {
-        tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + i * lineHeight);
+        tft.drawCentreString(wrappedLines[i], tftWidth / 2, startY + (int)i * lineHeight);
     }
 }
 
@@ -251,7 +270,7 @@ int8_t displayMessage(
 
     while (end != -1) {
         tft.drawString(msg.substring(start, end), tftWidth / 2, y);
-        y += FM * 8;
+        y += uiLineH(FM);
         start = end + 1;
         end = msg.indexOf('\n', start);
     }
@@ -454,7 +473,8 @@ void padprintln(const String &s, int16_t padx) {
 
     String buff;
     size_t start = 0;
-    int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
+    const int sz = max(1, (int)tft.getTextSize());
+    int _maxCharsInLine = max(1, (tftWidth - (padx + 1) * BORDER_PAD_X) / uiCharW(sz));
 
     // automatically split into multiple lines
     while (!(buff = s.substring(start, start + _maxCharsInLine)).isEmpty()) {
@@ -472,7 +492,8 @@ void padprintln(const char str[], int16_t padx) {
 
     String buff;
     size_t start = 0;
-    int _maxCharsInLine = (tftWidth - (padx + 1) * BORDER_PAD_X) / (FP * LW);
+    const int sz = max(1, (int)tft.getTextSize());
+    int _maxCharsInLine = max(1, (tftWidth - (padx + 1) * BORDER_PAD_X) / uiCharW(sz));
 
     // automatically split into multiple lines
     while (!(buff = String(str).substring(start, start + _maxCharsInLine)).isEmpty()) {
@@ -567,9 +588,9 @@ int loopOptions(
     if (menuType == MENU_TYPE_REGULAR && index > 0)
         tft.fillRoundRect(
             tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
+            tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5,
             tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
+            uiRowH(FM) * menuSize + 10,
             5,
             kvxConfig.bgColor
         );
@@ -587,6 +608,9 @@ int loopOptions(
             index = -1;
             break;
         }
+#ifndef LITE_VERSION
+        if (pdaAlarmsPoll()) redraw = true;
+#endif
         if (menuType == MENU_TYPE_MAIN) {
             checkReboot();
             if (devModeCounter >= 5 && !kvxConfig.devMode) {
@@ -602,7 +626,21 @@ int loopOptions(
             drawKvxTopBar(kvxActiveTitle.c_str());
         }
 
-        if (redraw) {
+        // Only redraw when dirty. For long submenu labels, tick a marquee ~3.5Hz
+        // without forcing a full TftFrame present every 20ms (that caused flicker).
+        bool marqueeRedraw = false;
+        if (menuType == MENU_TYPE_SUBMENU && index >= 0 && index < (int)options.size()) {
+            const int nchars = max(1, (tftWidth - 12) / (FM * LW));
+            if ((int)options[index].label.length() + 2 > nchars) {
+                static unsigned long marqueeTs = 0;
+                if (millis() - marqueeTs > 280) {
+                    marqueeTs = millis();
+                    marqueeRedraw = true;
+                }
+            }
+        }
+
+        if (redraw || marqueeRedraw) {
             menuOptionType = menuType; // updates menutype to the remote controller
             menuOptionLabel = kvxActiveTitle;
             // update the hovered
@@ -801,24 +839,25 @@ Opt_Coord drawOptions(
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5;
+    int32_t optionsTopY = tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5;
+    TftFrame frame;
     tft.drawPixel(0, 0, kvxConfig.bgColor);
     if (firstRender) {
         tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, (FM * 8 + 4) * menuSize + 10, 5, bgcolor
+            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, uiRowH(FM) * menuSize + 10, 5, bgcolor
         );
         tft.drawRoundRect(
             tftWidth * 0.10,
-            tftHeight / 2 - menuSize * (FM * 8 + 4) / 2 - 5,
+            tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5,
             tftWidth * 0.8,
-            (FM * 8 + 4) * menuSize + 10,
+            uiRowH(FM) * menuSize + 10,
             5,
             fgcolor
         );
     }
     tft.setTextColor(fgcolor, bgcolor);
     tft.setTextSize(FM);
-    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * (FM * 8 + 4) / 2);
+    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * uiRowH(FM) / 2);
 
     int i = 0;
     int init = 0;
@@ -900,27 +939,35 @@ void drawStatusBar() {
         tft.drawLine(5, 25, tftWidth - 6, 25, kvxConfig.priColor);
     }
 
+    // Clock / version: compact top-strip size (half of body FP).
+    const int clockSize = uiDenseFont();
+    const int clockY = max(4, (25 - clockSize * LH) / 2);
     if (clock_set) {
-        setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
-        tft.fillRect(12, 12, 60, LH, kvxConfig.bgColor);
 #if defined(HAS_RTC)
         updateTimeStr(_rtc.getTimeStruct());
 #else
         updateTimeStr(rtc.getTimeStruct());
 #endif
+        const int clockW = (int)strlen(timeStr) * clockSize * LW + 4;
+        tft.fillRect(12, clockY, max(60, clockW), clockSize * LH, kvxConfig.bgColor);
+        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
         tft.print(timeStr);
     } else {
-        setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
+        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
         tft.print(String("kvxputer v") + KVXPUTER_VERSION);
     }
 
-    int iconCount = 0;
     bool showSD = sdcardMounted;
     bool showGPS = gpsConnected;
     bool showWifi = (WiFi.getMode() != 0);
     bool showWeb = isWebUIActive;
     bool showBLE = BLEConnected;
     bool showWG = isConnectedWireguard;
+
+    const int IW = 16;
+    const int IH = 16;
+    const int GAP = 6;
+    int iconCount = 0;
     if (showSD) iconCount++;
     if (showGPS) iconCount++;
     if (showWifi) iconCount++;
@@ -929,64 +976,57 @@ void drawStatusBar() {
     if (showWG) iconCount++;
 
     if (iconCount > 0) {
-        const int IW = 16;
-        const int IH = 16;
-        const int GAP = 6;
-        int totalW = iconCount * IW + (iconCount - 1) * GAP;
-        int sx = (tftWidth - totalW) / 2;
+        // Pack from the right: SD immediately left of battery (same as kvx top bar).
+        const int batReserve = (bat > 0) ? (42 + max(42, 4 * uiDenseFont() * LW + 4)) : 6;
+        int rightEdge = tftWidth - batReserve;
+        int x = rightEdge - (iconCount * IW + (iconCount - 1) * GAP);
         int iy = 7;
-        int idx = 0;
 
-        if (showSD) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawSdSmall(x, iy);
-            idx++;
-        }
-        if (showGPS) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawGpsSmall(x, iy);
-            idx++;
-        }
-        if (showWifi) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWifiSmall(x, iy);
-            idx++;
-        }
-        if (showWeb) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWebUISmall(x, iy);
-            idx++;
-        }
-        if (showBLE) {
-            int x = sx + idx * (IW + GAP);
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawBLESmall(x, iy);
-            idx++;
-        }
         if (showWG) {
-            int x = sx + idx * (IW + GAP);
             tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
             drawWireguardStatus(x, iy);
-            idx++;
+            x += IW + GAP;
+        }
+        if (showBLE) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawBLESmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showWeb) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawWebUISmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showWifi) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawWifiSmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showGPS) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawGpsSmall(x, iy);
+            x += IW + GAP;
+        }
+        if (showSD) {
+            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
+            drawSdSmall(x, iy);
         }
     }
 }
 
 void drawMainBorder(bool clear) {
+    TftFrame frame;
     if (clear) {
         tft.drawPixel(0, 0, 0);
         tft.fillScreen(kvxConfig.bgColor);
     }
-    setTftDisplay(12, 12, kvxConfig.priColor, 1, kvxConfig.bgColor);
+    setTftDisplay(12, 12, kvxConfig.priColor, FP, kvxConfig.bgColor);
     tft.setTextDatum(0);
 
     // if(wifiConnected) {tft.print(timeStr);} else {tft.print("BRUCE 1.0b");}
 
     drawStatusBar();
+    tft.setTextSize(FP);
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -994,6 +1034,7 @@ void drawMainBorder(bool clear) {
 }
 
 void drawMainBorderWithTitle(const String &title, bool clear) {
+    TftFrame frame;
     drawMainBorder(clear);
     printTitle(title);
 }
@@ -1053,15 +1094,21 @@ void drawBatteryStatus(uint8_t bat) {
     uint16_t barcolor = kvxConfig.priColor;
     if (bat < 16) barcolor = color = TFT_RED;
 
+    // Percent / CHG: compact top-bar size (half of body FP).
+    const int batSize = uiDenseFont();
+    const int textY = max(4, (KVX_TOPBAR_H - batSize * LH) / 2);
+    const int pctRight = tftWidth - 44;
+    const int pctClearW = max(42, 4 * batSize * LW + 4);
+
     tft.drawRoundRect(tftWidth - 42, 7, 34, 17, 2, color);
-    tft.setTextSize(FP);
-    tft.fillRect(tftWidth - 85, 7, 42, 18, kvxConfig.bgColor);
+    tft.setTextSize(batSize);
+    tft.fillRect(pctRight - pctClearW, 2, pctClearW, KVX_TOPBAR_H - 3, kvxConfig.bgColor);
     if (charging) {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawRightString("CHG", tftWidth - 44, 12, 1);
+        tft.drawRightString("CHG", pctRight, textY, 1);
     } else {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", tftWidth - 44, 12, 1);
+        tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", pctRight, textY, 1);
     }
     tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
     tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, kvxConfig.bgColor);
@@ -1085,11 +1132,12 @@ void drawWireguardStatus(int x, int y) {
 ***************************************************************************************/
 Opt_Coord listFiles(int index, std::vector<FileList> fileList, const char *title) {
     Opt_Coord coord;
-    const uint16_t bg = KVX_DEFAULT_BGCOLOR;
-    const uint16_t purple = DEFAULT_PRICOLOR;
-    const uint16_t green = DEFAULT_SECCOLOR;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t purple = kvxConfig.priColor;
+    const uint16_t green = kvxConfig.secColor;
 
     if (title == nullptr || title[0] == '\0') title = "Files";
+    TftFrame frame;
     tft.fillRect(0, KVX_TOPBAR_H + 1, tftWidth, tftHeight - KVX_TOPBAR_H - 1, bg);
     drawKvxTopBar(title);
 

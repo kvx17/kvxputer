@@ -51,9 +51,10 @@ JSValue native_menuShow(JSContext *ctx, JSValue *this_val, int argc, JSValue *ar
 
     options.clear();
 
-    // loopOptions returns the last index; if returnToMenu is true, user pressed back
+    // loopOptions returns the last index; if returnToMenu is true, user pressed back.
+    // Keep returnToMenu sticky when forceHome so the Home cascade reaches the main grid.
     if (returnToMenu) {
-        returnToMenu = false;
+        if (!forceHome) returnToMenu = false;
         return JS_NewInt32(ctx, -1);
     }
 

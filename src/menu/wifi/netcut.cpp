@@ -7,6 +7,7 @@
 
 #include "netcut.h"
 #include "root/input/mykeyboard.h"
+#include "root/ui/scrollableTextArea.h"
 #include "esp_netif.h"
 #include "esp_netif_net_stack.h"
 #include "esp_private/wifi.h"
@@ -793,16 +794,13 @@ static void _deviceActionMenu(int idx) {
 
         options.push_back({"Info", [idx]() {
                                NetCutDevice &d = s_devices[idx];
-                               drawMainBorderWithTitle("Device Info");
-                               padprintln("");
-                               padprintln("IP:  " + d.ip.toString());
-                               padprintln("MAC: " + d.macStr);
-                               padprintln("VIP: " + String(d.isVip ? "Yes" : "No"));
-                               padprintln("Cut: " + String(d.isCut ? "Yes" : "No"));
-                               padprintln("Troll: " + String(d.isTroll ? "Yes" : "No"));
-                               padprintln("");
-                               padprintln("Press any key...");
-                               while (!check(AnyKeyPress)) vTaskDelay(pdMS_TO_TICKS(100));
+                               ScrollableTextArea area = ScrollableTextArea("Device Info");
+                               area.addLine("IP:  " + d.ip.toString());
+                               area.addLine("MAC: " + d.macStr);
+                               area.addLine("VIP: " + String(d.isVip ? "Yes" : "No"));
+                               area.addLine("Cut: " + String(d.isCut ? "Yes" : "No"));
+                               area.addLine("Troll: " + String(d.isTroll ? "Yes" : "No"));
+                               area.show();
                            }});
 
         options.push_back({"<< Back", [&stayInMenu]() { stayInMenu = false; }});

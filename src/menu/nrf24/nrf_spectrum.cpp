@@ -40,8 +40,12 @@ String scanChannels(bool web) {
             x, 0, tftHeight - (9 + level), (i % 8) ? TFT_BLACK : RGB565(25, 25, 25)
         );                                                    /// for clearing
         tft.drawFastVLine(x, 0, level, kvxConfig.secColor); /// for top display
-        // show 5 channel gap only
-        if (c % 5 == 0 && c != 0) { tft.drawCentreString(String(c).c_str(), x, tftHeight / 2, 1); }
+        // show 5 channel gap only — dense so mid labels fit under the plot
+        if (c % 5 == 0 && c != 0) {
+            tft.setTextSize(uiDenseFont());
+            tft.drawCentreString(String(c).c_str(), x, tftHeight / 2, 1);
+            tft.setTextSize(FP);
+        }
 
         if (web) {
             if (i > 0) result += ",";
@@ -57,9 +61,10 @@ String scanChannels(bool web) {
 void nrf_spectrum() {
     tft.fillScreen(kvxConfig.bgColor);
     tft.setTextSize(FP);
-    tft.drawString("2.40Ghz", 0, tftHeight - LH);
-    tft.drawCentreString("2.44Ghz", tftWidth / 2, tftHeight - LH, 1);
-    tft.drawRightString("2.48Ghz", tftWidth, tftHeight - LH, 1);
+    const int footY = uiFooterY(FP);
+    tft.drawString("2.40Ghz", 0, footY);
+    tft.drawCentreString("2.44Ghz", tftWidth / 2, footY, 1);
+    tft.drawRightString("2.48Ghz", tftWidth, footY, 1);
 
     if (nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
         NRFradio.setAutoAck(false);

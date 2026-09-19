@@ -744,30 +744,35 @@ bool chooseCmdIrFile(FS *fs, const String &filepath) {
         // loopOptions returned without any lambda running → EscPress was consumed internally
         // Treat it like a back button press
         if (!actionTaken) {
-            // Distinguish short vs long press by checking if button is still held
+            // Distinguish short vs long press by checking if button is still held.
+            // Never drain Esc while G0 Home is sticky — that hangs forever.
+            if (forceHome) {
+                goToMainMenu = true;
+                break;
+            }
             unsigned long pressStart = millis();
             bool longPress = false;
-            while (check(EscPress)) { // button still physically held
+            while (!forceHome && check(EscPress)) { // button still physically held
                 if (millis() - pressStart >= 2000) {
                     longPress = true;
                     break;
                 }
                 delay(10);
             }
-            while (check(EscPress)) delay(10); // wait for release
+            while (!forceHome && check(EscPress)) delay(10); // wait for release
 
-            if (longPress) goToMainMenu = true;
+            if (forceHome || longPress) goToMainMenu = true;
             // Short (or already released): goToMainMenu stays false → back to file browser
             break;
         }
     }
     options.clear();
     resetCodesArray();
-    // Flush any residual EscPress
+    // Flush any residual EscPress (skip while Home sticky)
     delay(100);
-    while (check(EscPress)) delay(10);
+    while (!forceHome && check(EscPress)) delay(10);
 
-    if (!goToMainMenu) {
+    if (!goToMainMenu && !forceHome) {
         // Short press: going back to file browser, NOT to main menu
         // Reset returnToMenu so loopOptions chain doesn't cascade-exit everything
         returnToMenu = false;

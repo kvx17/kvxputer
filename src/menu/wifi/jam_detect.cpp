@@ -75,7 +75,9 @@ static void jd_stop_wifi() {
 static void
 jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, int attackCh) {
     drawMainBorderWithTitle("Jam Detect");
-    tft.setTextSize(FP);
+    // 11 channel rows cannot fit FP body glyphs — keep dense HUD chrome.
+    const int dense = uiDenseFont();
+    tft.setTextSize(dense);
 
     const int x0 = 8;
     int y = 26;
@@ -83,18 +85,19 @@ jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, 
     // status banner
     bool attack = (attackCh >= 0);
     uint16_t sc = attack ? TFT_RED : TFT_GREEN;
-    tft.fillRect(x0, y, tftWidth - 2 * x0, 18, sc);
+    const int bannerH = uiLineH(dense) + 10;
+    tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
     tft.setTextColor(TFT_BLACK, sc);
     String banner = attack ? ("ATTACK ch" + String(attackCh) + "  " + String(dps[attackCh]) + "/s")
                            : "scanning... no jamming";
     tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
-    y += 24;
+    y += bannerH + 6;
 
     // per-channel deauth bars
     const int labelW = 28;
     const int valW = 26;
     const int barX = x0 + labelW;
-    const int bottom = tftHeight - 14;
+    const int bottom = uiFooterY(dense);
     const int rowH = (bottom - y) / JD_NCH;
     const int barW = tftWidth - barX - valW - 6;
     uint32_t scale = thr * 2;
@@ -128,7 +131,7 @@ jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, 
     }
 
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.drawString("scan ch" + String(curCh) + " thr" + String(thr) + "/s  UP/DN  ESC", x0, tftHeight - 12, 1);
+    tft.drawString("scan ch" + String(curCh) + " thr" + String(thr) + "/s  UP/DN  ESC", x0, bottom, 1);
 }
 
 void jam_detect_setup() {

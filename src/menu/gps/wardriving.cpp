@@ -116,6 +116,8 @@ void Wardriving::loop() {
     int count = 0;
     returnToMenu = false;
     while (1) {
+        if (check(EscPress) || returnToMenu || forceHome) return end();
+
         display_banner();
 
         if (GPSserial.available() > 0) {
@@ -151,7 +153,7 @@ void Wardriving::loop() {
 
         unsigned long tmp = millis();
         while (millis() - tmp < MAX_WAIT && !gps.location.isUpdated()) {
-            if (check(EscPress) || returnToMenu) return end();
+            if (check(EscPress) || returnToMenu || forceHome) return end();
             vTaskDelay(50 / portTICK_PERIOD_MS);
         }
     }

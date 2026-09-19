@@ -3,15 +3,29 @@
 #include "root/ui/display.h"
 #include "root/app/utils.h"
 #include "root/scripting/bjs_interpreter/interpreter.h"
+#include "menu/others/calculator.h"
 #include "menu/others/ibutton.h"
 #include "menu/others/mic.h"
 #include "menu/others/qrcode_menu.h"
+#if defined(HAS_NS4168_SPKR)
+#include "menu/others/media_player.h"
+#endif
+#ifndef LITE_VERSION
+#include "menu/others/pda/pda_menu.h"
+#endif
 #if defined(EVIL_EXTENSIONS)
 #include "menu/others/llm_chat/llm_chat.h"
 #endif
 
 void OthersMenu::optionsMenu() {
     options = {
+        {"Calculator",   calculatorApp                },
+#if defined(HAS_NS4168_SPKR)
+        {"Media Player", mediaPlayerApp               },
+#endif
+#ifndef LITE_VERSION
+        {"PDA",          pdaMenu                      },
+#endif
         {"QRCodes",      qrcode_menu                  },
 
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
@@ -27,7 +41,7 @@ void OthersMenu::optionsMenu() {
     };
 
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Others");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Tools");
 }
 
 void OthersMenu::micMenu() {

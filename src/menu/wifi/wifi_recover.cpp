@@ -1032,7 +1032,7 @@ void wifi_crack_handshake(const String &wordlist_path, const String &pcap_path) 
 
     while (!shared.found && !shared.abort) {
 
-        if (check(SelPress)) {
+        if (check(SelPress) || check(EscPress) || forceHome) {
             shared.abort = true;
             g_abortRequested = true;
             padprintln("");

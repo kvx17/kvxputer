@@ -69,8 +69,8 @@ void imsiEapMenu() {
     uint8_t ch = 1;
     unsigned long hop = millis();
     drawMainBorderWithTitle("EAP Identity Sniff");
-    tft.drawString("Not cellular IMSI", 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString("Not cellular IMSI", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         if (millis() - hop > 250) {
@@ -91,7 +91,7 @@ void imsiEapMenu() {
             }
         }
         tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("IDs: " + String((int)seen.size()) + " ch " + String(ch), 10, 56);
+        tft.drawString("IDs: " + String((int)seen.size()) + " ch " + String(ch), 10, uiStatusY(1));
         delay(40);
     }
     esp_wifi_set_promiscuous_rx_cb(nullptr);

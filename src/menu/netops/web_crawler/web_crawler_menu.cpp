@@ -38,8 +38,8 @@ void webCrawlerMenu() {
 
     int hits = 0, tried = 0;
     drawMainBorderWithTitle("Web Crawler");
-    tft.drawString(base, 10, 40);
-    tft.drawString("ESC to stop", 10, tftHeight - 20);
+    tft.drawString(base, 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
     HTTPClient http;
     http.setTimeout(2500);
@@ -61,8 +61,8 @@ void webCrawlerMenu() {
         }
         if (tried % 3 == 0) {
             tft.fillRect(10, 56, tftWidth - 20, 32, kvxConfig.bgColor);
-            tft.drawString("Tried " + String(tried) + "  hits " + String(hits), 10, 56);
-            tft.drawString(path, 10, 72);
+            tft.drawString("Tried " + String(tried) + "  hits " + String(hits), 10, uiStatusY(1));
+            tft.drawString(path, 10, uiStatusY(2));
         }
         delay(20);
     }

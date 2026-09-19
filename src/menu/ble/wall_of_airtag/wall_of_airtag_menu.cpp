@@ -160,9 +160,9 @@ void wallOfAirtagMenu() {
             return a.rssi > b.rssi;
         });
 
-        const int rowH = 22;
+        const int rowH = 2 * uiLineH(FP) + 4;
         const int startY = 44;
-        const int visible = max(1, (tftHeight - startY - 16) / rowH);
+        const int visible = max(1, (uiFooterY(FP) - startY) / rowH);
         if (scroll > (int)hits.size() - visible) scroll = max(0, (int)hits.size() - visible);
         if (scroll < 0) scroll = 0;
 
@@ -183,7 +183,7 @@ void wallOfAirtagMenu() {
                 tft.setTextColor(DEFAULT_SECCOLOR, kvxConfig.bgColor);
                 String l1 = String(idx + 1) + " " + shortMac(h.mac) + "  " + String(h.rssi) + "dBm ~" +
                             String(approxMeters(h.rssi), 1) + "m";
-                int nchars = max(1, (tftWidth - 14) / (FP * LW));
+                int nchars = max(1, (tftWidth - 14) / uiCharW(FP));
                 if ((int)l1.length() > nchars) l1 = l1.substring(0, nchars);
                 tft.drawString(l1, 8, y);
                 tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
@@ -191,7 +191,7 @@ void wallOfAirtagMenu() {
                             (h.separated ? "  sep" : "  near") + (h.randomAddr ? "  rnd" : "  pub");
                 if (h.keyPrefix.length()) l2 += "  " + h.keyPrefix;
                 if ((int)l2.length() > nchars) l2 = l2.substring(0, nchars);
-                tft.drawString(l2, 8, y + 10);
+                tft.drawString(l2, 8, y + uiLineH(FP) + 2);
             }
         }
         delay(30);

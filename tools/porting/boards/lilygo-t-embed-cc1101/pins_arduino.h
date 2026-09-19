@@ -49,7 +49,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define PIN_POWER_ON 15
 
 // Font Sizes
-#define FP 1
+#define FP 2
 #define FM 2
 #define FG 3
 
@@ -223,7 +223,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define PIN_POWER_ON 46
 
 // Font Sizes#
-#define FP 1
+#define FP 2
 #define FM 2
 #define FG 3
 

@@ -16,9 +16,11 @@
 #define LED_EFFECT_RAINBOW_BREATHE 7
 #define LED_EFFECT_DISCO 8
 #define LED_EFFECT_FIRE 9
+#define LED_EFFECT_BATTERY_STATUS 10
 
 CRGB hsvToRgb(uint16_t h, uint8_t s, uint8_t v);
 uint32_t alterOneColorChannel(uint32_t color, uint16_t newR, uint16_t newG, uint16_t newB);
+CRGB batteryStatusLedColor(int percent);
 
 void beginLed();
 void blinkLed(int blinkTime = 50);
@@ -50,6 +52,7 @@ void ledBootTick(bool purple);
 void ledRestoreStatus();
 int ledGetStatus();
 void ledSuppressStatus(bool suppress);
+bool ledIsStatusSuppressed();
 void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright);
 
 #else
@@ -59,6 +62,8 @@ inline void ledBootTick(bool purple) { (void)purple; }
 inline void ledRestoreStatus() {}
 inline int ledGetStatus() { return 1; }
 inline void ledSuppressStatus(bool suppress) { (void)suppress; }
+inline bool ledIsStatusSuppressed() { return false; }
+inline void ledEffects(bool enable) { (void)enable; }
 inline void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
     (void)r;
     (void)g;

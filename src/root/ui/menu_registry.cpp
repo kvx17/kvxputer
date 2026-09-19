@@ -25,7 +25,7 @@ const MenuDescriptor kMenus[] = {
     {"scripts",   "Scripts",   &mainMenu.scriptsMenu,  MENU_FLAG_LITE_EXCLUDED | MENU_FLAG_SCRIPTS},
     {"clock",     "Clock",     &mainMenu.clockMenu,    MENU_FLAG_NONE},
     {"charge",    "Charge",    &mainMenu.chargeMenu,   MENU_FLAG_NONE},
-    {"others",    "Others",    &mainMenu.othersMenu,   MENU_FLAG_NONE},
+    {"others",    "Tools",     &mainMenu.othersMenu,   MENU_FLAG_NONE},
     {"modules",   "Modules",   &mainMenu.modulesMenu,  MENU_FLAG_NONE},
     {"config",    "Config",    &mainMenu.configMenu,   MENU_FLAG_NONE},
 };

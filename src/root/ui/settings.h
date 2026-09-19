@@ -18,6 +18,8 @@ void setBrightnessMenu();
 
 void setUIColor();
 
+void setAccentColor();
+
 bool setCustomUIColorMenu();
 
 void setCustomUIColorChoiceMenu(int colorType);

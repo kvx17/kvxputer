@@ -1126,7 +1126,7 @@ static void sendDeauthNow() {
         }
     }
     if (deauth_sent) {
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* Deauth flash toast stays dense */;
         tft.setTextDatum(0);
         tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
         deauth_displayed = true;
@@ -1422,13 +1422,13 @@ void sniffer_setup() {
                     ) +
                     String(all_wifi_channels[ch]) + " (Next)",
                 tftWidth - 10,
-                tftHeight - 18,
+                uiFooterY(FP),
                 1
             );
             tft.drawString(
-                " EAPOL: " + String(num_EAPOL) + " HS: " + String(num_HS) + " ", 10, tftHeight - 18
+                " EAPOL: " + String(num_EAPOL) + " HS: " + String(num_HS) + " ", 10, uiFooterY(FP)
             );
-            tft.drawCentreString("Packets " + String(packet_counter), tftWidth / 2, tftHeight - 26, 1);
+            tft.drawCentreString("Packets " + String(packet_counter), tftWidth / 2, uiFooterY(FP) - uiLineH(FP), 1);
         }
 
         if (currentTime - lastTime > 100) tft.drawPixel(0, 0, 0);

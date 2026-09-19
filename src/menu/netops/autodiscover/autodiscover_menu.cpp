@@ -32,7 +32,7 @@ void autodiscoverMenu() {
         "<Message>Invalid Request</Message></Error></Response></Autodiscover>";
     drawMainBorderWithTitle("Autodiscover");
     tft.drawString("AP " + ssid + " " + apIP.toString(), 8, 40);
-    tft.drawString("ESC to stop", 8, tftHeight - 20);
+    tft.drawString("ESC to stop", 8, uiFooterY(FP));
     EscPress = false;
     while (!check(EscPress) && !returnToMenu) {
         dns.processNextRequest();

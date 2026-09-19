@@ -266,6 +266,28 @@ void tft_logger::fillScreen(int32_t color) {
     BRUCE_TFT_DRIVER::fillScreen(color);
 }
 
+bool tft_logger::beginFrame() {
+#if defined(HAS_SCREEN)
+    return BRUCE_TFT_DRIVER::beginFrame();
+#else
+    return false;
+#endif
+}
+
+void tft_logger::endFrame() {
+#if defined(HAS_SCREEN)
+    BRUCE_TFT_DRIVER::endFrame(!isSleeping);
+#endif
+}
+
+bool tft_logger::isFraming() const {
+#if defined(HAS_SCREEN)
+    return BRUCE_TFT_DRIVER::isFraming();
+#else
+    return false;
+#endif
+}
+
 void tft_logger::imageToBin(uint8_t fs, String file, int x, int y, bool center, int Ms) {
     if (!logging) return;
     if (!log || !images) return;

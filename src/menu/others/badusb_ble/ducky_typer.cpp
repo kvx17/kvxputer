@@ -591,6 +591,7 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
                 returnToMenu = true;
                 return;
             }
+            uiRamEnterHeavy();
 
             // Set function-specific MAC address (Logitech OUIs)
             if (functionId >= 0 && functionId < 5) {
@@ -905,7 +906,7 @@ void key_input(FS fs, const String &bad_script, HIDInterface *_hid) {
                         delay(50);
                     }
                     printStatusBadUSBBLE("Running");
-                    tft.setTextSize(1);
+                    tft.setTextSize(FP);
                 } else if (PriCmd->type == DuckyCommandType_Delay) {
                     if ((int)PriCmd->key > 0) delay(DEF_DELAY);
                     else {
@@ -1423,9 +1424,9 @@ void PresenterMode(HIDInterface *&hid, bool ble) {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         tft.drawCentreString("Time", tftWidth / 2, tftHeight / 2 + 15, 1);
 
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()); // presenter footer chrome
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, tftHeight - 15, 1);
+        tft.drawCentreString("<< PREV | SEL | NEXT >>", tftWidth / 2, uiFooterY(uiDenseFont()), 1);
     };
 
     auto updateSlideDisplay = [&]() {

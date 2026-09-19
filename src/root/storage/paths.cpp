@@ -76,6 +76,8 @@ const char *configPath(FS &fs) {
     return CONF;
 }
 
+const char *userSettingsPath() { return USER_SETTINGS; }
+
 const char *bootSoundPath(FS &fs) {
     if (fs.exists(BOOT_SOUND)) return BOOT_SOUND;
     if (fs.exists(BOOT_SOUND_LEGACY)) return BOOT_SOUND_LEGACY;

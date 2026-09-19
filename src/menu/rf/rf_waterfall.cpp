@@ -87,7 +87,7 @@ void rf_waterfall_run() {
             int x = i * (screen_width / 4);
             float f_freq = f_start + (f_end - f_start) * i / 4.0;
             tft.setCursor(x, 0);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Waterfall overlay chrome stays dense */;
 
             if (i == 0 && selected_item == 0) {
                 tft.setTextColor(TFT_PINK, TFT_BLACK);
@@ -169,9 +169,11 @@ void rf_waterfall_run() {
                     case 1: f_end -= step; break;
                     case 2: return;
                 }
+                if (forceHome) return;
                 if (EscPress) EscPress = false; // Reset for StickCs
                 delay(100);
             }
+            if (forceHome || check(EscPress)) return;
         }
         tft.drawPixel(0, 0, 0); // Cardputer Case, need to call something to the tft.
         tft.pushImage(0, current_line, screen_width, 1, frameBuffer);
@@ -182,7 +184,7 @@ void rf_waterfall_run() {
             max_freq = temp_max_freq;
             tft.fillRect(0, 10, screen_width, 10, TFT_BLACK);
             tft.setCursor(3, 10);
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* Waterfall overlay chrome stays dense */;
             tft.setTextColor(TFT_YELLOW, TFT_BLACK);
             tft.printf("%d dBm @ %.3f", max_rssi, max_freq);
 
@@ -201,7 +203,7 @@ void rf_waterfall_run() {
             tft.print("EXIT");
         }
 
-        if (check(EscPress)) break;
+        if (check(EscPress) || forceHome) break;
 
         current_line++;
         if (current_line >= screen_height) current_line = display_top;

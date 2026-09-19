@@ -16,6 +16,7 @@
 #include "HFP_Exploit.h"
 #include "ble_common.h"
 #include "root/ui/display.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/hal/radio_mem.h"
 #include "root/app/utils.h"
@@ -304,6 +305,7 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
         displayError("Low RAM: free WiFi/SD first", true);
         return false;
     }
+    uiRamEnterHeavy();
 
     std::string nameStr = name.c_str();
     NimBLEDevice::init(nameStr);
@@ -3021,7 +3023,7 @@ String selectFileFromSD() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - strlen("SD CARD FILES") * 12) / 2, 15);
             tft.print("SD CARD FILES");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
             tft.setCursor(20, 40);
@@ -3155,7 +3157,7 @@ String getScriptFromUser() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - strlen("SELECT SCRIPT") * 12) / 2, 15);
             tft.print("SELECT SCRIPT");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < scriptCount; i++) {
                 int scriptIdx = scrollOffset + i;
@@ -4194,7 +4196,7 @@ String selectTargetFromScan(const char *title) {
     }
     tft.setCursor(10, 15);
     tft.print(titleStr);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setCursor(20, 60);
     tft.print("Scanning for devices...");
@@ -4299,7 +4301,7 @@ String selectTargetFromScan(const char *title) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("NO DEVICES")) / 2, 15);
         tft.print("NO DEVICES");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setCursor(20, 60);
         tft.print("No BLE devices found!");
         tft.setCursor(20, 80);
@@ -4356,7 +4358,7 @@ String selectTargetFromScan(const char *title) {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("SELECT DEVICE")) / 2, 15);
             tft.print("SELECT DEVICE");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
             tft.setCursor(20, 40);
@@ -4473,61 +4475,69 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
     int maxVisibleItems = (tftHeight - menuStartY - 50) / menuItemHeight;
     if (maxVisibleItems > (int)deviceCount) maxVisibleItems = deviceCount;
 
+    bool redraw = true;
     while (!exitMenu) {
-        tft.fillScreen(kvxConfig.bgColor);
-        tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-        TouchFooter();
+        if (forceHome) {
+            targets.clear();
+            return "";
+        }
+        if (redraw) {
+            tft.fillScreen(kvxConfig.bgColor);
+            tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
+            TouchFooter();
 
-        tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
-        tft.setTextSize(2);
-        tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-        tft.print(title);
-        tft.setTextSize(1);
+            tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
+            tft.setTextSize(2);
+            tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
+            tft.print(title);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
-        tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
-        tft.setCursor(20, 40);
-        tft.print("Selected: ");
-        tft.print(targets.size());
-        tft.print("/");
-        tft.print(deviceCount);
+            tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
+            tft.setCursor(20, 40);
+            tft.print("Selected: ");
+            tft.print(targets.size());
+            tft.print("/");
+            tft.print(deviceCount);
 
-        for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < (int)deviceCount; i++) {
-            int idx = scrollOffset + i;
-            int yPos = menuStartY + (i * menuItemHeight);
-            if (yPos + menuItemHeight > tftHeight - 45) break;
+            for (int i = 0; i < maxVisibleItems && (scrollOffset + i) < (int)deviceCount; i++) {
+                int idx = scrollOffset + i;
+                int yPos = menuStartY + (i * menuItemHeight);
+                if (yPos + menuItemHeight > tftHeight - 45) break;
 
-            if (idx == currentIndex) {
-                tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
-                tft.setTextColor(TFT_BLACK, TFT_WHITE);
-                tft.setCursor(25, yPos + 8);
-                tft.print(selected[idx] ? "[X] " : "[ ] ");
-            } else {
-                tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, kvxConfig.bgColor);
-                tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
-                tft.setCursor(25, yPos + 8);
-                tft.print(selected[idx] ? "[X] " : "[ ] ");
+                if (idx == currentIndex) {
+                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, TFT_WHITE);
+                    tft.setTextColor(TFT_BLACK, TFT_WHITE);
+                    tft.setCursor(25, yPos + 8);
+                    tft.print(selected[idx] ? "[X] " : "[ ] ");
+                } else {
+                    tft.fillRect(20, yPos, tftWidth - 40, menuItemHeight - 3, kvxConfig.bgColor);
+                    tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
+                    tft.setCursor(25, yPos + 8);
+                    tft.print(selected[idx] ? "[X] " : "[ ] ");
+                }
+
+                String display = snapshot->names[idx] + " | " + snapshot->addresses[idx];
+                if (display.length() > 25) display = display.substring(0, 22) + "...";
+                tft.print(display);
             }
 
-            String display = snapshot->names[idx] + " | " + snapshot->addresses[idx];
-            if (display.length() > 25) display = display.substring(0, 22) + "...";
-            tft.print(display);
+            if (deviceCount > (size_t)maxVisibleItems) {
+                tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
+                tft.setCursor(tftWidth - 25, menuStartY + 5);
+                if (scrollOffset > 0) tft.print("^");
+                tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
+                if (scrollOffset + maxVisibleItems < (int)deviceCount) tft.print("v");
+            }
+
+            tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
+            tft.setCursor(20, tftHeight - 30);
+            tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select");
+            tft.setCursor(20, tftHeight - 20);
+            tft.print("ESC: Back");
+            redraw = false;
         }
 
-        if (deviceCount > (size_t)maxVisibleItems) {
-            tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-            tft.setCursor(tftWidth - 25, menuStartY + 5);
-            if (scrollOffset > 0) tft.print("^");
-            tft.setCursor(tftWidth - 25, menuStartY + (maxVisibleItems * menuItemHeight) - 20);
-            if (scrollOffset + maxVisibleItems < (int)deviceCount) tft.print("v");
-        }
-
-        tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
-        tft.setCursor(20, tftHeight - 30);
-        tft.print("SEL: Toggle  NEXT: Confirm  PREV: Select");
-        tft.setCursor(20, tftHeight - 20);
-        tft.print("ESC: Back");
-
-        if (check(EscPress)) {
+        if (check(EscPress) || forceHome) {
             delay(200);
             exitMenu = true;
             targets.clear();
@@ -4541,6 +4551,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                 currentIndex = deviceCount - 1;
                 scrollOffset = std::max(0, (int)deviceCount - maxVisibleItems);
             }
+            redraw = true;
         } else if (check(NextPress)) {
             delay(150);
             if (currentIndex < (int)deviceCount - 1) {
@@ -4551,6 +4562,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                 currentIndex = 0;
                 scrollOffset = 0;
             }
+            redraw = true;
         } else if (check(SelPress)) {
             delay(200);
             selected[currentIndex] = !selected[currentIndex];
@@ -4566,6 +4578,7 @@ String selectMultipleTargetsFromScan(const char *title, std::vector<NimBLEAddres
                     }
                 }
             }
+            redraw = true;
         }
         delay(50);
     }
@@ -4950,7 +4963,7 @@ void BleSuiteMenu() {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
             tft.print("BLE SUITE");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             for (int i = 0; i < maxVisible && (scrollOffset + i) < MENU_ITEMS; i++) {
                 int idx = scrollOffset + i;
@@ -5099,7 +5112,7 @@ int showSubMenu(const char *title, const char *options[], int optionCount) {
     tft.setTextWrap(true, true);
     tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
     tft.print(title);
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     int selected = 0, scrollOffset = 0;
     int lastSelected = -1, lastScrollOffset = -1;
@@ -5793,7 +5806,7 @@ void runAudioControlTest(NimBLEAddress target) {
             tft.setTextSize(2);
             tft.setCursor((tftWidth - tft.textWidth("AUDIO CONTROL TEST")) / 2, 15);
             tft.print("AUDIO CONTROL TEST");
-            tft.setTextSize(1);
+            tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
             tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
             tft.setCursor(20, 60);
@@ -5959,7 +5972,7 @@ void showAttackProgress(const char *message, uint16_t color) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 15);
     tft.print("BLE SUITE");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setTextColor(color, kvxConfig.bgColor);
 
@@ -5974,7 +5987,7 @@ void showAttackProgress(const char *message, uint16_t color) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msg.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6012,7 +6025,7 @@ void showAttackResult(bool success, const char *message) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
         tft.print("SUCCESS");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setTextColor(TFT_BLACK, TFT_GREEN);
     } else {
         tft.fillScreen(TFT_RED);
@@ -6022,7 +6035,7 @@ void showAttackResult(bool success, const char *message) {
         tft.setTextSize(2);
         tft.setCursor((tftWidth - tft.textWidth("FAILED")) / 2, 15);
         tft.print("FAILED");
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
         tft.setTextColor(TFT_WHITE, TFT_RED);
     }
 
@@ -6040,7 +6053,7 @@ void showAttackResult(bool success, const char *message) {
             int end = start;
             int lastSpace = -1;
 
-            while (end < len && (end - start) * 6 < maxWidth) {
+            while (end < len && (end - start) * LW < maxWidth) {
                 if (msg.charAt(end) == ' ') lastSpace = end;
                 end++;
             }
@@ -6079,7 +6092,7 @@ bool confirmAttack(const char *targetName) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("CONFIRM ATTACK")) / 2, 15);
     tft.print("CONFIRM ATTACK");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setCursor(20, 60);
     tft.print("Target: ");
@@ -6115,7 +6128,7 @@ bool requireSimpleConfirmation(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("CONFIRM")) / 2, 15);
     tft.print("CONFIRM");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.fillRect(20, 50, tftWidth - 40, 80, kvxConfig.bgColor);
     tft.setCursor(20, 60);
@@ -6131,7 +6144,7 @@ bool requireSimpleConfirmation(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6180,7 +6193,7 @@ int8_t showAdaptiveMessage(
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("MESSAGE")) / 2, 15);
     tft.print("MESSAGE");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
 
     tft.setTextColor(color, kvxConfig.bgColor);
 
@@ -6195,7 +6208,7 @@ int8_t showAdaptiveMessage(
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (lineStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6274,7 +6287,7 @@ void showWarningMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("WARNING")) / 2, 15);
     tft.print("WARNING");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_BLACK, TFT_YELLOW);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_YELLOW);
 
@@ -6289,7 +6302,7 @@ void showWarningMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6328,7 +6341,7 @@ void showErrorMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("ERROR")) / 2, 15);
     tft.print("ERROR");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_WHITE, TFT_RED);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_RED);
 
@@ -6343,7 +6356,7 @@ void showErrorMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6381,7 +6394,7 @@ void showSuccessMessage(const char *message) {
     tft.setTextSize(2);
     tft.setCursor((tftWidth - tft.textWidth("SUCCESS")) / 2, 15);
     tft.print("SUCCESS");
-    tft.setTextSize(1);
+    tft.setTextSize(uiDenseFont()) /* BLE Suite custom HUD density */;
     tft.setTextColor(TFT_BLACK, TFT_GREEN);
     tft.fillRect(20, 60, tftWidth - 40, 100, TFT_GREEN);
 
@@ -6396,7 +6409,7 @@ void showSuccessMessage(const char *message) {
         int end = start;
         int lastSpace = -1;
 
-        while (end < len && (end - start) * 6 < maxWidth) {
+        while (end < len && (end - start) * LW < maxWidth) {
             if (msgStr.charAt(end) == ' ') lastSpace = end;
             end++;
         }
@@ -6429,64 +6442,10 @@ void showSuccessMessage(const char *message) {
 void showDeviceInfoScreen(
     const char *title, const std::vector<String> &lines, uint16_t bgColor, uint16_t textColor
 ) {
-    tft.fillScreen(bgColor);
-    TouchFooter();
-    tft.drawRect(5, 5, tftWidth - 10, tftHeight - 10, TFT_WHITE);
-
-    tft.setTextColor(TFT_WHITE, bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth(title)) / 2, 15);
-    tft.print(title);
-    tft.setTextSize(1);
-
-    tft.setTextColor(textColor, bgColor);
-    int yPos = 60;
-    int lineHeight = 20;
-    int maxLines = 8;
-
-    for (int i = 0; i < std::min((int)lines.size(), maxLines); i++) {
-        if (yPos + lineHeight > tftHeight - 45) break;
-
-        String displayLine = lines[i];
-        int maxWidth = tftWidth - 40;
-        int lineY = yPos;
-        int start = 0;
-        int len = displayLine.length();
-
-        while (start < len) {
-            int end = start;
-            int lastSpace = -1;
-
-            while (end < len && (end - start) * 6 < maxWidth) {
-                if (displayLine.charAt(end) == ' ') lastSpace = end;
-                end++;
-            }
-
-            if (end == len || lastSpace == -1) {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, end));
-                start = end;
-            } else {
-                tft.setCursor(20, lineY);
-                tft.print(displayLine.substring(start, lastSpace));
-                start = lastSpace + 1;
-            }
-            lineY += lineHeight;
-            if (lineY > tftHeight - 45) break;
-        }
-        yPos = lineY;
-    }
-
-    tft.setTextColor(TFT_BLACK, bgColor);
-    tft.setCursor(20, tftHeight - 35);
-    tft.print("Press any key to continue...");
-
-    while (true) {
-        if (check(EscPress) || check(SelPress) || check(PrevPress) || check(NextPress)) {
-            delay(200);
-            return;
-        }
-        delay(50);
-    }
+    (void)bgColor;
+    (void)textColor;
+    ScrollableTextArea area = ScrollableTextArea(title ? String(title) : String("INFO"));
+    for (const auto &line : lines) area.addLine(line);
+    area.show();
 }
 #endif

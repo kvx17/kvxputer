@@ -119,14 +119,14 @@ void RFJammer::display_banner() {
     drawMainBorderWithTitle("RF JAMMER");
 
     int y = BORDER_PAD_Y + FM * LH + 4;
-    int lineH = max(14, tftHeight / 10);
+    int lineH = max(uiLineH(FP) + 2, tftHeight / 10);
     tft.setTextSize(FP);
     char buf[40];
     uint16_t accent = getComplementaryColor2(kvxConfig.priColor);
 
     // Line 1: Mode badge (centered, accent rounded rect)
     const char *modeName = JAM_MODE_NAMES[jamMode];
-    int mbW = strlen(modeName) * 6 + 10;
+    int mbW = strlen(modeName) * uiCharW(FP) + 10;
     int mbX = (tftWidth - mbW) / 2;
     tft.fillRoundRect(mbX, y, mbW, lineH - 2, 3, accent);
     tft.setTextColor(kvxConfig.bgColor, accent);
@@ -139,7 +139,7 @@ void RFJammer::display_banner() {
     snprintf(buf, sizeof(buf), "%.2f MHz", kvxConfigPins.rfFreq);
     tft.drawString(buf, 12, y + 2, 1);
     const char *modStr = isCC1101 ? "CC1101" : "RAW TX";
-    int mdW = strlen(modStr) * 6 + 8;
+    int mdW = strlen(modStr) * uiCharW(FP) + 8;
     int mdX = tftWidth - 12 - mdW;
     tft.fillRoundRect(mdX, y + 1, mdW, lineH - 3, 3, kvxConfig.priColor);
     tft.setTextColor(kvxConfig.bgColor, kvxConfig.priColor);

@@ -204,7 +204,7 @@ JSValue native_dialogViewText(JSContext *ctx, JSValue *this_val, int argc, JSVal
         tft.setTextSize(FP);
     }
     ScrollableTextArea area = ScrollableTextArea(
-        1, 10, padY, tftWidth - 2 * BORDER_PAD_X, tftHeight - BORDER_PAD_X - padY, false, true
+        FP, 10, padY, tftWidth - 2 * BORDER_PAD_X, tftHeight - BORDER_PAD_X - padY, false, true
     );
     JSCStringBuf sb;
     const char *s = JS_ToCString(ctx, argv[0], &sb);
@@ -316,7 +316,7 @@ JSValue native_dialogCreateTextViewerClose(JSContext *ctx, JSValue *this_val, in
 JSValue native_dialogCreateTextViewer(JSContext *ctx, JSValue *this_val, int argc, JSValue *argv) {
     if (argc < 1 || !JS_IsString(ctx, argv[0])) return JS_ThrowTypeError(ctx, "TextViewer requires text");
 
-    uint8_t fontSize = 1;
+    uint8_t fontSize = FP;
     int16_t startX = 10;
     int16_t startY = 10;
     int32_t width = tftWidth - 10;

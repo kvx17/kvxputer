@@ -40,7 +40,7 @@ void cctvMenu() {
         IPAddress ip(gw[0], gw[1], gw[2], i);
         String url = "http://" + ip.toString();
         tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString(url, 10, 40);
+        tft.drawString(url, 10, uiStatusY(0));
         if (!http.begin(url + "/")) continue;
         int code = http.GET();
         http.end();

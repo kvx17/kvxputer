@@ -137,6 +137,21 @@ static const uint8_t kPresenterHid[] = {
 static constexpr int kPresenterNext = 1;
 static constexpr int kPresenterF5 = 10;
 
+static int presenterArrowAction(char c, bool vertical) {
+    if (vertical) {
+        if (c == '/') return 0;
+        if (c == ',') return 1;
+        if (c == ';') return 2;
+        if (c == '.') return 3;
+    } else {
+        if (c == ';') return 0;
+        if (c == '.') return 1;
+        if (c == ',') return 2;
+        if (c == '/') return 3;
+    }
+    return -1;
+}
+
 #if defined(HAS_KEYBOARD)
 static char presenterLastToken = 0;
 static unsigned long presenterLastFire = 0;
@@ -149,7 +164,7 @@ static void presenterResetInputState() {
 }
 
 // Rising-edge only — level polling was spamming "," when a matrix/key state stuck.
-static int presenterPollDirectKey() {
+static int presenterPollDirectKey(bool vertical) {
     Keyboard.update();
     Keyboard_Class::KeysState status = Keyboard.keysState();
 
@@ -167,10 +182,10 @@ static int presenterPollDirectKey() {
     };
 
     if (status.fn) {
-        consider(';', 0, 0);
-        consider('.', 1, 1);
-        consider(',', 2, 2);
-        consider('/', 3, 3);
+        consider(';', presenterArrowAction(';', vertical), 0);
+        consider('.', presenterArrowAction('.', vertical), 1);
+        consider(',', presenterArrowAction(',', vertical), 2);
+        consider('/', presenterArrowAction('/', vertical), 3);
     } else if (status.enter) {
         nowHeld |= (1u << 4);
         if (!(presenterHeldMask & (1u << 4))) {
@@ -188,7 +203,11 @@ static int presenterPollDirectKey() {
             {'[', 5, 10}, {']', 6, 11}, {'h', 7, 12}, {'H', 7, 12}, {'e', 8, 13},
             {'E', 8, 13}, {'p', 9, 14}, {'P', 9, 14}, {'5', kPresenterF5, 15},
         };
-        for (const auto &m : kMap) consider(m.ch, m.act, m.bit);
+        for (const auto &m : kMap) {
+            int act = m.act;
+            if (act <= 3) act = presenterArrowAction(m.ch, vertical);
+            consider(m.ch, act, m.bit);
+        }
     }
 
     presenterHeldMask = nowHeld;
@@ -245,6 +264,7 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -261,7 +281,7 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
         int sent = -1;
 #if defined(HAS_KEYBOARD)
         // Cardputer: rising-edge key poll only (no Prev/Next flags)
-        sent = presenterPollDirectKey();
+        sent = presenterPollDirectKey(vertical);
 #else
         if (check(UpPress)) sent = 0;
         else if (check(DownPress)) sent = 1;
@@ -283,10 +303,8 @@ static bool runPresenterLoop(HidRemoteTransportSession &s, bool vertical) {
                 if (key.enter) sent = kPresenterNext;
                 else {
                     char c = strokeChar(key);
-                    if (c == ';') sent = 0;
-                    else if (c == '.') sent = 1;
-                    else if (c == ',') sent = 2;
-                    else if (c == '/') sent = 3;
+                    int arrowAct = presenterArrowAction(c, vertical);
+                    if (arrowAct >= 0) sent = arrowAct;
                     else if (c == ' ') sent = 4;
                     else if (c == '[') sent = 5;
                     else if (c == ']') sent = 6;
@@ -521,6 +539,7 @@ static bool runKeyboard(HidRemoteTransportSession &s) {
     redrawKb();
 
     while (true) {
+        if (forceHome) break;
         if (fnLayer && fnFlash && millis() > fnFlashUntil) {
             fnFlash = 0;
             dirty = true;
@@ -768,6 +787,7 @@ static bool runMediaLayout(HidRemoteTransportSession &s, const char *title) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -818,6 +838,7 @@ static bool runMouse(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -934,6 +955,7 @@ static bool runShorts(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         if (flashId >= 0 && millis() > flashUntil) {
             flashId = -1;
             draw();
@@ -1012,7 +1034,7 @@ static bool runShorts(HidRemoteTransportSession &s) {
 static void drawClickerPanel(bool running, unsigned long clicks, bool full) {
     if (full) {
         hidClearContentArea();
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
         tft.drawString("Delay (-/=): " + String(kvxConfig.hidRemoteClickerDelay) + "ms", 8, 32);
         const char *btn = "LEFT";
@@ -1041,6 +1063,7 @@ static bool runClicker(HidRemoteTransportSession &s) {
     hidRemoteDrawFooter("fn+Ok back");
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
@@ -1077,7 +1100,7 @@ static bool runClicker(HidRemoteTransportSession &s) {
 static void drawJigglerPanel(bool stealth, bool running, bool full) {
     if (full) {
         hidClearContentArea();
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
         if (stealth) {
             tft.drawString("Min (-/=): " + String(kvxConfig.hidRemoteStealthMin) + "s", 8, 32);
@@ -1101,6 +1124,7 @@ static bool runJiggler(HidRemoteTransportSession &s, bool stealth) {
     hidRemoteDrawFooter("fn+Ok back");
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
@@ -1165,6 +1189,7 @@ static bool runPushToTalk(HidRemoteTransportSession &s) {
     draw();
 
     while (true) {
+        if (forceHome) break;
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
