@@ -143,6 +143,12 @@ void tft_display::endFrame(bool present) {
     if (canvasInInternalRam()) releaseCanvas();
 }
 
+void tft_display::abortFrame() {
+    _frameDepth = 0;
+    _buffering = false;
+    resetDirty();
+}
+
 void tft_display::setRotation(uint8_t r) {
     TFT_eSPI::setRotation(r);
     if (_fb) _fb->deleteSprite();

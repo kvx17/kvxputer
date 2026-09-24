@@ -1,6 +1,9 @@
 #include "save.h"
 #include "root/storage/paths.h"
+#include "root/storage/sd_functions.h"
+
 bool rf_raw_save(RawRecording recorded) {
+    setupSdCard();
     FS *fs = nullptr;
     if (!getFsStorage(fs) || fs == nullptr) {
         displayError("No space left on device", true);
@@ -10,11 +13,10 @@ bool rf_raw_save(RawRecording recorded) {
     char filename[32];
     int index = 0;
 
+    kvx::paths::ensureDir(*fs, kvx::paths::RF_PRESETS);
     if (!fs->exists(kvx::paths::RF_PRESETS)) {
-        if (!fs->mkdir(kvx::paths::RF_PRESETS)) {
-            displayError("Error creating directory", true);
-            return false;
-        }
+        displayError("Error creating directory", true);
+        return false;
     }
 
     do {

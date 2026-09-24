@@ -8,7 +8,7 @@ Infrared → kvxputer universal remote:
 
 | Entry | Action |
 |-------|--------|
-| Learn Remote | New or update a named profile |
+| Learn Remote | Warns that ADV needs an IR RX module (OK continues / Esc cancels); then new or update a named profile |
 | Use Remote | Pad control for a saved profile |
 | Browse IR | SD / LittleFS / Recent `.ir` picker (same as Custom IR: Choose cmd / Spam all) |
 | Delete Remote | Remove a profile |

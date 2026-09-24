@@ -156,6 +156,21 @@ Notes:
 - G0 is also used for flashing: hold G0 while plugging USB if upload fails (bootloader mode).
 - StickS3 does not use this Cardputer G0 fake-off / force-home path; see [M5StickS3](#m5sticks3) for its tap/hold button map.
 
+### Home grid keyboard
+
+On the main channel grid (Cardputer / Adv):
+
+| Keys | What happens |
+|------|----------------|
+| **FN + `;`** | Brightness up 5% (5–100%) |
+| **FN + `.`** | Brightness down 5% (5–100%) |
+| **FN + `,`** | Volume down 5% (0–100) |
+| **FN + `/`** | Volume up 5% (beep at the new level) |
+| **FN + Space** | Mute (volume 0%) |
+| **backtick + Ctrl + Backspace + Space** (all four held) | Open **Mainscreen Shortcuts** |
+
+`;` `.` `,` `/` without FN still move the tile cursor. App letter shortcuts are unchanged.
+
 ---
 
 ## Modules & Add-ons
@@ -543,7 +558,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 | Tool | Purpose |
 |------|---------|
 | **Clock** | Full-screen clock; submenu opens Timer. |
-| **Charge** | Charge-friendly UI with restrained input. Sleep (S / Down / G0) blanks the panel; LED stays on at ~20% brightness showing battery color (purple at 95–100%). |
+| **Charge** | Charge-friendly UI. Up/Down steps panel brightness 0–100% (0% blanks the panel). LED stays a solid 20% battery color unless L toggles it off. S / G0 sleep the panel only. USB + charge switch off shows “Flip the charge switch”. |
 
 ### Config
 

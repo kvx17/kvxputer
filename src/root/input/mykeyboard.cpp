@@ -1398,6 +1398,20 @@ bool __attribute__((weak)) isCardputerKeyHeld(char c) {
     return false;
 }
 
+bool __attribute__((weak)) isFnKeyHeld(void) { return KeyStroke.fn; }
+
+bool __attribute__((weak)) isSystemShortcutChordHeld(void) {
+    if (!KeyStroke.pressed || !KeyStroke.ctrl || !KeyStroke.del) return false;
+    bool tick = false;
+    bool space = false;
+    for (char c : KeyStroke.word) {
+        const uint8_t u = (uint8_t)c;
+        if (c == '`' || u == 0xB1) tick = true;
+        if (c == ' ') space = true;
+    }
+    return tick && space;
+}
+
 void goToDeepSleep() {
 #if DEEPSLEEP_WAKEUP_PIN >= 0
 

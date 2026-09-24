@@ -9,12 +9,14 @@
 #include "wardriving.h"
 #include "root/storage/paths.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/sd_functions.h"
 #include "root/net/wifi_common.h"
 #include "current_year.h"
 #include "menu/ble/ble_common.h"
 #include <cctype>
+#include <vector>
 
 #define MAX_WAIT 5000
 
@@ -59,7 +61,7 @@ void Wardriving::setup() {
     PPM.enableOTG();
 #endif
     display_banner();
-    padprintln("Initializing...");
+    displayTextLine("Initializing...");
 
     loadAlertMACs();
     begin_wifi();
@@ -83,7 +85,7 @@ bool Wardriving::begin_gps() {
     );
 
     int count = 0;
-    padprintln("Waiting for GPS data");
+    displayTextLine("Waiting for GPS data");
     while (GPSserial.available() <= 0) {
         if (check(EscPress)) {
             end();
@@ -118,27 +120,21 @@ void Wardriving::loop() {
     while (1) {
         if (check(EscPress) || returnToMenu || forceHome) return end();
 
+        if (check(UpPress) || check(PrevPress)) {
+            if (scrollOffset > 0) scrollOffset--;
+        } else if (check(DownPress) || check(NextPress)) {
+            scrollOffset++;
+        }
+
         display_banner();
 
         if (GPSserial.available() > 0) {
             count = 0;
             while (GPSserial.available() > 0) gps.encode(GPSserial.read());
-            String txt = "GPS Read: ";
-            // Debuging GPS messages
-            // while (GPSserial.available() > 0) {
-            //     char read = GPSserial.read();
-            //     txt += read;
-            //     gps.encode(read);
-            // }
-            // Serial.println(txt);
             if (gps.location.isUpdated()) {
-                padprintln("GPS location updated");
                 set_position();
                 scanWiFiBLE();
             } else {
-                padprintln("GPS location not updated");
-                dump_gps_data();
-
                 if (filename == "" && gps.date.year() >= CURRENT_YEAR && gps.date.year() < CURRENT_YEAR + 5)
                     create_filename();
             }
@@ -147,13 +143,19 @@ void Wardriving::loop() {
                 displayError("GPS not Found!");
                 return end();
             }
-            padprintln("No GPS data available");
             count++;
         }
 
         unsigned long tmp = millis();
         while (millis() - tmp < MAX_WAIT && !gps.location.isUpdated()) {
             if (check(EscPress) || returnToMenu || forceHome) return end();
+            if (check(UpPress) || check(PrevPress)) {
+                if (scrollOffset > 0) scrollOffset--;
+                display_banner();
+            } else if (check(DownPress) || check(NextPress)) {
+                scrollOffset++;
+                display_banner();
+            }
             vTaskDelay(50 / portTICK_PERIOD_MS);
         }
     }
@@ -171,36 +173,105 @@ void Wardriving::set_position() {
 }
 
 void Wardriving::display_banner() {
-    drawMainBorderWithTitle("Wardriving");
+    // No "WARDRIVING" title band — short top-bar label + one line per metric.
+    const char *title = "WD Both";
+    if (scanWiFi && !scanBLE) title = "WD WiFi";
+    else if (!scanWiFi && scanBLE) title = "WD BLE";
 
-    padprintln("");
-    if (filename != "") padprintln("File: " + filename.substring(0, filename.length() - 4));
-    String txt = "Found";
-    if (scanWiFi) txt += " WiFi: " + String(wifiNetworkCount);
-    if (scanBLE) txt += " BLE: " + String(bluetoothDeviceCount);
-    padprint(txt);
-    if (foundMACAddressCount) padprint(" Alert: " + String(foundMACAddressCount));
+    std::vector<String> lines;
+    if (filename.length()) {
+        String f = filename;
+        if (f.endsWith(".csv")) f.remove(f.length() - 4);
+        lines.push_back("File: " + f);
+    } else {
+        lines.push_back("File: (waiting)");
+    }
+    if (scanWiFi) lines.push_back("WiFi found: " + String(wifiNetworkCount));
+    if (scanBLE) lines.push_back("BLE found: " + String(bluetoothDeviceCount));
+    if (foundMACAddressCount) lines.push_back("Alerts: " + String(foundMACAddressCount));
 
-    padprintln("");
     uint32_t elapsedMs = millis() - sessionStartMs;
     uint32_t elapsedSeconds = elapsedMs / 1000;
     uint32_t hours = elapsedSeconds / 3600;
     uint32_t minutes = (elapsedSeconds / 60) % 60;
     uint32_t seconds = elapsedSeconds % 60;
-    padprintf("Distance: %.2fkm  ET: %02lu:%02lu:%02lu\n", distance / 1000, hours, minutes, seconds);
-    // Serial.printf("Wardrive Elapsed Time: %02lu:%02lu:%02lu\n", hours, minutes, seconds);
+    char distBuf[40];
+    snprintf(distBuf, sizeof(distBuf), "Distance: %.2f km", distance / 1000.0);
+    lines.push_back(String(distBuf));
+    char etBuf[32];
+    snprintf(etBuf, sizeof(etBuf), "ET: %02lu:%02lu:%02lu", hours, minutes, seconds);
+    lines.push_back(String(etBuf));
+
+    if (!gps.location.isUpdated()) {
+        if (!date_time_updated && (!gps.date.isUpdated() || !gps.time.isUpdated())) {
+            lines.push_back("GPS: waiting for fix");
+        } else {
+            date_time_updated = true;
+            char buf[40];
+            snprintf(
+                buf,
+                sizeof(buf),
+                "Date: %02d-%02d-%02d",
+                gps.date.year(),
+                gps.date.month(),
+                gps.date.day()
+            );
+            lines.push_back(String(buf));
+            snprintf(
+                buf,
+                sizeof(buf),
+                "Time: %02d:%02d:%02d",
+                gps.time.hour(),
+                gps.time.minute(),
+                gps.time.second()
+            );
+            lines.push_back(String(buf));
+            snprintf(buf, sizeof(buf), "Sats: %d", gps.satellites.value());
+            lines.push_back(String(buf));
+            snprintf(buf, sizeof(buf), "HDOP: %.2f", gps.hdop.hdop());
+            lines.push_back(String(buf));
+        }
+    } else {
+        lines.push_back("GPS: location OK");
+    }
+
+    const int dense = uiDenseFont();
+    const int rowH = uiLineH(dense) + 2;
+    const int listY = KVX_TOPBAR_H + 4;
+    const int footerH = uiLineH(dense) + 2;
+    const int maxRows = max(1, (tftHeight - listY - footerH) / rowH);
+
+    if (scrollOffset > (int)lines.size() - maxRows) {
+        scrollOffset = max(0, (int)lines.size() - maxRows);
+    }
+    if (scrollOffset < 0) scrollOffset = 0;
+
+    tft.fillScreen(kvxConfig.bgColor);
+    drawKvxTopBar(title);
+
+    tft.setTextSize(dense);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    const int maxChars = max(1, (tftWidth - 12) / uiCharW(dense));
+    for (int i = 0; i < maxRows && scrollOffset + i < (int)lines.size(); i++) {
+        String line = lines[scrollOffset + i];
+        if ((int)line.length() > maxChars) line = line.substring(0, maxChars);
+        tft.setCursor(6, listY + i * rowH);
+        tft.print(line);
+    }
+
+    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
+    tft.drawCentreString(
+        (int)lines.size() > maxRows ? ";/. scroll  ESC exit" : "ESC exit",
+        tftWidth / 2,
+        tftHeight - footerH,
+        1
+    );
 }
 
 void Wardriving::dump_gps_data() {
-    if (!date_time_updated && (!gps.date.isUpdated() || !gps.time.isUpdated())) {
-        padprintln("Waiting for valid GPS data");
-        return;
-    }
+    // GPS lines are folded into display_banner(); keep for call-site compatibility.
+    if (!date_time_updated && (!gps.date.isUpdated() || !gps.time.isUpdated())) return;
     date_time_updated = true;
-    padprintf(2, "Date: %02d-%02d-%02d\n", gps.date.year(), gps.date.month(), gps.date.day());
-    padprintf(2, "Time: %02d:%02d:%02d\n", gps.time.hour(), gps.time.minute(), gps.time.second());
-    padprintf(2, "Sat:  %d\n", gps.satellites.value());
-    padprintf(2, "HDOP: %.2f\n", gps.hdop.hdop());
 }
 
 String Wardriving::auth_mode_to_string(wifi_auth_mode_t authMode) {
@@ -220,6 +291,7 @@ String Wardriving::auth_mode_to_string(wifi_auth_mode_t authMode) {
 
 void Wardriving::scanWiFiBLE() {
     FS *fs;
+    setupSdCard();
     if (!getFsStorage(fs)) {
         padprintln("Storage setup error");
         displayError("Storage setup error", true);
@@ -229,15 +301,16 @@ void Wardriving::scanWiFiBLE() {
 
     if (filename == "") create_filename();
 
-    if (!(*fs).exists(kvx::paths::GPS_WARDRIVING)) (*fs).mkdir(kvx::paths::GPS_WARDRIVING);
+    const char *outDir = kvx::paths::GPS_WDBOTH;
+    kvx::paths::ensureDir(*fs, outDir);
 
-    bool is_new_file = false;
-    if (!(*fs).exists((String(kvx::paths::GPS_WARDRIVING) + "/") + filename)) is_new_file = true;
-    File file = (*fs).open((String(kvx::paths::GPS_WARDRIVING) + "/") + filename, is_new_file ? FILE_WRITE : FILE_APPEND);
+    String fullPath = String(outDir) + "/" + filename;
+    bool is_new_file = !(*fs).exists(fullPath);
+    File file = (*fs).open(fullPath, is_new_file ? FILE_WRITE : FILE_APPEND);
 
     if (!file) {
         padprintln("Failed to open file for writing");
-        displayError("Failed to open file for writing", true);
+        displayError("Failed to open file for writing\n" + fullPath, true);
         returnToMenu = true;
         return;
     }
@@ -252,6 +325,10 @@ void Wardriving::scanWiFiBLE() {
             "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude,CurrentLongitude,"
             "AltitudeMeters,AccuracyMeters,RCOIs,MfgrId,Type"
         );
+        // Tell the user where the session CSV lives (SD preferred via getFsStorage).
+        String where = String(fs == &SD ? "SD" : "LittleFS") + ": " + fullPath;
+        displaySuccess(where, true);
+        display_banner();
     }
 
     padprintf("Coord: %.6f, %.6f\n", gps.location.lat(), gps.location.lng());
@@ -449,12 +526,15 @@ int Wardriving::scanWiFiNetworks() {
 
 void Wardriving::loadAlertMACs() {
     FS *fs;
+    setupSdCard();
     if (!getFsStorage(fs)) return;
 
-    if (!(*fs).exists(kvx::paths::GPS_WARDRIVING)) (*fs).mkdir(kvx::paths::GPS_WARDRIVING);
+    const char *outDir = kvx::paths::GPS_WDBOTH;
+    kvx::paths::ensureDir(*fs, outDir);
 
-    if ((*fs).exists(String(kvx::paths::GPS_WARDRIVING) + "/alert.txt")) {
-        File alertFile = (*fs).open(String(kvx::paths::GPS_WARDRIVING) + "/alert.txt", FILE_READ);
+    String alertPath = String(outDir) + "/alert.txt";
+    if ((*fs).exists(alertPath)) {
+        File alertFile = (*fs).open(alertPath, FILE_READ);
         if (alertFile) {
             while (alertFile.available()) {
                 String line = alertFile.readStringUntil('\n');
@@ -470,7 +550,7 @@ void Wardriving::loadAlertMACs() {
         }
     } else {
         // Create sample alert file
-        File alertFile = (*fs).open(String(kvx::paths::GPS_WARDRIVING) + "/alert.txt", FILE_WRITE);
+        File alertFile = (*fs).open(alertPath, FILE_WRITE);
         if (alertFile) {
             alertFile.println("# Alert MAC addresses - one per line");
             alertFile.println("# Lines starting with # are comments");

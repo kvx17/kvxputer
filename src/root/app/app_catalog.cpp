@@ -44,7 +44,10 @@
 #include "menu/others/qrcode_menu.h"
 #include "menu/others/timer.h"
 #if defined(HAS_NS4168_SPKR)
+#include "menu/others/audio.h"
 #include "menu/others/media_player.h"
+#elif defined(BUZZ_PIN)
+#include "menu/others/audio.h"
 #endif
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_menu.h"
@@ -754,6 +757,134 @@ static bool purgeReservedShortcuts() {
     return changed;
 }
 
+#ifdef HAS_KEYBOARD
+static bool strokeHasCode(uint8_t code) {
+    for (char w : KeyStroke.word) {
+        if ((uint8_t)w == code) return true;
+    }
+    return false;
+}
+
+static bool systemComboHeld(char raw, uint8_t fnHid) {
+    if (strokeHasCode((uint8_t)raw) || strokeHasCode(fnHid)) return true;
+    return isCardputerKeyHeld(raw);
+}
+
+static void consumeSystemShortcutKeys() {
+    UpPress = false;
+    DownPress = false;
+    PrevPress = false;
+    NextPress = false;
+    NextPagePress = false;
+    PrevPagePress = false;
+    EscPress = false;
+    KeyStroke.Clear();
+}
+
+static void drawSystemShortcutHud(const String &msg) {
+    const int h = 26;
+    tft.fillRect(0, tftHeight - h, tftWidth, h, kvxConfig.secColor);
+    tft.setTextSize(FM);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
+    tft.drawCentreString(msg, tftWidth / 2, tftHeight - h + 6, 1);
+}
+
+static void applySystemBrightness(int dir) {
+    dimmer = false;
+    isScreenOff = false;
+    resetPowerSaveTimer();
+    uint8_t v = nextBrightnessValue(kvxConfig.bright, dir);
+    setBrightness(v, false);
+    kvxConfig.setBright(v);
+    _setBrightness(v);
+    currentScreenBrightness = v;
+    drawSystemShortcutHud("Bright " + String(v) + "%");
+}
+
+static void volumeTickBeep() {
+#if defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN)
+    if (!kvxConfig.soundEnabled || kvxConfig.soundVolume <= 0) return;
+    AnyKeyPress = false;
+    playVolumeTickBeep((uint8_t)kvxConfig.soundVolume);
+#endif
+}
+
+static void applySystemVolume(int dir, bool mute) {
+    int v = mute ? 0 : nextVolumeValue(kvxConfig.soundVolume, dir);
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+    kvxConfig.soundVolume = v;
+    if (v == 0) drawSystemShortcutHud("Muted");
+    else drawSystemShortcutHud("Vol " + String(v) + "%");
+    if (!mute) volumeTickBeep();
+    kvxConfig.saveFile();
+}
+
+// FN+;/. brightness, FN+,/ / volume, FN+space mute. Chord opens shortcut editor.
+// Returns true when a submenu was opened (caller must redraw the grid).
+static bool handleMainscreenSystemShortcuts() {
+    static unsigned long lastAdjMs = 0;
+    static bool muteLatched = false;
+    static bool chordLatched = false;
+
+    const bool chord = isSystemShortcutChordHeld();
+    if (chord) {
+        consumeSystemShortcutKeys();
+        if (!chordLatched) {
+            chordLatched = true;
+            while (isSystemShortcutChordHeld() || EscPress) {
+                EscPress = false;
+                KeyStroke.Clear();
+                delay(20);
+            }
+            resetHeldNavKeys();
+            setMainscreenShortcutsMenu();
+            return true;
+        }
+        return false;
+    }
+    chordLatched = false;
+
+    const bool fnHeld = isFnKeyHeld() || KeyStroke.fn;
+    if (!fnHeld) {
+        muteLatched = false;
+        return false;
+    }
+
+    int brightDir = 0;
+    int volDir = 0;
+    bool mute = false;
+    if (systemComboHeld(';', 0xDA)) brightDir = 1;
+    else if (systemComboHeld('.', 0xD9)) brightDir = -1;
+    else if (systemComboHeld(',', 0xD8)) volDir = -1;
+    else if (systemComboHeld('/', 0xD7)) volDir = 1;
+    else if (systemComboHeld(' ', ' ')) mute = true;
+    else {
+        muteLatched = false;
+        return false;
+    }
+
+    consumeSystemShortcutKeys();
+
+    if (mute) {
+        if (!muteLatched) {
+            muteLatched = true;
+            applySystemVolume(0, true);
+        }
+        return false;
+    }
+    muteLatched = false;
+
+    const unsigned long now = millis();
+    if (now - lastAdjMs < 180) return false;
+    lastAdjMs = now;
+
+    if (brightDir) applySystemBrightness(brightDir);
+    else applySystemVolume(volDir, false);
+    return false;
+}
+#endif
+
 bool appCatalogHandleMainscreenKeys() {
 #ifdef HAS_KEYBOARD
     static bool purged = false;
@@ -761,6 +892,8 @@ bool appCatalogHandleMainscreenKeys() {
         purged = true;
         if (purgeReservedShortcuts()) kvxConfig.saveFile();
     }
+
+    if (handleMainscreenSystemShortcuts()) return true;
 
     // Never touch navigation frames. Arrow keys also put ;,./ into KeyStroke.word,
     // so only run when no Up/Down/Prev/Next/Sel/Esc pulse is pending.

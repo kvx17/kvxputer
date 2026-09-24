@@ -71,8 +71,10 @@ public:
     void mouseClick(uint8_t buttons);
     void mouseRelease(uint8_t buttons);
     size_t press(uint8_t k) override;
+    size_t pressRaw(uint8_t k) override;
     size_t press(const MediaKeyReport k);
     size_t release(uint8_t k) override;
+    size_t releaseRaw(uint8_t k) override;
     size_t release(const MediaKeyReport k);
     size_t write(uint8_t c) override;
     size_t write(const MediaKeyReport c);

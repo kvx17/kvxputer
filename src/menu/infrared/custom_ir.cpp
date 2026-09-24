@@ -240,12 +240,25 @@ void otherIRcodes() {
         return;
     }
 
-    // select a file to tx
-    if (!(*fs).exists(kvx::paths::IR_PROFILES)) (*fs).mkdir(kvx::paths::IR_PROFILES);
-
-    // startPath: remember the last visited folder so the user lands back there
-    // after pressing back in the command list
+    // select a file to tx — user captures under /kvxputer; packs stay in support_files.
+    kvx::paths::ensureDir(*fs, kvx::paths::IR_PROFILES);
     String startPath = kvx::paths::IR_PROFILES;
+    auto dirHasEntries = [](FS &fs, const char *path) -> bool {
+        File d = fs.open(path);
+        if (!d || !d.isDirectory()) {
+            if (d) d.close();
+            return false;
+        }
+        File e = d.openNextFile();
+        bool has = (bool)e;
+        if (e) e.close();
+        d.close();
+        return has;
+    };
+    if (!dirHasEntries(*fs, startPath.c_str())) {
+        if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY2)) startPath = kvx::paths::IR_PROFILES_LEGACY2;
+        else if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY)) startPath = kvx::paths::IR_PROFILES_LEGACY;
+    }
 
     while (true) {
         filepath = loopSD(*fs, true, "IR", startPath);

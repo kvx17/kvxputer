@@ -94,6 +94,7 @@ public:
 
     bool beginFrame();
     void endFrame();
+    void abortFrame();
     bool isFraming() const;
 
     // Disables tft writings on the display,

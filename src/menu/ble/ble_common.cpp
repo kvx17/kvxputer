@@ -4,11 +4,14 @@
 #include "root/app/ram_profile.h"
 #include "root/app/utils.h"
 #include "root/net/wifi_common.h"
+#include "root/ui/scanner_list.h"
 #include "esp_mac.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #endif
+#include <set>
+#include <vector>
 
 #define SERVICE_UUID "1bc68b2a-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
@@ -64,21 +67,10 @@ char strID[18];
 char strAddl[200];
 
 void ble_info(const String &name, const String &address, const String &signal) {
-    drawMainBorder();
-    tft.setTextColor(kvxConfig.priColor);
-    tft.setTextSize(FP);
-    tft.drawCentreString("-=Information=-", tftWidth / 2, uiStatusY(0) - uiRowH(FP), SMOOTH_FONT);
-    tft.drawString("Name: " + name, 10, uiStatusY(0));
-    tft.drawString("Adresse: " + address, 10, uiStatusY(1));
-    tft.drawString("Signal: " + String(signal) + " dBm", 10, uiStatusY(2));
-    tft.drawCentreString("   Press " + String(BTN_ALIAS) + " to act", tftWidth / 2, uiFooterY(FP), 1);
-
-    delay(300);
-    while (!check(SelPress)) {
-        while (!check(SelPress)) { yield(); }
-        returnToMenu = true;
-        break;
-    }
+    // Legacy entry; BLE Scan uses scannerListShowDetail.
+    (void)name;
+    (void)address;
+    (void)signal;
 }
 
 class AdvertisedDeviceCallbacks : public NimBLEScanCallbacks {};
@@ -177,12 +169,100 @@ bool ble_scan_setup() {
     return true;
 }
 
+namespace {
+
+struct BleScanHit {
+    String name;
+    String mac;
+    int rssi = 0;
+    String addrType;
+    String services;
+    String mfgHex;
+    String txPower;
+    String appearance;
+    String flags;
+    String payloadHex;
+    unsigned long firstSeen = 0;
+    unsigned long lastSeen = 0;
+};
+
+String bleBytesToHex(const uint8_t *p, size_t len, size_t maxBytes = 12) {
+    String out;
+    size_t n = min(len, maxBytes);
+    for (size_t i = 0; i < n; i++) {
+        char b[4];
+        snprintf(b, sizeof(b), "%02X", p[i]);
+        out += b;
+        if (i + 1 < n) out += " ";
+    }
+    if (len > maxBytes) out += "...";
+    return out;
+}
+
+String bleAddrTypeName(const NimBLEAdvertisedDevice *dev) {
+    if (!dev) return "?";
+    switch (dev->getAddressType()) {
+        case BLE_ADDR_PUBLIC: return "public";
+        case BLE_ADDR_RANDOM: return "random";
+        case BLE_ADDR_PUBLIC_ID: return "public-id";
+        case BLE_ADDR_RANDOM_ID: return "random-id";
+        default: return "other";
+    }
+}
+
+void bleFillHit(BleScanHit &h, const NimBLEAdvertisedDevice *dev) {
+    if (!dev) return;
+    h.name = String(dev->getName().c_str());
+    h.mac = String(dev->getAddress().toString().c_str());
+    h.rssi = dev->getRSSI();
+    h.addrType = bleAddrTypeName(dev);
+    if (dev->haveServiceUUID()) h.services = String(dev->getServiceUUID().toString().c_str());
+    if (dev->haveManufacturerData()) {
+        std::string md = dev->getManufacturerData();
+        h.mfgHex = bleBytesToHex((const uint8_t *)md.data(), md.size());
+    }
+    if (dev->haveTXPower()) h.txPower = String(dev->getTXPower()) + " dBm";
+    if (dev->haveAppearance()) h.appearance = String(dev->getAppearance());
+    {
+        char fb[8];
+        snprintf(fb, sizeof(fb), "0x%02X", (unsigned)dev->getAdvFlags());
+        h.flags = fb;
+    }
+    const std::vector<uint8_t> &payload = dev->getPayload();
+    if (!payload.empty()) h.payloadHex = bleBytesToHex(payload.data(), payload.size());
+}
+
+std::vector<String> bleScanRowLabels(const std::vector<BleScanHit> &hits) {
+    std::vector<String> rows;
+    rows.reserve(hits.size());
+    for (const auto &h : hits) {
+        String label = h.name.length() ? h.name : h.mac;
+        label += "  " + String(h.rssi) + "dBm";
+        rows.push_back(label);
+    }
+    return rows;
+}
+
+std::vector<ScannerDetailField> bleScanDetail(const BleScanHit &h) {
+    std::vector<ScannerDetailField> f;
+    f.push_back({"Name", h.name.length() ? h.name : "<no name>"});
+    f.push_back({"MAC", h.mac});
+    f.push_back({"RSSI", String(h.rssi) + " dBm"});
+    f.push_back({"Addr type", h.addrType});
+    if (h.services.length()) f.push_back({"Service", h.services});
+    if (h.mfgHex.length()) f.push_back({"Mfg data", h.mfgHex});
+    if (h.txPower.length()) f.push_back({"TX power", h.txPower});
+    if (h.appearance.length()) f.push_back({"Appearance", h.appearance});
+    if (h.flags.length()) f.push_back({"Flags", h.flags});
+    if (h.payloadHex.length()) f.push_back({"Payload", h.payloadHex});
+    f.push_back({"First seen", String(h.firstSeen) + " ms"});
+    f.push_back({"Last seen", String(h.lastSeen) + " ms"});
+    return f;
+}
+
+} // namespace
+
 void ble_scan() {
-    displayTextLine("Scanning..");
-
-    options = {};
-    options.reserve(MAX_DISPLAY_DEVICES);
-
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
     bleWasActiveBefore =
@@ -195,44 +275,89 @@ void ble_scan() {
     }
 
     pBLEScan->clearResults();
+    pBLEScan->setDuplicateFilter(false);
+    pBLEScan->setMaxResults(0xFF);
+    pBLEScan->setScanResponseTimeout(200);
+    pBLEScan->start(0, false);
 
-    try {
-        BLEScanResults foundDevices = pBLEScan->getResults(scanTime * 1000, false);
-        int deviceCount = foundDevices.getCount();
-        int processedCount = 0;
-        int maxToProcess = min(deviceCount, MAX_DISPLAY_DEVICES);
+    std::vector<BleScanHit> hits;
+    std::set<String> seen;
 
-        for (int i = 0; i < maxToProcess && processedCount < MAX_DISPLAY_DEVICES; i++) {
-            const NimBLEAdvertisedDevice *advertisedDevice = foundDevices.getDevice(i);
-            if (!advertisedDevice) continue;
+    ScannerListState ui;
+    scannerListBegin(ui, "BLE Scan", "scanning");
 
-            String bt_title = "";
-            String bt_name;
-            String bt_address;
-            String bt_signal;
-
-            bt_name = advertisedDevice->getName().c_str();
-            bt_address = advertisedDevice->getAddress().toString().c_str();
-            bt_signal = String(advertisedDevice->getRSSI());
-
-            if (bt_name.isEmpty()) bt_name = "<no name>";
-            else bt_title = bt_name;
-            if (bt_title.isEmpty()) bt_title = bt_address;
-
-            if (options.size() < MAX_DISPLAY_DEVICES) {
-                options.emplace_back(bt_title.c_str(), [=]() { ble_info(bt_name, bt_address, bt_signal); });
-                processedCount++;
+    auto ingest = [&]() {
+        if (!pBLEScan) return;
+        if (!pBLEScan->isScanning()) pBLEScan->start(0, true, true);
+        NimBLEScanResults results = pBLEScan->getResults();
+        int deviceCount = results.getCount();
+        for (int i = 0; i < deviceCount; i++) {
+            if ((int)hits.size() >= MAX_DISPLAY_DEVICES &&
+                seen.find(String(results.getDevice(i)->getAddress().toString().c_str())) == seen.end()) {
+                continue;
+            }
+            const NimBLEAdvertisedDevice *dev = results.getDevice(i);
+            if (!dev) continue;
+            String mac = String(dev->getAddress().toString().c_str());
+            if (seen.insert(mac).second) {
+                if ((int)hits.size() >= MAX_DISPLAY_DEVICES) {
+                    seen.erase(mac);
+                    continue;
+                }
+                BleScanHit h;
+                bleFillHit(h, dev);
+                h.firstSeen = millis();
+                h.lastSeen = h.firstSeen;
+                hits.push_back(h);
+            } else {
+                for (auto &h : hits) {
+                    if (h.mac == mac) {
+                        h.rssi = dev->getRSSI();
+                        String name = String(dev->getName().c_str());
+                        if (name.length()) h.name = name;
+                        h.lastSeen = millis();
+                        break;
+                    }
+                }
             }
         }
+    };
 
-        if (options.size() >= MAX_DISPLAY_DEVICES) { options.emplace_back("... and more devices", nullptr); }
-    } catch (...) {
-        displayError("BLE scan error");
-        pBLEScan->clearResults();
-        return;
+    unsigned long lastPaint = 0;
+    while (true) {
+        ScannerListResult r = scannerListPoll(ui);
+        if (r == SCANNER_LIST_EXIT) break;
+        if (r == SCANNER_LIST_DETAIL && ui.cursor >= 0 && ui.cursor < (int)hits.size()) {
+            BleScanHit snap = hits[ui.cursor];
+            String title = snap.name.length() ? snap.name : "RESULT DETAILS";
+            scannerListShowDetail(title.c_str(), bleScanDetail(snap), [&]() {
+                if (pBLEScan && !pBLEScan->isScanning()) pBLEScan->start(0, true, true);
+            });
+            ui.cursor = min(ui.cursor, max(0, (int)hits.size() - 1));
+            scannerListRefresh(ui);
+            lastPaint = 0;
+            continue;
+        }
+        if (millis() - lastPaint > 220) {
+            lastPaint = millis();
+            try {
+                ingest();
+            } catch (...) {
+                displayError("BLE scan error");
+                break;
+            }
+            scannerListSetStatus(ui, (String(hits.size()) + " devices").c_str());
+            scannerListSetRows(ui, bleScanRowLabels(hits));
+        }
+        delay(20);
+        if (forceHome) break;
     }
 
-    if (pBLEScan) { pBLEScan->stop(); }
+    scannerListEnd();
+    if (pBLEScan) {
+        pBLEScan->stop();
+        pBLEScan->clearResults();
+    }
 
     if (!bleWasActiveBefore) {
 #if !defined(LITE_VERSION)
@@ -242,14 +367,8 @@ void ble_scan() {
 #endif
     }
 
-    if (!options.empty()) {
-        addOptionToMainMenu();
-        loopOptions(options);
-        options.clear();
-    } else {
-        displayError("No devices found");
-        delay(1000);
-    }
+    if (hits.empty()) displayInfo("No devices found", true);
+    else displayInfo("Found " + String((int)hits.size()) + " device(s)", true);
 }
 
 bool initBLEServer() {

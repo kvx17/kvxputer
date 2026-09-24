@@ -187,9 +187,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
     String lastLiveAddr = wasConnected ? gHidRemoteSession.getConnectedAddress() : String("");
     hidRemoteClearMenuKeys();
 
-    const char *footer = fromSettings
-                             ? "1-6 connect  hold=opts  S settings  U=USB  ESC"
-                             : "1-6 connect  hold=opts  S settings  U=USB  ESC";
+    const char *footer = "1-6 connect  hold=opts  S  U=USB  ESC";
 
     tft.fillScreen(0x0841);
     hidRemoteDrawHostSlots(HID_REMOTE_BLE, wasConnected);

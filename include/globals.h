@@ -199,6 +199,7 @@ extern bool dimmer;
 extern volatile bool chargeModeActive;
 extern volatile int chargeModeBright;
 extern volatile bool chargeUserSleep;
+extern volatile unsigned long chargeInputGraceUntil;
 
 extern volatile bool NextPress;
 

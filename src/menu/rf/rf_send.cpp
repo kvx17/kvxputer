@@ -46,6 +46,27 @@ void sendCustomRF() {
     filepath = "";
 
     String startPath = kvx::paths::RF_PRESETS;
+    kvx::paths::ensureDir(*filesystem, kvx::paths::RF_PRESETS);
+    {
+        auto dirHasEntries = [](FS &fs, const char *path) -> bool {
+            File d = fs.open(path);
+            if (!d || !d.isDirectory()) {
+                if (d) d.close();
+                return false;
+            }
+            File e = d.openNextFile();
+            bool has = (bool)e;
+            if (e) e.close();
+            d.close();
+            return has;
+        };
+        if (!dirHasEntries(*filesystem, startPath.c_str())) {
+            if ((*filesystem).exists(kvx::paths::RF_PRESETS_LEGACY2))
+                startPath = kvx::paths::RF_PRESETS_LEGACY2;
+            else if ((*filesystem).exists(kvx::paths::RF_PRESETS_LEGACY))
+                startPath = kvx::paths::RF_PRESETS_LEGACY;
+        }
+    }
 
     while (!returnToMenu) {
         num_steps_keeloq = 1;

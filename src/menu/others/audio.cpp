@@ -12,6 +12,8 @@
 #include "AudioGeneratorMIDI.h"
 #include "AudioGeneratorWAV.h"
 #include "AudioOutputI2SNoDAC.h"
+#include "driver/i2s_std.h"
+#include <cstring>
 #include <ESP8266Audio.h>
 #include <ESP8266SAM.h>
 
@@ -654,7 +656,7 @@ bool isAudioFile(const String &filepath) {
            filepath.endsWith(".aac") || filepath.endsWith(".flac");
 }
 
-void playTone(unsigned int frequency, unsigned long duration, short waveType) {
+void playTone(unsigned int frequency, unsigned long duration, short waveType, bool stopOnKey) {
     if (!kvxConfig.soundEnabled) return;
 
     _setup_codec_speaker(true);
@@ -717,7 +719,7 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     }
 
     while (wav->isRunning()) {
-        if (!wav->loop() || check(AnyKeyPress)) { wav->stop(); }
+        if (!wav->loop() || (stopOnKey && check(AnyKeyPress))) { wav->stop(); }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
@@ -726,6 +728,122 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType) {
     delete out;
 
     _setup_codec_speaker(false);
+}
+
+void playVolumeTickBeep(uint8_t volumePercent) {
+    if (!kvxConfig.soundEnabled || volumePercent == 0) return;
+
+    _setup_codec_speaker(true);
+
+    static i2s_chan_handle_t tx = nullptr;
+
+    auto teardown = [&]() {
+        if (!tx) return;
+        i2s_channel_disable(tx);
+        i2s_del_channel(tx);
+        tx = nullptr;
+    };
+
+    auto setup = [&]() -> bool {
+        if (tx) return true;
+        i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+        chan_cfg.dma_desc_num = 8;
+        chan_cfg.dma_frame_num = 256;
+        if (i2s_new_channel(&chan_cfg, &tx, NULL) != ESP_OK) {
+            tx = nullptr;
+            return false;
+        }
+        i2s_std_slot_config_t slot_cfg =
+            I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+        const i2s_std_config_t std_cfg = {
+            .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
+            .slot_cfg = slot_cfg,
+            .gpio_cfg =
+                {
+                            .mclk = I2S_GPIO_UNUSED,
+                            .bclk = (gpio_num_t)BCLK,
+                            .ws = (gpio_num_t)WCLK,
+                            .dout = (gpio_num_t)DOUT,
+                            .din = I2S_GPIO_UNUSED,
+                            .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
+                            },
+        };
+        if (i2s_channel_init_std_mode(tx, &std_cfg) != ESP_OK) {
+            i2s_del_channel(tx);
+            tx = nullptr;
+            return false;
+        }
+        return true;
+    };
+
+    if (!setup()) {
+        _setup_codec_speaker(false);
+        return;
+    }
+
+    const int sr = 16000;
+    const int ms = 180;
+    const int freq = 880;
+    const int period = sr / freq;
+    int g = (int)volumePercent;
+    int16_t amp = (int16_t)(200 + (g * g * 3));
+    int16_t buf[256];
+    auto fillTone = [&](int start, int count) {
+        for (int i = 0; i < count; i++) {
+            int16_t s = ((start + i) % period < period / 2) ? amp : (int16_t)(-amp);
+            buf[i * 2] = s;
+            buf[i * 2 + 1] = s;
+        }
+    };
+
+    // Prime DMA while disabled, then unmute the amp. First-press audio was
+    // previously queued and then cut off before the speaker started.
+    fillTone(0, 128);
+    size_t loaded = 0;
+    i2s_channel_preload_data(tx, buf, 128 * 4, &loaded);
+    esp_err_t en = i2s_channel_enable(tx);
+    if (en != ESP_OK && en != ESP_ERR_INVALID_STATE) {
+        teardown();
+        if (!setup()) {
+            _setup_codec_speaker(false);
+            return;
+        }
+        fillTone(0, 128);
+        i2s_channel_preload_data(tx, buf, 128 * 4, &loaded);
+        en = i2s_channel_enable(tx);
+        if (en != ESP_OK && en != ESP_ERR_INVALID_STATE) {
+            teardown();
+            _setup_codec_speaker(false);
+            return;
+        }
+    }
+    delay(50);
+
+    int total = sr * ms / 1000;
+    int n = 0;
+    while (n < total) {
+        int chunk = 64;
+        if (n + chunk > total) chunk = total - n;
+        fillTone(n, chunk);
+        size_t written = 0;
+        if (i2s_channel_write(tx, buf, (size_t)chunk * 4, &written, pdMS_TO_TICKS(100)) != ESP_OK) break;
+        n += chunk;
+    }
+    memset(buf, 0, sizeof(buf));
+    size_t written = 0;
+    i2s_channel_write(tx, buf, 128 * 4, &written, pdMS_TO_TICKS(50));
+    delay(40);
+    i2s_channel_disable(tx);
+    _setup_codec_speaker(false);
+}
+
+#else
+void playVolumeTickBeep(uint8_t volumePercent) {
+    (void)volumePercent;
+#if defined(BUZZ_PIN)
+    if (!kvxConfig.soundEnabled || volumePercent == 0) return;
+    tone(BUZZ_PIN, 880, 150);
+#endif
 }
 
 #endif

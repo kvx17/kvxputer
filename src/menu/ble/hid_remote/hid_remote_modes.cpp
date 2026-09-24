@@ -37,11 +37,23 @@ static bool checkModeExit(const keyStroke &key) { return key.pressed && key.fn &
 static void sendRawKey(HidRemoteTransportSession &s, uint8_t hidKey) {
     if (s.keyboardHid == nullptr) return;
     s.releaseAll();
-    delay(20);
-    if (s.keyboardHid->press(hidKey) == 0) return;
-    delay(80);
+    delay(30);
+
+    // Prefer pressRaw with the real HID usage so Linux gets F11=0x44 (and not an
+    // ASCII-mapped glyph). KEY_* values are Arduino-style (KEY_F11=0xCC → 0x44).
+    size_t ok = 0;
+    if (hidKey >= 0x88) {
+        const uint8_t usage = (uint8_t)(hidKey - 0x88);
+        ok = s.keyboardHid->pressRaw(usage);
+        if (ok == 0) ok = s.keyboardHid->press(hidKey);
+    } else {
+        ok = s.keyboardHid->press(hidKey);
+    }
+    if (ok == 0) return;
+
+    delay(160); // Linux needs a clear make/break window for function keys
     s.releaseAll();
-    delay(20);
+    delay(30);
 }
 
 static void sendCombo(HidRemoteTransportSession &s, uint8_t mod1, uint8_t mod2, uint8_t key) {
@@ -771,6 +783,22 @@ static bool handleMediaKey(HidRemoteTransportSession &s, const keyStroke &key, i
         flashId = 12;
         return true;
     }
+    if (c == 'f' || c == 'F') {
+        // HID Usage Page Keyboard/Keypad: F11 = 0x44 (fullscreen on Linux browsers etc.)
+        if (s.keyboardHid != nullptr) {
+            s.releaseAll();
+            delay(30);
+            size_t ok = s.keyboardHid->pressRaw(0x44);
+            if (ok == 0) ok = s.keyboardHid->press(KEY_F11);
+            if (ok != 0) {
+                delay(160);
+                s.releaseAll();
+                delay(30);
+            }
+        }
+        flashId = 14;
+        return true;
+    }
     return false;
 }
 
@@ -781,7 +809,7 @@ static bool runMediaLayout(HidRemoteTransportSession &s, const char *title) {
     auto draw = [&]() {
         hidRemoteDrawHeader(s.transport, s.isConnected(), title);
         hidDrawMediaPad(flashId);
-        hidRemoteDrawFooter("SPC play/pause  fn+Ok");
+        hidRemoteDrawFooter("SPC play  f=F11  fn+Ok");
     };
 
     draw();

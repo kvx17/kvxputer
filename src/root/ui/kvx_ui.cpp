@@ -9,6 +9,7 @@
 void drawKvxTopBar(const char *leftLabel) { drawKvxTopBar(leftLabel, nullptr); }
 
 void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
+    if (chargeModeActive) return;
     // Only open a present-frame when the caller is not already buffering.
     // Nested top-bar frames used to blit the strip alone mid-redraw and flash.
     const bool ownFrame = !tft.isFraming();
@@ -50,7 +51,8 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     if (iconCount > 0) iconsWidth = iconCount * IW + (iconCount - 1) * GAP;
     int iconsLeft = rightEdge - iconsWidth;
 
-    // Compact HH:MM to the left of icons (or battery) when the clock is set.
+    // Compact HH:MM immediately left of the icon pack / battery (right cluster).
+    // Do not draw a second clock on the left next to the app name.
     int statusRight = iconsLeft - 4;
     if (clock_set) {
 #if defined(HAS_RTC)
@@ -59,13 +61,7 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
         updateTimeStr(rtc.getTimeStruct());
 #endif
         char hhmm[6];
-        // timeStr is HH:MM:SS or h:MM:SS AM — take first 5 chars of HH:MM when 24h.
-        if (kvxConfig.clock24hr) {
-            snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
-        } else {
-            // 12h: "HH:MM:SS AM" → "HH:MM"
-            snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
-        }
+        snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
         tft.setTextSize(barSize);
         tft.setTextColor(purple, bg);
         tft.drawRightString(hhmm, statusRight, barTextY, 1);
@@ -180,6 +176,7 @@ static void drawKvxSubmenuRow(
 }
 
 void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title) {
+    if (chargeModeActive) return;
     const uint16_t bg = kvxConfig.bgColor;
 
     const int lineH = FM * LH + 4;

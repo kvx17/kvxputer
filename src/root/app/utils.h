@@ -23,6 +23,7 @@ struct ChargeInfo {
     int trendMvPerMin = 0;
     bool usb = false;
     bool estimated = true;
+    bool chargeSwitchOff = false; // Cardputer flip switch: GPIO10 seeing USB rail
 #ifdef USE_BQ27220_VIA_I2C
     int remainMah = 0;
     int fullMah = 0;
@@ -35,7 +36,7 @@ struct ChargeInfo {
 
 ChargeInfo readChargeInfo();
 const char *chargeStateLabel(ChargeState state);
-void updateClockTimezone();
+bool updateClockTimezone();
 #if !defined(HAS_RTC)
 void restorePersistedClock();
 #endif

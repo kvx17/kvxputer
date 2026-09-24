@@ -12,6 +12,7 @@ bool kremoteEnsureDir(FS *fs) {
 }
 
 FS *kremotePickFs() {
+    setupSdCard();
     FS *fs = nullptr;
     if (getFsStorage(fs) && fs != nullptr) {
         kremoteEnsureDir(fs);

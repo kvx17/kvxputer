@@ -134,6 +134,7 @@ bool dimmer = false;
 volatile bool chargeModeActive = false;
 volatile int chargeModeBright = -1;
 volatile bool chargeUserSleep = false;
+volatile unsigned long chargeInputGraceUntil = 0;
 char timeStr[16];
 time_t localTime;
 struct tm *timeInfo;

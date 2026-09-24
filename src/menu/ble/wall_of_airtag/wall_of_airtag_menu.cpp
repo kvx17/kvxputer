@@ -8,6 +8,7 @@
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/ui/scanner_list.h"
 #include <NimBLEDevice.h>
 #include <globals.h>
 #include <algorithm>
@@ -51,10 +52,9 @@ String shortMac(const String &mac) {
     return mac.substring(0, 5) + ".." + mac.substring(mac.length() - 5);
 }
 
-bool parseFindMy(const NimBLEAdvertisedDevice *dev, AirTagHit &out) {
-    if (!dev || !dev->haveManufacturerData()) return false;
-    std::string md = dev->getManufacturerData();
-    if (md.size() < 5) return false;
+bool parseFindMy(const ScannerAdvSnap &dev, AirTagHit &out) {
+    if (!dev.haveMfg || dev.mfg.size() < 5) return false;
+    const std::string &md = dev.mfg;
     uint16_t cid = (uint8_t)md[0] | ((uint16_t)(uint8_t)md[1] << 8);
     if (cid != 0x004C) return false;
     if ((uint8_t)md[2] != 0x12) return false;
@@ -70,6 +70,31 @@ bool parseFindMy(const NimBLEAdvertisedDevice *dev, AirTagHit &out) {
     return true;
 }
 
+std::vector<String> airtagRowLabels(const std::vector<AirTagHit> &hits) {
+    std::vector<String> rows;
+    rows.reserve(hits.size());
+    for (const auto &h : hits) {
+        String label = shortMac(h.mac) + "  " + String(h.rssi) + "dBm ~" + String(approxMeters(h.rssi), 1) + "m";
+        rows.push_back(label);
+    }
+    return rows;
+}
+
+std::vector<ScannerDetailField> airtagDetail(const AirTagHit &h) {
+    std::vector<ScannerDetailField> f;
+    f.push_back({"MAC", h.mac});
+    f.push_back({"RSSI", String(h.rssi) + " dBm"});
+    f.push_back({"Approx", String(approxMeters(h.rssi), 1) + " m"});
+    f.push_back({"Battery", batteryLabel(h.battery)});
+    f.push_back({"Status", h.separated ? "separated" : "near"});
+    f.push_back({"Addr", h.randomAddr ? "random" : "public"});
+    if (h.keyPrefix.length()) f.push_back({"Key prefix", h.keyPrefix});
+    f.push_back({"Hits", String(h.hits)});
+    f.push_back({"First seen", String(h.firstSeen) + " ms"});
+    f.push_back({"Last seen", String(h.lastSeen) + " ms"});
+    return f;
+}
+
 } // namespace
 
 void wallOfAirtagMenu() {
@@ -80,47 +105,34 @@ void wallOfAirtagMenu() {
         kvx::paths::ensureDir(*fs, kvx::paths::BLE_AIRTAGS);
         logPath = String(kvx::paths::BLE_AIRTAGS) + "/airtags.txt";
     }
-    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
-    NimBLEDevice::init("");
-    NimBLEScan *scan = NimBLEDevice::getScan();
-    scan->setActiveScan(true);
-    scan->setInterval(100);
-    scan->setWindow(99);
-    scan->setDuplicateFilter(false);
+    NimBLEScan *scan = scannerBleStart();
+    if (!scan) {
+        displayError("BLE scan failed", true);
+        return;
+    }
 
     std::vector<AirTagHit> hits;
     std::set<String> logged;
     std::set<String> audioSeen;
-    int scroll = 0;
 
-    drawMainBorderWithTitle("Wall Of Airtag");
-    tft.setTextSize(FP);
-    tft.drawString("ESC stop  ;/. scroll", 8, tftHeight - 14);
-    EscPress = false;
+    ScannerListState ui;
+    scannerListBegin(ui, "Wall Of Airtag", "scanning");
 
-    scan->start(0, false);
-    unsigned long lastUi = 0;
-    while (!check(EscPress) && !returnToMenu && !forceHome) {
-        if (check(UpPress) && scroll > 0) scroll--;
-        if (check(DownPress)) scroll++;
-
-        NimBLEScanResults results = scan->getResults();
-        for (int i = 0; i < results.getCount(); i++) {
-            const NimBLEAdvertisedDevice *dev = results.getDevice(i);
-            if (!dev) continue;
-            if (dev->haveManufacturerData()) {
-                std::string md = dev->getManufacturerData();
-                if (md.size() >= 3) {
-                    uint16_t cid = (uint8_t)md[0] | ((uint16_t)(uint8_t)md[1] << 8);
-                    if (cid == 0x004C && (uint8_t)md[2] == 0x07) {
-                        audioSeen.insert(String(dev->getAddress().toString().c_str()));
-                    }
+    auto ingest = [&]() {
+        scannerBleKeepAlive(scan);
+        const auto batch = scannerBleTakeInbox(scan);
+        std::vector<String> newMacs;
+        for (const auto &dev : batch) {
+            if (dev.haveMfg && dev.mfg.size() >= 3) {
+                uint16_t cid = (uint8_t)dev.mfg[0] | ((uint16_t)(uint8_t)dev.mfg[1] << 8);
+                if (cid == 0x004C && (uint8_t)dev.mfg[2] == 0x07) {
+                    audioSeen.insert(dev.mac);
                 }
             }
             AirTagHit parsed;
             if (!parseFindMy(dev, parsed)) continue;
-            String mac = String(dev->getAddress().toString().c_str());
-            int rssi = dev->getRSSI();
+            const String &mac = dev.mac;
+            int rssi = dev.rssi;
             bool found = false;
             for (auto &h : hits) {
                 if (h.mac == mac) {
@@ -137,67 +149,75 @@ void wallOfAirtagMenu() {
             if (!found) {
                 parsed.mac = mac;
                 parsed.rssi = rssi;
-                parsed.randomAddr = (dev->getAddressType() != BLE_ADDR_PUBLIC);
+                parsed.randomAddr = (dev.addrType != BLE_ADDR_PUBLIC);
                 parsed.hits = 1;
                 parsed.firstSeen = millis();
                 parsed.lastSeen = parsed.firstSeen;
                 hits.push_back(parsed);
-                if (fs && logged.insert(mac).second) {
-                    File out = fs->open(logPath, FILE_APPEND);
-                    if (!out) out = fs->open(logPath, FILE_WRITE);
-                    if (out) {
-                        out.println(
-                            mac + " " + String(rssi) + " batt=" + batteryLabel(parsed.battery) +
-                            (parsed.separated ? " sep" : " near")
-                        );
-                        out.close();
+                newMacs.push_back(mac);
+            }
+        }
+        if (fs) {
+            for (const auto &mac : newMacs) {
+                if (!logged.insert(mac).second) continue;
+                const AirTagHit *hp = nullptr;
+                for (const auto &h : hits) {
+                    if (h.mac == mac) {
+                        hp = &h;
+                        break;
                     }
+                }
+                if (!hp) continue;
+                File out = fs->open(logPath, FILE_APPEND);
+                if (!out) out = fs->open(logPath, FILE_WRITE);
+                if (out) {
+                    out.println(
+                        hp->mac + " " + String(hp->rssi) + " batt=" + batteryLabel(hp->battery) +
+                        (hp->separated ? " sep" : " near")
+                    );
+                    out.close();
                 }
             }
         }
+    };
 
-        std::sort(hits.begin(), hits.end(), [](const AirTagHit &a, const AirTagHit &b) {
-            return a.rssi > b.rssi;
-        });
-
-        const int rowH = 2 * uiLineH(FP) + 4;
-        const int startY = 44;
-        const int visible = max(1, (uiFooterY(FP) - startY) / rowH);
-        if (scroll > (int)hits.size() - visible) scroll = max(0, (int)hits.size() - visible);
-        if (scroll < 0) scroll = 0;
-
-        if (millis() - lastUi > 200) {
-            lastUi = millis();
-            tft.fillRect(6, 26, tftWidth - 12, tftHeight - 42, kvxConfig.bgColor);
-            tft.setTextSize(FP);
-            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-            String hdr = "AirTags " + String((int)hits.size());
-            if (audioSeen.size()) hdr += "  audio " + String((int)audioSeen.size());
-            tft.drawString(hdr, 8, 28);
-
-            for (int n = 0; n < visible; n++) {
-                int idx = scroll + n;
-                if (idx >= (int)hits.size()) break;
-                const AirTagHit &h = hits[idx];
-                int y = startY + n * rowH;
-                tft.setTextColor(DEFAULT_SECCOLOR, kvxConfig.bgColor);
-                String l1 = String(idx + 1) + " " + shortMac(h.mac) + "  " + String(h.rssi) + "dBm ~" +
-                            String(approxMeters(h.rssi), 1) + "m";
-                int nchars = max(1, (tftWidth - 14) / uiCharW(FP));
-                if ((int)l1.length() > nchars) l1 = l1.substring(0, nchars);
-                tft.drawString(l1, 8, y);
-                tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-                String l2 = String("   batt ") + batteryLabel(h.battery) +
-                            (h.separated ? "  sep" : "  near") + (h.randomAddr ? "  rnd" : "  pub");
-                if (h.keyPrefix.length()) l2 += "  " + h.keyPrefix;
-                if ((int)l2.length() > nchars) l2 = l2.substring(0, nchars);
-                tft.drawString(l2, 8, y + uiLineH(FP) + 2);
-            }
+    unsigned long lastPaint = 0;
+    while (true) {
+        ScannerListResult r = scannerListPoll(ui);
+        if (r == SCANNER_LIST_EXIT) break;
+        if (r == SCANNER_LIST_DETAIL && ui.cursor >= 0 && ui.cursor < (int)hits.size()) {
+            AirTagHit snap = hits[ui.cursor];
+            scannerListShowDetail("RESULT DETAILS", airtagDetail(snap), [&]() { scannerBleKeepAlive(scan); });
+            scannerListRefresh(ui);
+            lastPaint = 0;
+            continue;
         }
-        delay(30);
+        ingest();
+        if (millis() - lastPaint > 220) {
+            lastPaint = millis();
+            String keep = (ui.cursor >= 0 && ui.cursor < (int)hits.size()) ? hits[ui.cursor].mac : "";
+            std::sort(hits.begin(), hits.end(), [](const AirTagHit &a, const AirTagHit &b) {
+                return a.rssi > b.rssi;
+            });
+            if (keep.length()) {
+                for (int i = 0; i < (int)hits.size(); i++) {
+                    if (hits[i].mac == keep) {
+                        ui.cursor = i;
+                        break;
+                    }
+                }
+            }
+            String st = String(scannerBleAdvCount()) + " adv";
+            if (!hits.empty()) st += "  " + String((int)hits.size()) + " tag";
+            if (audioSeen.size()) st += " a" + String((int)audioSeen.size());
+            scannerListSetStatus(ui, st.c_str());
+            scannerListSetRows(ui, airtagRowLabels(hits));
+        }
+        delay(20);
     }
-    scan->stop();
-    NimBLEDevice::deinit(true);
+
+    scannerBleTeardown(true);
+    scannerListEnd();
     displayInfo("Logged " + String((int)hits.size()) + " AirTag(s)", true);
 }
 #endif

@@ -676,6 +676,7 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
     FS *fs;
     String filename = "";
 
+    setupSdCard();
     if (!getFsStorage(fs)) {
         displayError("No space left on device", true);
         return false;

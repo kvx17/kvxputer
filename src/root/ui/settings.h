@@ -12,6 +12,12 @@ void setBrightness(uint8_t brightval, bool save = true);
 
 void getBrightness();
 
+// Same steps as Config → Brightness / Sound Volume (shared with home-grid FN shortcuts).
+uint8_t nextBrightnessValue(uint8_t current, int dir);
+int brightnessSettingIndex(uint8_t bright);
+int nextVolumeValue(int current, int dir);
+int volumeSettingIndex(int volume);
+
 int gsetRotation(bool set = false);
 
 void setBrightnessMenu();

@@ -50,6 +50,7 @@ private:
     int foundMACAddressCount = 0;                 // Counter for found MAC addresses
     uint32_t macCacheClears = 0;                  // Number of times MAC cache was cleared
     static constexpr size_t MAX_REGISTERED_MACS = 250;
+    int scrollOffset = 0;                         // Status list scroll (Up/Down)
 
     bool rxPinReleased = false;
 

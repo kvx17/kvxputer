@@ -45,6 +45,12 @@ void tftSuppressCanvas(bool suppress) {
 #endif
 }
 
+void tftAbortFrame() {
+#if defined(HAS_SCREEN)
+    tft.abortFrame();
+#endif
+}
+
 bool __attribute__((weak)) isCharging() { return false; }
 /***************************************************************************************
 ** Function name: displayScrollingText
@@ -140,7 +146,7 @@ bool wakeUpScreen() {
     // Charge owns blanking while user-slept. If InputHandler woke us on the same
     // Down press/release that blanked the panel, the display would only stay off
     // while the key was held. Leave wake to the Charge loop (Up / Esc / S / G0).
-    if (chargeModeActive && chargeUserSleep) return false;
+    if (chargeModeActive) return false;
 
     if (isScreenOff) {
         isScreenOff = false;
@@ -931,6 +937,7 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 }
 
 void drawStatusBar() {
+    if (chargeModeActive) return;
     uint8_t bat = getBattery();
     if (bat > 0) drawBatteryStatus(bat);
 
@@ -940,18 +947,12 @@ void drawStatusBar() {
     }
 
     // Clock / version: compact top-strip size (half of body FP).
+    // kvx top bar already shows HH:MM next to the battery — do not print a
+    // second full clock on the left (main screen + scanner apps share that bar).
     const int clockSize = uiDenseFont();
     const int clockY = max(4, (25 - clockSize * LH) / 2);
     if (clock_set) {
-#if defined(HAS_RTC)
-        updateTimeStr(_rtc.getTimeStruct());
-#else
-        updateTimeStr(rtc.getTimeStruct());
-#endif
-        const int clockW = (int)strlen(timeStr) * clockSize * LW + 4;
-        tft.fillRect(12, clockY, max(60, clockW), clockSize * LH, kvxConfig.bgColor);
-        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
-        tft.print(timeStr);
+        tft.fillRect(12, clockY, max(60, 8 * clockSize * LW), clockSize * LH, kvxConfig.bgColor);
     } else {
         setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
         tft.print(String("kvxputer v") + KVXPUTER_VERSION);
@@ -1015,6 +1016,7 @@ void drawStatusBar() {
 }
 
 void drawMainBorder(bool clear) {
+    if (chargeModeActive) return;
     TftFrame frame;
     if (clear) {
         tft.drawPixel(0, 0, 0);
@@ -1034,6 +1036,7 @@ void drawMainBorder(bool clear) {
 }
 
 void drawMainBorderWithTitle(const String &title, bool clear) {
+    if (chargeModeActive) return;
     TftFrame frame;
     drawMainBorder(clear);
     printTitle(title);

@@ -1,4 +1,5 @@
 #include "root/storage/sd_functions.h"
+#include "root/storage/paths.h"
 #include "root/hal/bus_HAL.h"
 #include "root/ui/display.h" // using displayRedStripe as error msg
 #include "root/ui/kvx_ui.h"
@@ -1094,7 +1095,7 @@ File createNewFile(FS *&fs, String filepath, String filename) {
     String ext = filename.substring(extIndex);
 
     if (filepath.endsWith("/")) filepath = filepath.substring(0, filepath.length() - 1);
-    if (!(*fs).exists(filepath)) (*fs).mkdir(filepath);
+    kvx::paths::ensureDir(*fs, filepath.c_str());
 
     name = filepath + "/" + name;
 

@@ -61,16 +61,19 @@ constexpr const char *RFID_AMIIBO          = "/support_files/rfid/amiibo";
 constexpr const char *RFID_LEGACY          = "/BruceRFID";
 constexpr const char *RFID2                = "/support_files/rfid2";
 
-// Infrared
-constexpr const char *IR_PROFILES        = "/support_files/infrared/profiles";
+// Infrared (user captures under SD/kvxputer; packs may still live under support_files)
+constexpr const char *IR_PROFILES          = "/kvxputer/infrared/profiles";
 constexpr const char *IR_PROFILES_LEGACY   = "/BruceIR";
-constexpr const char *IR_REMOTES           = "/support_files/infrared/remotes";
+constexpr const char *IR_PROFILES_LEGACY2  = "/support_files/infrared/profiles";
+constexpr const char *IR_REMOTES           = "/kvxputer/infrared/remotes";
+constexpr const char *IR_REMOTES_LEGACY    = "/support_files/infrared/remotes";
 constexpr const char *IR_TVBG              = "/support_files/infrared/tvbg";
 constexpr const char *IR_ESL               = "/support_files/infrared/esl";
 
 // RF
-constexpr const char *RF_PRESETS           = "/support_files/rf/presets";
+constexpr const char *RF_PRESETS           = "/kvxputer/rf/presets";
 constexpr const char *RF_PRESETS_LEGACY    = "/BruceRF";
+constexpr const char *RF_PRESETS_LEGACY2   = "/support_files/rf/presets";
 
 // LoRa
 constexpr const char *LORA_SETTINGS        = "/support_files/lora/lora_settings.json";
@@ -85,6 +88,7 @@ constexpr const char *MEDIA_IMAGES         = "/support_files/media/images";
 // GPS
 constexpr const char *GPS_TRACKS           = "/support_files/gps/tracks";
 constexpr const char *GPS_WARDRIVING       = "/support_files/gps/wardriving";
+constexpr const char *GPS_WDBOTH           = "/kvxputer/app/WdBoth";
 constexpr const char *GPS_TRACKS_LEGACY    = "/BruceGPS";
 constexpr const char *GPS_WARDRIVING_LEGACY = "/BruceWardriving";
 
