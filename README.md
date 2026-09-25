@@ -639,6 +639,11 @@ Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on
 
 Maintained at [github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer).
 
+Do you like or enjoy this project? You can support me by [buying me a coffee!](https://buymeacoffee.com/kvx17)
+
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kvx17)
+
+
 Early ideas came from Bruce (BruceDevices) and Evil-Cardputer (7h30th3r0n3); upstream notices remain where applicable, and the combined distribution is AGPL-3.0 because of the Bruce lineage. The project has since grown into its own codebase and direction.
 
 Use responsibly: only on networks and devices you own or have explicit permission to test.
