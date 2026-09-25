@@ -25,6 +25,9 @@ constexpr const char *MENU_SCRIPTS_TOOLS     = "/menu/scripts/Tools";
 constexpr const char *MENU_SCRIPTS_LEGACY[]  = {"/scripts", "/BruceScripts", "/BruceJS"};
 constexpr const size_t MENU_SCRIPTS_LEGACY_COUNT = 3;
 
+// BadUSB payloads (SD only)
+constexpr const char *BADUSB_SCRIPTS         = "/kvxputer/scripts/badUSB";
+
 // --- support_files/ (runtime assets) ---
 
 // WiFi
@@ -69,6 +72,9 @@ constexpr const char *IR_REMOTES           = "/kvxputer/infrared/remotes";
 constexpr const char *IR_REMOTES_LEGACY    = "/support_files/infrared/remotes";
 constexpr const char *IR_TVBG              = "/support_files/infrared/tvbg";
 constexpr const char *IR_ESL               = "/support_files/infrared/esl";
+// Universal remote app settings (favorites) — SD only
+constexpr const char *KREMOTE_DIR          = "/kvxputer/kvxuniversalremote";
+constexpr const char *KREMOTE_USER_SETTINGS = "/kvxputer/kvxuniversalremote/userSettings.json";
 
 // RF
 constexpr const char *RF_PRESETS           = "/kvxputer/rf/presets";

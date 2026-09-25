@@ -50,6 +50,10 @@ void sendSamsungCommand(String address, String command, bool hideDefaultUI = fal
 void sendSonyCommand(String address, String command, uint8_t nbits, bool hideDefaultUI = false);
 void sendKaseikyoCommand(String address, String command, bool hideDefaultUI = false);
 bool sendDecodedCommand(String protocol, String value, uint8_t bits = 32, bool hideDefaultUI = false);
-void otherIRcodes();
+void otherIRcodes(const char *startFolder = nullptr);
+// Shared post-file menu: Choose cmd / Spam all / Virtual Remote / Favorite / Menu.
+// Returns true when Choose-cmd Main Menu was selected (leave Browse IR).
+// Returns false for Menu/Esc (caller returns to file list or favorites list).
+bool irFileActionMenu(FS *fs, const String &filepath);
 bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI = false);
 bool chooseCmdIrFile(FS *fs, const String &filepath);

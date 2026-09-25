@@ -288,7 +288,7 @@ void drawWebUiScreen(bool mode_ap) {
 
     if (mode_ap) {
         tft.setCursor(padX, currentY);
-        tft.print("Net: KvxputerNet/kvxputernet");
+        tft.print("Net: " + kvxConfig.wifiAp.ssid + "/" + kvxConfig.wifiAp.pwd);
         currentY += LH * FP + 6;
     }
 

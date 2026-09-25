@@ -139,10 +139,7 @@ static bool devModeOn() { return kvxConfig.devMode; }
 
 // --- WiFi ---
 static void launchWifiSta() { wifiConnectMenu(WIFI_STA); }
-static void launchWifiAp() {
-    wifiConnectMenu(WIFI_AP);
-    displayInfo("pwd: " + kvxConfig.wifiAp.pwd, true);
-}
+static void launchWifiAp() { wifiStartApInteractive(); }
 static void launchWifiOff() { wifiDisconnect(); }
 static void launchApInfo() { displayAPInfo(); }
 static void launchWifiAtk() { wifi_atk_menu(); }
@@ -411,7 +408,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"telnet", "TelNET", "WiFi", false, notLite, launchTelnet},
         {"ssh", "SSH", "WiFi", false, notLite, launchSsh},
         {"sniffer", "Sniffer", "WiFi", true, notLite, launchSniffer},
-        {"channel_analyzer", "Channel Analyzer", "WiFi", true, notLite, launchChannelAnalyzer},
+        {"channel_analyzer", "kvx wifi analyzer", "WiFi", true, notLite, launchChannelAnalyzer},
         {"jam_detect", "Jam Detect", "WiFi", true, notLite, launchJamDetect},
         {"scan_hosts", "Scan Hosts", "WiFi", true, notLite, launchScanHosts},
         {"wireguard", "Wireguard", "WiFi", false, notLite, launchWireguard},

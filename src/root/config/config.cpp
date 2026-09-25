@@ -107,6 +107,8 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteLedEnabled"] = hidRemoteLedEnabled;
     setting["kremotePortrait"] = kremotePortrait;
     setting["kremoteButtonsSwapped"] = kremoteButtonsSwapped;
+    setting["kremoteIrHw"] = kremoteIrHw;
+    setting["kremoteBrowseFolder"] = kremoteBrowseFolder;
     setting["g0HoldHome"] = g0HoldHome;
     setting["pdaWcFace"] = pdaWcFace;
     JsonArray pdaBind = setting["pdaKeyBind"].to<JsonArray>();
@@ -597,6 +599,17 @@ void KvxputerConfig::fromFile(bool checkFS) {
     }
     if (!setting["kremoteButtonsSwapped"].isNull()) {
         kremoteButtonsSwapped = setting["kremoteButtonsSwapped"].as<bool>();
+    }
+    if (!setting["kremoteIrHw"].isNull()) {
+        kremoteIrHw = (uint8_t)setting["kremoteIrHw"].as<int>();
+        if (kremoteIrHw > 2) kremoteIrHw = 0;
+    }
+    if (!setting["kremoteBrowseFolder"].isNull()) {
+        String p = setting["kremoteBrowseFolder"].as<String>();
+        p.trim();
+        while (p.length() > 1 && p.endsWith("/")) p.remove(p.length() - 1);
+        if (p.length() && !p.startsWith("/")) p = "/" + p;
+        kremoteBrowseFolder = p;
     }
     if (!setting["g0HoldHome"].isNull()) {
         g0HoldHome = setting["g0HoldHome"].as<bool>();
@@ -1272,6 +1285,21 @@ void KvxputerConfig::setKremotePortrait(bool value) {
 
 void KvxputerConfig::setKremoteButtonsSwapped(bool value) {
     kremoteButtonsSwapped = value;
+    saveFile();
+}
+
+void KvxputerConfig::setKremoteIrHw(uint8_t value) {
+    if (value > 2) value = 0;
+    kremoteIrHw = value;
+    saveFile();
+}
+
+void KvxputerConfig::setKremoteBrowseFolder(const String &value) {
+    String p = value;
+    p.trim();
+    while (p.length() > 1 && p.endsWith("/")) p.remove(p.length() - 1);
+    if (p.length() && !p.startsWith("/")) p = "/" + p;
+    kremoteBrowseFolder = p;
     saveFile();
 }
 

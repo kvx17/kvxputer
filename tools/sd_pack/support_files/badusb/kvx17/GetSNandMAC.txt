@@ -1,0 +1,15 @@
+REM Get SN, MAC and Hostname
+WINDOWS GUI
+DELAY 2000 
+STRING cmd
+DELAY 1000
+ENTER
+DELAY 2000
+STRING ipconfig 
+ENTER
+DELAY 1000
+STRING hostname
+ENTER
+DELAY 1000
+STRING wmic bios get serialnumber 
+ENTER

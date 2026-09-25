@@ -855,7 +855,7 @@ void EvilPortal::saveToCSV(const String &csvLine, bool isAPname) {
 }
 
 void EvilPortal::apName_from_keyboard() {
-    apName = keyboard("Free Wifi", 30, "Evil Portal SSID:");
+    apName = keyboard("Free Wifi", 30, "kvx Portal SSID:");
     if (apName == "\x1B") apName = "Free Wifi";
 }
 

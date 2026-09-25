@@ -24,7 +24,7 @@ void IRMenu::optionsMenu() {
     options = {
         {"kvxputer universal remote", kremoteMenu},
         {"TV-B-Gone", StartTvBGone              },
-        {"Custom IR", otherIRcodes              },
+        {"Custom IR", []() { otherIRcodes(); }},
         {"IR Read",   [=]() { IrRead(); }       },
 #if !defined(LITE_VERSION)
         {"IR Jammer", startIrJammer             }, // Simple frequency-adjustable jammer

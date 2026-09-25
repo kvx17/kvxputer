@@ -604,11 +604,44 @@ void readFs(FS &fs, const String &folder, const String &allowed_ext) {
     fileList.push_back(object);
 }
 
+static void addUseThisFolderRow() {
+    FileList object;
+    object.filename = "> Use this folder";
+    object.folder = false;
+    object.operation = true;
+    fileList.insert(fileList.begin(), object);
+}
+
+static bool isViewableImagePath(const String &path) {
+    String p = path;
+    p.toLowerCase();
+    return p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".png") || p.endsWith(".bmp") ||
+           p.endsWith(".gif");
+}
+
+static void viewImageFile(FS &fs, const String &filepath) {
+    tftAbortFrame();
+    tft.fillScreen(TFT_BLACK);
+    if (!drawImg(fs, filepath, 0, 0, true, -1)) {
+        displayError("Can't display image", true);
+        return;
+    }
+    // Release the key that opened the file so we don't dismiss immediately.
+    while (check(AnyKeyPress) || check(SelPress) || check(EscPress)) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    delay(200);
+    while (!check(AnyKeyPress) && !forceHome) {
+        resetPowerSaveTimer();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 /*********************************************************************
 **  Function: loopSD
 **  Where you choose what to do with your SD Files
 **********************************************************************/
-String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPath) {
+String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPath, bool folderPicker) {
     delay(10);
     if (!fs.exists(rootPath)) {
         Serial.println("loopSD-> 1st exist test failed");
@@ -643,6 +676,7 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
     // returnToMenu=true;  // make sure menu is redrawn when quitting in any point
 
     readFs(fs, Folder, allowed_ext);
+    if (folderPicker) addUseThisFolderRow();
 
     maxFiles = fileList.size() - 1; // discount the >back operator
     LongPress = false;
@@ -662,12 +696,16 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                 tft.fillScreen(KVX_DEFAULT_BGCOLOR);
                 Serial.println("reload to read: " + Folder);
                 readFs(fs, Folder, allowed_ext);
+                if (folderPicker) addUseThisFolderRow();
                 PreFolder = Folder;
                 maxFiles = fileList.size() - 1;
                 if (strcmp(PreFolder.c_str(), Folder.c_str()) != 0 || index > maxFiles) index = 0;
                 reload = false;
             }
-            if (fileList.size() < 2) readFs(fs, Folder, allowed_ext);
+            if (fileList.size() < 2) {
+                readFs(fs, Folder, allowed_ext);
+                if (folderPicker) addUseThisFolderRow();
+            }
 
             coord = listFiles(index, fileList, kvxFilesBarTitle(Folder).c_str());
 #if defined(HAS_TOUCH)
@@ -686,25 +724,29 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
 #ifdef HAS_KEYBOARD
         pressed_letter = checkLetterShortcutPress();
 
-        // check letter shortcuts
+        // Jump to first/next file or folder whose name starts with the pressed letter.
         if (pressed_letter > 0) {
-            // Serial.println(pressed_letter);
-            if (tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                // already selected, go to the next
-                index += 1;
-                // check if index is still valid
-                if (index <= maxFiles && tolower(fileList[index].filename.c_str()[0]) == pressed_letter) {
-                    redraw = true;
-                    continue;
+            const char want = (char)tolower((unsigned char)pressed_letter);
+            auto startsWithLetter = [&](int i) -> bool {
+                if (i < 0 || i >= (int)fileList.size()) return false;
+                if (fileList[i].operation) return false; // skip > Back and ops
+                const String &name = fileList[i].filename;
+                if (name.length() == 0) return false;
+                return (char)tolower((unsigned char)name[0]) == want;
+            };
+            // Search from next row, then wrap; leave index unchanged if no match.
+            int found = -1;
+            for (int step = 1; step <= maxFiles; step++) {
+                int i = (index + step) % (maxFiles + 1);
+                if (i > maxFiles) continue;
+                if (startsWithLetter(i)) {
+                    found = i;
+                    break;
                 }
             }
-            // else look again from the start
-            for (int i = 0; i < maxFiles; i++) {
-                if (tolower(fileList[i].filename.c_str()[0]) == pressed_letter) { // check if 1st char matches
-                    index = i;
-                    redraw = true;
-                    break; // quit on 1st match
-                }
+            if (found >= 0) {
+                index = found;
+                redraw = true;
             }
         }
 #endif
@@ -772,6 +814,11 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             LongPress = false;
 
             if (check(SelPress)) {
+                if (folderPicker && fileList[index].operation &&
+                    fileList[index].filename.startsWith("> Use this folder")) {
+                    result = Folder;
+                    break;
+                }
                 if (fileList[index].folder == true && fileList[index].operation == false) {
                     options = {
                         {"New Folder", [=]() { createFolder(fs, Folder); }                                 },
@@ -807,6 +854,11 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                 }
             } else {
             Files:
+                if (folderPicker && fileList[index].operation &&
+                    fileList[index].filename.startsWith("> Use this folder")) {
+                    result = Folder;
+                    break;
+                }
                 if (fileList[index].folder == true && fileList[index].operation == false) {
                     Folder = Folder + (Folder == "/" ? "" : "/") +
                              fileList[index].filename; // Folder=="/"? "":"/" +
@@ -839,14 +891,10 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
                         options.push_back({"Copy->SD", [=]() { copyToFs(LittleFS, SD, filepath); }});
 
                     // custom file formats commands added in front
-                    if (filepath.endsWith(".jpg") || filepath.endsWith(".gif") || filepath.endsWith(".bmp") ||
-                        filepath.endsWith(".png"))
-                        options.insert(options.begin(), {"View Image", [&]() {
-                                                             drawImg(fs, filepath, 0, 0, true, -1);
-                                                             delay(750);
-                                                             while (!check(AnyKeyPress))
-                                                                 vTaskDelay(10 / portTICK_PERIOD_MS);
-                                                         }});
+                    if (isViewableImagePath(filepath))
+                        options.insert(
+                            options.begin(), {"View Image", [=, &fs]() { viewImageFile(fs, filepath); }}
+                        );
                     if (filepath.endsWith(".ir")) {
                         options.insert(options.begin(), {"IR Choose cmd", [&]() {
                                                              delay(200);
@@ -1004,6 +1052,11 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
 **  Display file content
 **********************************************************************/
 void viewFile(FS &fs, const String &filepath) {
+    if (isViewableImagePath(filepath)) {
+        viewImageFile(fs, filepath);
+        return;
+    }
+
     File file = fs.open(filepath, FILE_READ);
     if (!file) return;
 

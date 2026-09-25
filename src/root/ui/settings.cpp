@@ -1428,11 +1428,11 @@ void setGpsBaudrateMenu() {
 **  Handles Menu to set the WiFi AP SSID
 **********************************************************************/
 void setWifiApSsidMenu() {
-    const bool isDefault = kvxConfig.wifiAp.ssid == "KvxputerNet";
+    const bool isDefault = kvxConfig.wifiAp.ssid == "kvxputer";
 
     options = {
-        {"Default (KvxputerNet)",
-         [=]() { kvxConfig.setWifiApCreds("KvxputerNet", kvxConfig.wifiAp.pwd); },
+        {"Default (kvxputer)",
+         [=]() { kvxConfig.setWifiApCreds("kvxputer", kvxConfig.wifiAp.pwd); },
          isDefault                                                                            },
         {"Custom",
          [=]() {
@@ -1453,18 +1453,18 @@ void setWifiApSsidMenu() {
 **  Handles Menu to set the WiFi AP Password
 **********************************************************************/
 void setWifiApPasswordMenu() {
-    const bool isDefault = kvxConfig.wifiAp.pwd == "kvxputernet";
+    const bool isDefault = kvxConfig.wifiAp.pwd == "kvxputer";
 
     options = {
-        {"Default (kvxputernet)",
-         [=]() { kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, "kvxputernet"); },
+        {"Default (kvxputer)",
+         [=]() { kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, "kvxputer"); },
          isDefault                                                                             },
         {"Custom",
          [=]() {
-             String newPassword = keyboard(kvxConfig.wifiAp.pwd, 32, "WiFi AP Password:", true);
+             String newPassword = keyboard(kvxConfig.wifiAp.pwd, 63, "WiFi AP Password:", true);
              if (newPassword != "\x1B") {
-                 if (!newPassword.isEmpty()) kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, newPassword);
-                 else displayError("Password cannot be empty", true);
+                 if (newPassword.length() < 8) displayError("Password min 8 chars", true);
+                 else kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, newPassword);
              }
          },                                                                          !isDefault},
     };

@@ -154,6 +154,55 @@ bool _setupAP() {
     return true;
 }
 
+static bool isStockApSsid(String s) {
+    s.trim();
+    String u = s;
+    u.toLowerCase();
+    return s.length() == 0 || u == "bruce" || u == "brucenet" || s == "KvxputerNet";
+}
+
+static bool isStockApPwd(String s) {
+    String u = s;
+    u.toLowerCase();
+    return s.length() == 0 || u == "bruce" || u == "kvxputernet";
+}
+
+bool wifiStartApInteractive() {
+    if (WiFi.AP.started()) {
+        displayInfo("AP already running", true);
+        return true;
+    }
+    if (WiFi.isConnected()) {
+        displayError("Disconnect WiFi first", true);
+        return false;
+    }
+
+    String ssid = kvxConfig.wifiAp.ssid;
+    String pwd = kvxConfig.wifiAp.pwd;
+    if (isStockApSsid(ssid)) ssid = "kvxputer";
+    if (isStockApPwd(pwd)) pwd = "kvxputer";
+
+    ssid = keyboard(ssid, 32, "AP SSID:");
+    if (ssid == "\x1B") return false;
+    ssid.trim();
+    if (ssid.length() == 0) {
+        displayError("SSID cannot be empty", true);
+        return false;
+    }
+
+    pwd = keyboard(pwd, 63, "AP Password:", true);
+    if (pwd == "\x1B") return false;
+    if (pwd.length() < 8) {
+        displayError("Password min 8 chars", true);
+        return false;
+    }
+
+    kvxConfig.setWifiApCreds(ssid, pwd);
+    if (!wifiConnectMenu(WIFI_AP)) return false;
+    displayInfo("pwd: " + kvxConfig.wifiAp.pwd, true);
+    return true;
+}
+
 void wifiDisconnect() {
     wifiTransitioning = true;
 
@@ -332,7 +381,8 @@ void wifiConnectTask(void *pvParameters) {
                 if (timezoneTaskHandle == NULL) {
                     xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
                 }
-                drawStatusBar();
+                // Do not draw UI from this task — it races the main menu / apps
+                // and previously stamped the theme border onto the kvx grid.
                 break;
             }
             vTaskDelay(100 / portTICK_RATE_MS);

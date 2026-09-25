@@ -20,6 +20,17 @@
 void _setup_codec_speaker(bool enable) __attribute__((weak));
 void _setup_codec_speaker(bool enable) {}
 
+// IDF I2S handle used by the volume tick. Must be released before ESP8266Audio
+// takes I2S_NUM_0 or file playback is silent.
+static i2s_chan_handle_t g_tickI2s = nullptr;
+
+static void releaseTickBeepI2s() {
+    if (!g_tickI2s) return;
+    i2s_channel_disable(g_tickI2s);
+    i2s_del_channel(g_tickI2s);
+    g_tickI2s = nullptr;
+}
+
 // Volume control constants
 static const float AUDIO_VOLUME_SCALE = 0.1f;
 static const float AUDIO_VOLUME_MAX = 100.0f;
@@ -192,70 +203,56 @@ static void audioPlaybackTask(void *parameter) {
             break;
         }
 
-        // Check for pause request
+        // Pause/resume without holding the mutex across fade delays so the UI
+        // can poll getAudioPlaybackInfo without blocking.
         if (player->pauseRequested) {
-            if (player->lock(pdMS_TO_TICKS(100))) {
-                if (player->state == PLAYBACK_PLAYING) {
-                    // Fade out volume to prevent pop/crackling
-                    for (int i = 10; i >= 0; i--) {
-                        player->output->SetGain(player->currentGain * i / 10.0f);
-                        vTaskDelay(pdMS_TO_TICKS(8));
-                    }
-
-                    // Stop I2S output to prevent buffer loop
-                    player->output->stop();
-
-                    player->state = PLAYBACK_PAUSED;
-                    player->pausedTime = millis();
-                    Serial.println("Playback paused - I2S stopped");
-                } else if (player->state == PLAYBACK_PAUSED) {
-                    // Restart I2S output
-                    if (!player->output->begin()) {
-                        Serial.println("ERROR: Failed to restart I2S output");
-                        player->pauseRequested = false;
-                        player->unlock();
-                        break; // Exit task if can't restart
-                    }
-
-                    // Restore volume with fade in
-                    for (int i = 0; i <= 10; i++) {
-                        player->output->SetGain(player->currentGain * i / 10.0f);
-                        vTaskDelay(pdMS_TO_TICKS(8));
-                    }
-
-                    player->state = PLAYBACK_PLAYING;
-                    player->totalPausedDuration += millis() - player->pausedTime;
-                    Serial.println("Playback resumed - I2S restarted");
+            if (player->state == PLAYBACK_PLAYING) {
+                float gain = player->currentGain;
+                for (int i = 10; i >= 0; i--) {
+                    if (player->output) player->output->SetGain(gain * i / 10.0f);
+                    vTaskDelay(pdMS_TO_TICKS(8));
                 }
-                player->pauseRequested = false;
-                player->unlock();
+                if (player->output) player->output->stop();
+                player->state = PLAYBACK_PAUSED;
+                player->pausedTime = millis();
+                Serial.println("Playback paused - I2S stopped");
+            } else if (player->state == PLAYBACK_PAUSED) {
+                if (!player->output || !player->output->begin()) {
+                    Serial.println("ERROR: Failed to restart I2S output");
+                    player->pauseRequested = false;
+                    break;
+                }
+                float gain = player->currentGain;
+                for (int i = 0; i <= 10; i++) {
+                    player->output->SetGain(gain * i / 10.0f);
+                    vTaskDelay(pdMS_TO_TICKS(8));
+                }
+                player->state = PLAYBACK_PLAYING;
+                player->totalPausedDuration += millis() - player->pausedTime;
+                Serial.println("Playback resumed - I2S restarted");
             }
+            player->pauseRequested = false;
         }
 
-        // Check for volume change request
         if (player->volumeChanged && player->output) {
-            if (player->lock(pdMS_TO_TICKS(50))) {
-                player->currentGain = player->newVolume / AUDIO_VOLUME_MAX;
-                player->output->SetGain(player->currentGain);
-                player->volumeChanged = false;
-                player->unlock();
-                Serial.print("Volume changed to: ");
-                Serial.println(player->newVolume);
-            }
+            player->currentGain = player->newVolume / AUDIO_VOLUME_MAX;
+            player->output->SetGain(player->currentGain);
+            player->volumeChanged = false;
+            Serial.print("Volume changed to: ");
+            Serial.println(player->newVolume);
         }
 
-        // Only loop generator when not paused
+        // Decode without holding the mutex. Do not vTaskDelay here — even 1 tick
+        // (often 10 ms) underruns I2S and the track is silent. taskYIELD() lets
+        // the UI (same priority) run when it is ready.
         if (player->state == PLAYBACK_PLAYING) {
             if (!player->generator->loop()) {
                 Serial.println("Generator loop ended");
                 break;
             }
         } else {
-            // Paused - yield to prevent busy waiting
             vTaskDelay(pdMS_TO_TICKS(50));
         }
-
-        // Yield to prevent watchdog timeout
         taskYIELD();
     }
 
@@ -346,6 +343,7 @@ bool isAudioPlaying() {
 AudioPlaybackInfo getAudioPlaybackInfo() {
     initAudioPlayer();
 
+    static AudioPlaybackInfo lastInfo = {};
     AudioPlaybackInfo info;
     info.state = PLAYBACK_IDLE;
     info.currentFile = "";
@@ -356,13 +354,13 @@ AudioPlaybackInfo getAudioPlaybackInfo() {
 
     if (!g_audioPlayer) return info;
 
-    if (g_audioPlayer->lock(pdMS_TO_TICKS(100))) {
+    // Short try-lock so the UI never stalls waiting on the decode task.
+    if (g_audioPlayer->lock(pdMS_TO_TICKS(5))) {
         info.state = g_audioPlayer->state;
         info.currentFile = g_audioPlayer->currentFile;
         info.volume = kvxConfig.soundVolume;
         info.isAsyncMode = (g_audioPlayer->mode == PLAYBACK_ASYNC);
 
-        // Calculate position
         if (g_audioPlayer->state == PLAYBACK_PLAYING) {
             info.position = millis() - g_audioPlayer->startTime - g_audioPlayer->totalPausedDuration;
         } else if (g_audioPlayer->state == PLAYBACK_PAUSED) {
@@ -371,9 +369,11 @@ AudioPlaybackInfo getAudioPlaybackInfo() {
         }
 
         g_audioPlayer->unlock();
+        lastInfo = info;
+        return info;
     }
 
-    return info;
+    return lastInfo;
 }
 
 void setAudioPlaybackVolume(uint8_t volume) {
@@ -462,6 +462,7 @@ bool playAudioFile(FS *fs, String filepath, PlaybackMode mode) {
     // Stop any current playback
     if (isAudioPlaying()) { stopAudioPlayback(); }
 
+    releaseTickBeepI2s();
     _setup_codec_speaker(true);
 
     AudioFileSource *source = new AudioFileSourceFS(*fs, filepath.c_str());
@@ -546,6 +547,7 @@ bool playAudioRTTTLString(String song, PlaybackMode mode) {
 
     if (isAudioPlaying()) { stopAudioPlayback(); }
 
+    releaseTickBeepI2s();
     _setup_codec_speaker(true);
 
     AudioOutputI2S *audioout = createConfiguredAudioOutput();
@@ -618,6 +620,7 @@ bool tts(String text, PlaybackMode mode) {
     // Stop any current playback
     if (isAudioPlaying()) { stopAudioPlayback(); }
 
+    releaseTickBeepI2s();
     _setup_codec_speaker(true);
 
     AudioOutputI2S *audioout = createConfiguredAudioOutput();
@@ -659,6 +662,7 @@ bool isAudioFile(const String &filepath) {
 void playTone(unsigned int frequency, unsigned long duration, short waveType, bool stopOnKey) {
     if (!kvxConfig.soundEnabled) return;
 
+    releaseTickBeepI2s();
     _setup_codec_speaker(true);
 
     if (frequency == 0 || duration == 0) {
@@ -735,22 +739,15 @@ void playVolumeTickBeep(uint8_t volumePercent) {
 
     _setup_codec_speaker(true);
 
-    static i2s_chan_handle_t tx = nullptr;
-
-    auto teardown = [&]() {
-        if (!tx) return;
-        i2s_channel_disable(tx);
-        i2s_del_channel(tx);
-        tx = nullptr;
-    };
+    auto teardown = [&]() { releaseTickBeepI2s(); };
 
     auto setup = [&]() -> bool {
-        if (tx) return true;
+        if (g_tickI2s) return true;
         i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
         chan_cfg.dma_desc_num = 8;
         chan_cfg.dma_frame_num = 256;
-        if (i2s_new_channel(&chan_cfg, &tx, NULL) != ESP_OK) {
-            tx = nullptr;
+        if (i2s_new_channel(&chan_cfg, &g_tickI2s, NULL) != ESP_OK) {
+            g_tickI2s = nullptr;
             return false;
         }
         i2s_std_slot_config_t slot_cfg =
@@ -768,9 +765,9 @@ void playVolumeTickBeep(uint8_t volumePercent) {
                             .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
                             },
         };
-        if (i2s_channel_init_std_mode(tx, &std_cfg) != ESP_OK) {
-            i2s_del_channel(tx);
-            tx = nullptr;
+        if (i2s_channel_init_std_mode(g_tickI2s, &std_cfg) != ESP_OK) {
+            i2s_del_channel(g_tickI2s);
+            g_tickI2s = nullptr;
             return false;
         }
         return true;
@@ -800,8 +797,8 @@ void playVolumeTickBeep(uint8_t volumePercent) {
     // previously queued and then cut off before the speaker started.
     fillTone(0, 128);
     size_t loaded = 0;
-    i2s_channel_preload_data(tx, buf, 128 * 4, &loaded);
-    esp_err_t en = i2s_channel_enable(tx);
+    i2s_channel_preload_data(g_tickI2s, buf, 128 * 4, &loaded);
+    esp_err_t en = i2s_channel_enable(g_tickI2s);
     if (en != ESP_OK && en != ESP_ERR_INVALID_STATE) {
         teardown();
         if (!setup()) {
@@ -809,8 +806,8 @@ void playVolumeTickBeep(uint8_t volumePercent) {
             return;
         }
         fillTone(0, 128);
-        i2s_channel_preload_data(tx, buf, 128 * 4, &loaded);
-        en = i2s_channel_enable(tx);
+        i2s_channel_preload_data(g_tickI2s, buf, 128 * 4, &loaded);
+        en = i2s_channel_enable(g_tickI2s);
         if (en != ESP_OK && en != ESP_ERR_INVALID_STATE) {
             teardown();
             _setup_codec_speaker(false);
@@ -826,14 +823,15 @@ void playVolumeTickBeep(uint8_t volumePercent) {
         if (n + chunk > total) chunk = total - n;
         fillTone(n, chunk);
         size_t written = 0;
-        if (i2s_channel_write(tx, buf, (size_t)chunk * 4, &written, pdMS_TO_TICKS(100)) != ESP_OK) break;
+        if (i2s_channel_write(g_tickI2s, buf, (size_t)chunk * 4, &written, pdMS_TO_TICKS(100)) != ESP_OK)
+            break;
         n += chunk;
     }
     memset(buf, 0, sizeof(buf));
     size_t written = 0;
-    i2s_channel_write(tx, buf, 128 * 4, &written, pdMS_TO_TICKS(50));
+    i2s_channel_write(g_tickI2s, buf, 128 * 4, &written, pdMS_TO_TICKS(50));
     delay(40);
-    i2s_channel_disable(tx);
+    teardown();
     _setup_codec_speaker(false);
 }
 

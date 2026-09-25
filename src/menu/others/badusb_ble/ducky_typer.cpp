@@ -3,8 +3,11 @@
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "root/hal/radio_mem.h"
+#include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/app/utils.h"
+#include "menu/others/pda/pda_common.h"
+#include "menu/others/pda/pda_editor.h"
 #include "esp_mac.h"
 #include "menu/ble/ble_common.h"
 #include <NimBLEDevice.h>
@@ -704,8 +707,254 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
 }
 
 // ============================================================================
-// DUCKY SETUP - Main entry for BadUSB/BLE script runner
+// BADUSB SCRIPT LIBRARY + RUNNER
 // ============================================================================
+
+static constexpr int kBadusbMaxLen = 4096;
+
+static bool badusbGetSd(FS *&fs, bool showError) {
+    if (!setupSdCard()) {
+        if (showError) displayError("No SD card", true);
+        return false;
+    }
+    fs = &SD;
+    kvx::paths::ensureDir(*fs, kvx::paths::BADUSB_SCRIPTS);
+    return true;
+}
+
+static String badusbDir() { return String(kvx::paths::BADUSB_SCRIPTS); }
+
+static String badusbDisplayName(const String &filename) {
+    String label = filename;
+    String lower = label;
+    lower.toLowerCase();
+    if (lower.endsWith(".txt")) label.remove(label.length() - 4);
+    return label;
+}
+
+static String badusbSuggestedName(const String &content) {
+    int start = 0;
+    while (start < (int)content.length()) {
+        int nl = content.indexOf('\n', start);
+        String line = (nl < 0) ? content.substring(start) : content.substring(start, nl);
+        if (line.endsWith("\r")) line.remove(line.length() - 1);
+        line.trim();
+        if (line.length() > 0) {
+            if (line.startsWith("REM ")) line = line.substring(4);
+            else if (line.startsWith("COMMENT ")) line = line.substring(8);
+            line.trim();
+            if (line.length() > 32) {
+                line = line.substring(0, 32);
+                line.trim();
+            }
+            return pdaSanitizeName(line);
+        }
+        if (nl < 0) break;
+        start = nl + 1;
+    }
+    return "script";
+}
+
+static bool badusbWritePath(FS *fs, const String &path, const String &content) {
+    if (fs == nullptr) return false;
+    kvx::paths::ensureParentDirs(*fs, path.c_str());
+    File file = fs->open(path, FILE_WRITE);
+    if (!file) {
+        displayError("Save failed", true);
+        return false;
+    }
+    file.print(content);
+    file.close();
+    return true;
+}
+
+static String badusbUniquePath(FS *fs, const String &base, const String &keepPath) {
+    String dir = badusbDir();
+    String candidate = dir + "/" + base + ".txt";
+    if (candidate == keepPath || !fs->exists(candidate)) return candidate;
+    for (int n = 2; n < 1000; n++) {
+        candidate = dir + "/" + base + "-" + String(n) + ".txt";
+        if (candidate == keepPath || !fs->exists(candidate)) return candidate;
+    }
+    return candidate;
+}
+
+static bool badusbPromptSave(FS *fs, String &path, const String &content) {
+    String def = badusbSuggestedName(content);
+    String name = keyboard(def, 40, "Script name:");
+    if (name == "\x1B") return false;
+    name.trim();
+    if (name.length() == 0) {
+        displayError("Name cannot be empty", true);
+        return false;
+    }
+    name = pdaSanitizeName(name);
+    String lower = name;
+    lower.toLowerCase();
+    if (lower.endsWith(".txt")) name = name.substring(0, name.length() - 4);
+    path = badusbUniquePath(fs, name, path);
+    if (!badusbWritePath(fs, path, content)) return false;
+    displaySuccess("Script saved", true);
+    return true;
+}
+
+static bool duckyPrepareHid(HIDInterface *&hid, bool ble, bool &first_time) {
+    if (!first_time) return true;
+
+    printStatusBadUSBBLE("Preparing USB");
+    if (ble) safeCleanupDuckyBLE(hid);
+    ducky_startKb(hid, ble, 2); // functionId 2 = BadUSB
+    if (returnToMenu) return false;
+
+    if (!ble) {
+#if !defined(USB_as_HID)
+        mySerial.write(0x00);
+        while (mySerial.available() <= 0) {
+            if (mySerial.available() <= 0) {
+                displayTextLine("CH9329 -> USB");
+                delay(200);
+                mySerial.write(0x00);
+            } else break;
+            if (check(EscPress)) {
+                displayError("CH9329 not found");
+                delay(500);
+                return false;
+            }
+        }
+#endif
+        printStatusBadUSBBLE("Preparing USB");
+        delay(2000);
+    } else {
+        printStatusBadUSBBLE("Waiting Victim");
+        while (!hid->isConnected() && !check(EscPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
+        if (hid->isConnected()) {
+            BLEConnected = true;
+            printStatusBadUSBBLE("Preparing BLE");
+            delay(1000);
+        } else {
+            displayWarning("Canceled", true);
+            return false;
+        }
+    }
+
+    first_time = false;
+    return true;
+}
+
+static void duckyRunFile(FS *fs, const String &bad_script, HIDInterface *&hid, bool ble, bool &first_time) {
+    if (fs == nullptr || bad_script.length() == 0) return;
+
+    printHeaderBadUSBBLE(bad_script);
+    printStatusBadUSBBLE("Preparing");
+    if (!duckyPrepareHid(hid, ble, first_time)) return;
+
+    while (!returnToMenu && !forceHome) {
+        printStatusBadUSBBLE(String(BTN_ALIAS) + " to start");
+        if (!waitForButtonPress()) return;
+        delay(200);
+        key_input(*fs, bad_script, hid);
+        printStatusBadUSBBLE("Finished - " + String(BTN_ALIAS) + " to restart");
+        if (!waitForButtonPress()) return;
+        printHeaderBadUSBBLE(bad_script);
+        printStatusBadUSBBLE("Preparing");
+    }
+}
+
+static void duckyRunBuffer(const String &content, HIDInterface *&hid, bool ble, bool &first_time) {
+    FS *fs = nullptr;
+    String path;
+    if (setupLittleFS()) {
+        fs = &LittleFS;
+        path = "/ducky_run.txt";
+    } else if (setupSdCard()) {
+        fs = &SD;
+        kvx::paths::ensureDir(*fs, kvx::paths::BADUSB_SCRIPTS);
+        path = badusbDir() + "/._run.txt";
+    } else {
+        displayError("No storage", true);
+        return;
+    }
+    if (!badusbWritePath(fs, path, content)) return;
+    duckyRunFile(fs, path, hid, ble, first_time);
+    fs->remove(path);
+}
+
+static void badusbOpenExisting(
+    FS *fs, const String &filename, HIDInterface *&hid, bool ble, bool &first_time
+) {
+    String path = badusbDir() + "/" + filename;
+    bool deleted = false;
+    while (!deleted && !returnToMenu && !forceHome) {
+        std::vector<Option> opts = {
+            {"Run", [&]() { duckyRunFile(fs, path, hid, ble, first_time); }},
+            {"Edit",
+             [&]() {
+                 String content = readSmallFile(*fs, path);
+                 String label = badusbDisplayName(filename);
+                 if (pdaTextEditor(content, label.c_str(), kBadusbMaxLen, true) != PDA_EDIT_OK) return;
+                 if (badusbWritePath(fs, path, content)) displaySuccess("Script saved", true);
+             }},
+            {"Delete",
+             [&]() {
+                 fs->remove(path);
+                 deleted = true;
+                 displaySuccess("Deleted", true);
+             }},
+        };
+        int r = loopOptions(opts, MENU_TYPE_SUBMENU, filename.c_str());
+        if (r < 0) break;
+    }
+}
+
+static void badusbNewScript(HIDInterface *&hid, bool ble, bool &first_time) {
+    String content = "";
+    if (pdaTextEditor(content, "New Script", kBadusbMaxLen, true) != PDA_EDIT_OK) return;
+    if (content.length() == 0) {
+        displayError("Empty script", true);
+        return;
+    }
+
+    int act = 0; // 1=run 2=save 3=save&run
+    std::vector<Option> acts = {
+        {"Run",        [&]() { act = 1; }},
+        {"Save",       [&]() { act = 2; }},
+        {"Save & Run", [&]() { act = 3; }},
+    };
+    int r = loopOptions(acts, MENU_TYPE_SUBMENU, "Script");
+    if (r < 0 || act == 0) return;
+
+    String path;
+    FS *sd = nullptr;
+    bool saved = false;
+    if (act == 2 || act == 3) {
+        if (!badusbGetSd(sd, true)) {
+            if (act == 2) return;
+        } else {
+            saved = badusbPromptSave(sd, path, content);
+            if (!saved && act == 2) return;
+        }
+    }
+
+    if (act == 1 || act == 3) {
+        if (saved && sd != nullptr) duckyRunFile(sd, path, hid, ble, first_time);
+        else duckyRunBuffer(content, hid, ble, first_time);
+    }
+}
+
+static void badusbBrowseAndRun(HIDInterface *&hid, bool ble, bool &first_time) {
+    FS *fs = nullptr;
+    std::vector<Option> opts;
+    if (setupSdCard()) opts.push_back({"SD Card", [&]() { fs = &SD; }});
+    opts.push_back({"LittleFS", [&]() { fs = &LittleFS; }});
+    int r = loopOptions(opts, MENU_TYPE_SUBMENU, "Browse");
+    if (r < 0 || fs == nullptr) return;
+    String bad_script = loopSD(*fs, true);
+    if (bad_script.length() == 0) {
+        displayWarning("Canceled", true);
+        return;
+    }
+    duckyRunFile(fs, bad_script, hid, ble, first_time);
+}
 
 void ducky_setup(HIDInterface *&hid, bool ble) {
     Serial.println("Ducky typer begin");
@@ -715,82 +964,28 @@ void ducky_setup(HIDInterface *&hid, bool ble) {
     }
 
     tft.fillScreen(kvxConfig.bgColor);
-
-    FS *fs = nullptr;
     bool first_time = true;
+    const char *title = ble ? "BadBLE" : "BadUSB";
 
-    tft.fillScreen(kvxConfig.bgColor);
-    String bad_script = "";
-    options = {};
+    while (!returnToMenu && !forceHome) {
+        std::vector<Option> opts;
+        opts.push_back({"New Script", [&]() { badusbNewScript(hid, ble, first_time); }});
+        opts.push_back({"Browse files", [&]() { badusbBrowseAndRun(hid, ble, first_time); }});
 
-    if (setupSdCard()) {
-        options.push_back({"SD Card", [&]() { fs = &SD; }});
-    }
-    options.push_back({"LittleFS", [&]() { fs = &LittleFS; }});
-    options.push_back({"Main Menu", [&]() { fs = nullptr; }});
-
-    loopOptions(options);
-
-    if (fs != nullptr) {
-        bad_script = loopSD(*fs, true);
-        if (bad_script == "") {
-            displayWarning("Canceled", true);
-            returnToMenu = true;
-            goto EXIT;
-        }
-    StartRunningScript:
-        printHeaderBadUSBBLE(bad_script);
-        printStatusBadUSBBLE("Preparing");
-
-        if (first_time) {
-            printStatusBadUSBBLE("Preparing USB");
-            // Double cleanup before starting
-            if (ble) safeCleanupDuckyBLE(hid);
-            ducky_startKb(hid, ble, 2); // functionId 2 = BadUSB
-            if (returnToMenu) goto EXIT;
-            first_time = false;
-            if (!ble) {
-#if !defined(USB_as_HID)
-                mySerial.write(0x00);
-                while (mySerial.available() <= 0) {
-                    if (mySerial.available() <= 0) {
-                        displayTextLine("CH9329 -> USB");
-                        delay(200);
-                        mySerial.write(0x00);
-                    } else break;
-                    if (check(EscPress)) {
-                        displayError("CH9329 not found");
-                        delay(500);
-                        goto EXIT;
-                    }
-                }
-#endif
-                printStatusBadUSBBLE("Preparing USB");
-                delay(2000);
-            } else {
-                printStatusBadUSBBLE("Waiting Victim");
-                while (!hid->isConnected() && !check(EscPress)) { vTaskDelay(pdMS_TO_TICKS(1)); }
-                if (hid->isConnected()) {
-                    BLEConnected = true;
-                    printStatusBadUSBBLE("Preparing BLE");
-                    delay(1000);
-                } else {
-                    displayWarning("Canceled", true);
-                    goto EXIT;
-                }
+        FS *sd = nullptr;
+        if (badusbGetSd(sd, false)) {
+            std::vector<String> files = pdaListFiles(sd, kvx::paths::BADUSB_SCRIPTS, "txt");
+            for (const String &f : files) {
+                if (f.startsWith(".")) continue;
+                String label = badusbDisplayName(f);
+                opts.push_back({label, [&, f, sd]() { badusbOpenExisting(sd, f, hid, ble, first_time); }});
             }
         }
-        printStatusBadUSBBLE(String(BTN_ALIAS) + " to start");
-        if (!waitForButtonPress()) { goto EXIT; }
-        delay(200);
-        key_input(*fs, bad_script, hid);
 
-        printStatusBadUSBBLE("Finished - " + String(BTN_ALIAS) + " to restart");
-        if (!waitForButtonPress()) { goto EXIT; }
-
-        goto StartRunningScript;
+        int r = loopOptions(opts, MENU_TYPE_SUBMENU, title);
+        if (r < 0) break;
     }
-EXIT:
+
     if (!ble) {
         delete hid;
         hid = nullptr;
@@ -800,7 +995,6 @@ EXIT:
 #endif
     }
     if (ble) safeCleanupDuckyBLE(hid);
-    returnToMenu = true;
 }
 
 // ============================================================================

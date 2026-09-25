@@ -941,10 +941,9 @@ void drawStatusBar() {
     uint8_t bat = getBattery();
     if (bat > 0) drawBatteryStatus(bat);
 
-    if (kvxConfig.theme.border) {
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
-        tft.drawLine(5, 25, tftWidth - 6, 25, kvxConfig.priColor);
-    }
+    // Do not draw the app frame border here — that belongs in drawMainBorder.
+    // Status-only refreshes (e.g. WiFi-at-startup) must not paint an app border
+    // over the kvx main-menu grid.
 
     // Clock / version: compact top-strip size (half of body FP).
     // kvx top bar already shows HH:MM next to the battery — do not print a
@@ -1025,7 +1024,12 @@ void drawMainBorder(bool clear) {
     setTftDisplay(12, 12, kvxConfig.priColor, FP, kvxConfig.bgColor);
     tft.setTextDatum(0);
 
-    // if(wifiConnected) {tft.print(timeStr);} else {tft.print("BRUCE 1.0b");}
+    // App chrome border (theme). Kept out of drawStatusBar so background
+    // WiFi/status refreshes cannot stamp this frame onto the main menu.
+    if (kvxConfig.theme.border) {
+        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
+        tft.drawLine(5, 25, tftWidth - 6, 25, kvxConfig.priColor);
+    }
 
     drawStatusBar();
     tft.setTextSize(FP);
@@ -1334,7 +1338,16 @@ void jpegRender(int xpos, int ypos) {
     max_y += ypos;
 
     // Fetch data from the file, decode and display
-    tft.fillRect(xpos, ypos, JpegDec.width, JpegDec.height, TFT_BLACK);
+    // Fetch data from the file, decode and display
+    {
+        int32_t fx = xpos < 0 ? 0 : xpos;
+        int32_t fy = ypos < 0 ? 0 : ypos;
+        int32_t fw = (int32_t)JpegDec.width + (xpos < 0 ? xpos : 0);
+        int32_t fh = (int32_t)JpegDec.height + (ypos < 0 ? ypos : 0);
+        if (fw > tft.width() - fx) fw = tft.width() - fx;
+        if (fh > tft.height() - fy) fh = tft.height() - fy;
+        if (fw > 0 && fh > 0) tft.fillRect(fx, fy, fw, fh, TFT_BLACK);
+    }
     while (JpegDec.read()) {   // While there is more data in the file
         pImg = JpegDec.pImage; // Decode a MCU (Minimum Coding Unit, typically a 8x8 or 16x16 pixel block)
 
@@ -1366,11 +1379,16 @@ void jpegRender(int xpos, int ypos) {
 
         // calculate how many pixels must be drawn
         uint32_t mcu_pixels = win_w * win_h;
+        (void)mcu_pixels;
 
-        // draw image MCU block only if it will fit on the screen
-        if ((mcu_x + win_w) <= tft.width() && (mcu_y + win_h) <= tft.height())
+        // Draw any MCU that overlaps the panel. Requiring the whole MCU to fit
+        // skipped every edge tile, and centered images larger than the screen
+        // could paint nothing after the black fill.
+        const int32_t x1 = mcu_x + (int32_t)win_w;
+        const int32_t y1 = mcu_y + (int32_t)win_h;
+        if (x1 > 0 && y1 > 0 && mcu_x < tft.width() && mcu_y < tft.height())
             tft.pushImage(mcu_x, mcu_y, win_w, win_h, pImg);
-        else if ((mcu_y + win_h) > tft.height())
+        else if (mcu_y >= tft.height())
             JpegDec.abort(); // Image has run off bottom of screen so abort decoding
     }
 
@@ -1378,78 +1396,35 @@ void jpegRender(int xpos, int ypos) {
 }
 
 bool showJpeg(FS &fs, const String &filename, int x, int y, bool center) {
-    // record the current time so we can measure how long it takes to draw an image
     uint32_t drawTime = millis();
-    File picture;
-    if (fs.exists(filename)) picture = fs.open(filename, FILE_READ);
-    else return false;
+    if (!fs.exists(filename)) return false;
 
-    const size_t data_size = picture.size();
+    File picture = fs.open(filename, FILE_READ);
+    if (!picture) return false;
 
-    // Alloc memory into heap
-    uint8_t *data_array = new uint8_t[data_size];
-    if (data_array == nullptr) {
-        // Fail allocating memory
+    // Stream from the file handle. Loading the whole JPEG into internal DRAM
+    // fails on Cardputer for typical photos, so decode never runs and the
+    // viewer stays black.
+    bool decoded = JpegDec.decodeFsFile(picture) == 1;
+    if (!decoded) {
         picture.close();
-        delete[] data_array;
+        Serial.println("JPEG decode failed");
         return false;
     }
 
-    uint8_t data;
-    int i = 0;
-    byte line_len = 0;
-
-    while (picture.available()) {
-        data = picture.read();
-        data_array[i] = data;
-        i++;
-
-        // print array on Serial
-        /*
-        Serial.print("0x");
-        if (abs(data) < 16) {
-          Serial.print("0");
-        }
-
-        Serial.print(data, HEX);
-        Serial.print(","); // Add value and comma
-        line_len++;
-        if (line_len >= 32) {
-          line_len = 0;
-          Serial.println();
-        }
-        */
+    if (center) {
+        x = x + (tftWidth - JpegDec.width) / 2;
+        y = y + (tftHeight - JpegDec.height) / 2;
     }
+    jpegRender(x, y);
 
-    picture.close();
-
-    bool decoded = false;
-    if (data_array) {
-        decoded = JpegDec.decodeArray(data_array, data_size);
-    } else {
-        displayError(filename + " Fail");
-        delay(2500);
-        delete[] data_array; // free heap before leaving
-        return false;
-    }
-
-    if (decoded) {
-        if (center) {
-            x = x + (tftWidth - JpegDec.width) / 2;
-            y = y + (tftHeight - JpegDec.height) / 2;
-        }
-        jpegRender(x, y);
-    }
-    // calculate how long it took to draw the image
-    drawTime = millis() - drawTime; // Calculate the time it took
-
-    // print the results to the serial port
+    drawTime = millis() - drawTime;
     Serial.print("Total render time was    : ");
     Serial.print(drawTime);
     Serial.println(" ms");
     Serial.println("=====================================");
 
-    delete[] data_array; // free heap before leaving
+    picture.close();
     return true;
 }
 
@@ -1467,9 +1442,9 @@ bool showJpeg(const uint8_t *data_array, size_t data_size, int x, int y, bool ce
             y = y + (tftHeight - JpegDec.height) / 2;
         }
         jpegRender(x, y);
+        return true;
     }
-
-    return true;
+    return false;
 }
 
 #if !defined(LITE_VERSION)
@@ -1982,8 +1957,9 @@ bool drawImg(
     ext.toLowerCase();
     uint8_t fls = 2;         // 2 for Little FS
     if (&fs == &SD) fls = 0; // 0 for SD
+    tftAbortFrame();
     tft.imageToBin(fls, filename, x, y, center, playDurationMs);
-    if (ext.endsWith("jpg")) return showJpeg(fs, filename, x, y, center);
+    if (ext.endsWith("jpg") || ext.endsWith("jpeg")) return showJpeg(fs, filename, x, y, center);
     else if (ext.endsWith("bmp")) return drawBmp(fs, filename, x, y, center);
     else if (ext.endsWith("png")) return drawPNG(fs, filename, x, y, center);
 
@@ -2001,15 +1977,12 @@ bool drawImg(
 /// Draw PNG files
 
 #include <PNGdec.h>
-#if TFT_WIDTH > TFT_HEIGHT
-#define MAX_IMAGE_WIDTH TFT_WIDTH
-#else
-#define MAX_IMAGE_WIDTH TFT_HEIGHT
-#endif
 PNG *png = nullptr;
 // Optional pointer to write decoded lines into a cached BIN file
 static File *pngBinOut = nullptr;
 static bool pngCacheOnly = false;
+static uint16_t *pngLineBuf = nullptr;
+static int pngLineBufW = 0;
 // Optionally use heap capabilities on ESP32 to pick the best memory region for the decoder
 #if defined(ESP32)
 #include <esp_heap_caps.h>
@@ -2039,18 +2012,29 @@ int32_t mySeek(PNGFILE *handle, int32_t position) {
 int16_t xpos = 0;
 int16_t ypos = 0;
 int PNGDraw(PNGDRAW *pDraw) {
-    uint16_t usPixels[MAX_IMAGE_WIDTH];
-    // static uint16_t dmaBuffer[MAX_IMAGE_WIDTH]; // static so buffer persists after fn exit
+    if (!pngLineBuf || pDraw->iWidth > pngLineBufW) return 0;
     uint8_t r = ((uint16_t)kvxConfig.bgColor & 0xF800) >> 8;
     uint8_t g = ((uint16_t)kvxConfig.bgColor & 0x07E0) >> 3;
     uint8_t b = ((uint16_t)kvxConfig.bgColor & 0x001F) << 3;
-    png->getLineAsRGB565(pDraw, usPixels, PNG_RGB565_BIG_ENDIAN, b << 16 | g << 8 | r);
+    png->getLineAsRGB565(pDraw, pngLineBuf, PNG_RGB565_BIG_ENDIAN, b << 16 | g << 8 | r);
     if (!pngCacheOnly) {
         tft.drawPixel(0, 0, 0);
         tft.drawPixel(0, 0, 0);
-        tft.pushImage(xpos, ypos + pDraw->y, pDraw->iWidth, 1, usPixels);
+        int drawW = pDraw->iWidth;
+        int drawX = xpos;
+        uint16_t *src = pngLineBuf;
+        if (drawX < 0) {
+            src += -drawX;
+            drawW += drawX;
+            drawX = 0;
+        }
+        if (drawX + drawW > tft.width()) drawW = tft.width() - drawX;
+        int drawY = ypos + pDraw->y;
+        if (drawW > 0 && drawY >= 0 && drawY < tft.height()) {
+            tft.pushImage(drawX, drawY, drawW, 1, src);
+        }
     }
-    if (pngBinOut) { pngBinOut->write((uint8_t *)usPixels, pDraw->iWidth * sizeof(uint16_t)); }
+    if (pngBinOut) { pngBinOut->write((uint8_t *)pngLineBuf, pDraw->iWidth * sizeof(uint16_t)); }
     return 1;
 }
 
@@ -2169,16 +2153,26 @@ bool drawPNG(FS &fs, const String &filename, int x, int y, bool center) {
             }
         }
 
+        xpos = x;
+        ypos = y;
         if (center) {
             xpos = x + (tftWidth - png->getWidth()) / 2;
             ypos = y + (tftHeight - png->getHeight()) / 2;
         }
 
-        if (png->getWidth() > MAX_IMAGE_WIDTH) {
-            Serial.println("Image too wide for allocated line buffer size!");
+        pngLineBufW = png->getWidth();
+        if (pngLineBufW < 1) pngLineBufW = 1;
+        pngLineBuf = (uint16_t *)malloc((size_t)pngLineBufW * sizeof(uint16_t));
+        if (!pngLineBuf) {
+            Serial.println("Fail alloc PNG line!");
+            rc = PNG_MEM_ERROR;
+            png->close();
         } else {
             rc = png->decode(NULL, 0);
             png->close();
+            free(pngLineBuf);
+            pngLineBuf = nullptr;
+            pngLineBufW = 0;
         }
 
         if (pngBinOut) {

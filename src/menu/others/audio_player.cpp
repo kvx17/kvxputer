@@ -6,6 +6,8 @@
 #include "root/ui/settings.h"
 #include "menu/others/audio.h"
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 // ===== ENUMS & STRUCTS =====
 
@@ -312,50 +314,48 @@ void musicPlayerUI(FS *fs, const String &filepath) {
         tft.setCursor((tftWidth - w) / 2, (ui.HEADER_HEIGHT - (8 * ui.TEXT_SIZE_LARGE)) / 2);
         tft.print(title);
     };
-    auto drawTrackInfo = [&]() {
+    auto drawTrackInfo = [&](bool full) {
         int y = ui.HEADER_HEIGHT + ui.MARGIN_Y;
-
-        // Background area info
-        tft.fillRect(0, y, tftWidth, ui.DISPLAY_HEIGHT, kvxConfig.bgColor);
-
-        // Music icon box - larger for better visibility
         int iconSize = ui.DISPLAY_HEIGHT - 4;
-        int boxSize = iconSize + 45; // Wider box towards right
-        tft.drawRoundRect(ui.MARGIN_X, y + 2, boxSize, iconSize, 4, TFT_DARKGREY);
-        tft.setTextColor(TFT_WHITE);
-        tft.setTextSize(2);
-
-        // Center "AUDIO" text in box
-        String AudioFormatLabel = "AUDIO";              // TODO: Use file extension
-        int textWidth = AudioFormatLabel.length() * 12; // textSize(2): 6 pixel base * 2 = 12 pixel per char
-        int textHeight = 16;                            // textSize(2): 8 pixel base * 2 = 16 pixel
-        int centerX = ui.MARGIN_X + (boxSize - textWidth) / 2 + 2; // Offset 5
-        int centerY = y + 2 + (iconSize - textHeight) / 2;
-        tft.setCursor(centerX, centerY);
-        tft.print(AudioFormatLabel);
-
-        // Scrolling Title
-        int gap = 20; // Fixed gap from MP3 box
+        int boxSize = iconSize + 45;
+        int gap = 20;
         int textX = ui.MARGIN_X + boxSize + gap;
         int maxChars = (tftWidth - textX - 5) / (6 * ui.TEXT_SIZE_LARGE);
+        if (maxChars < 1) maxChars = 1;
 
+        if (full) {
+            tft.fillRect(0, y, tftWidth, ui.DISPLAY_HEIGHT, kvxConfig.bgColor);
+            tft.drawRoundRect(ui.MARGIN_X, y + 2, boxSize, iconSize, 4, TFT_DARKGREY);
+            tft.setTextColor(TFT_WHITE);
+            tft.setTextSize(2);
+            String AudioFormatLabel = "AUDIO";
+            int textWidth = AudioFormatLabel.length() * 12;
+            int textHeight = 16;
+            int centerX = ui.MARGIN_X + (boxSize - textWidth) / 2 + 2;
+            int centerY = y + 2 + (iconSize - textHeight) / 2;
+            tft.setCursor(centerX, centerY);
+            tft.print(AudioFormatLabel);
+        }
+
+        // Title strip only (avoid full-panel fillRect on scroll ticks)
+        int titleY = y + (ui.DISPLAY_HEIGHT / 2) - 8;
+        int titleH = 8 * ui.TEXT_SIZE_LARGE + 2;
+        tft.fillRect(textX, titleY, tftWidth - textX, titleH, kvxConfig.bgColor);
         tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
         tft.setTextSize(ui.TEXT_SIZE_LARGE);
 
         String displayText = player.filename;
-        if (displayText.length() > maxChars) {
+        if (displayText.length() > (size_t)maxChars) {
             String scrolled = displayText + "   " + displayText;
             displayText = scrolled.substring(player.scrollOffset, player.scrollOffset + maxChars);
-
-            // Scroll every 300ms
             if (millis() - player.lastUpdate > 300) {
                 player.scrollOffset++;
-                if (player.scrollOffset >= player.filename.length() + 3) player.scrollOffset = 0;
+                if (player.scrollOffset >= (int)player.filename.length() + 3) player.scrollOffset = 0;
                 player.lastUpdate = millis();
             }
         }
 
-        tft.setCursor(textX, y + (ui.DISPLAY_HEIGHT / 2) - 8);
+        tft.setCursor(textX, titleY);
         tft.print(displayText);
     };
 
@@ -402,7 +402,7 @@ void musicPlayerUI(FS *fs, const String &filepath) {
     // Initial Draw
     tft.fillScreen(kvxConfig.bgColor);
     drawHeader();
-    drawTrackInfo();
+    drawTrackInfo(true);
     drawTimers();
     drawProgressBar(
         ui.MARGIN_X,
@@ -422,15 +422,10 @@ void musicPlayerUI(FS *fs, const String &filepath) {
 
         bool controlsNeedRedraw = false;
         bool progressNeedsRedraw = false;
-        bool infoNeedsRedraw = false;
+        bool titleNeedsRedraw = false;
+        bool fullInfoRedraw = false;
 
         AudioPlaybackInfo info = getAudioPlaybackInfo();
-
-        // Playback state check
-        bool actualPlaying = (info.state == PLAYBACK_PLAYING);
-        if (player.isPlaying != actualPlaying && !player.isPaused) {
-            // State change detected externally (e.g. end of track)
-        }
 
         // Update position more smoothly (every 200ms)
         if (millis() - lastPosUpdate > 200) {
@@ -440,8 +435,7 @@ void musicPlayerUI(FS *fs, const String &filepath) {
                 progressNeedsRedraw = true;
             }
 
-            // Scroll text logic
-            if (player.filename.length() > 15) infoNeedsRedraw = true;
+            if (player.filename.length() > 15) titleNeedsRedraw = true;
             lastPosUpdate = millis();
         }
 
@@ -478,15 +472,12 @@ void musicPlayerUI(FS *fs, const String &filepath) {
 
                     case BTN_PLAY:
                         if (player.isPlaying && !player.isPaused) {
-                            // Pause
                             pauseAudioPlayback();
                             player.isPaused = true;
                         } else if (player.isPaused) {
-                            // Restart from pause pauseAudioPlayback (toggle)
                             pauseAudioPlayback();
                             player.isPaused = false;
                         } else {
-                            // Play New File
                             playAudioFile(fs, filepath, PLAYBACK_ASYNC);
                             player.isPlaying = true;
                             player.isPaused = false;
@@ -497,9 +488,9 @@ void musicPlayerUI(FS *fs, const String &filepath) {
 
                     case BTN_VOLUME:
                         showVolumeControl(currentVolume);
-                        tft.fillScreen(kvxConfig.bgColor); // Full redraw after popup
+                        tft.fillScreen(kvxConfig.bgColor);
                         drawHeader();
-                        infoNeedsRedraw = true;
+                        fullInfoRedraw = true;
                         progressNeedsRedraw = true;
                         controlsNeedRedraw = true;
                         break;
@@ -516,8 +507,8 @@ void musicPlayerUI(FS *fs, const String &filepath) {
             break;
         }
 
-        // REDRAWS
-        if (infoNeedsRedraw) drawTrackInfo();
+        if (fullInfoRedraw) drawTrackInfo(true);
+        else if (titleNeedsRedraw) drawTrackInfo(false);
 
         if (progressNeedsRedraw) {
             drawTimers();
@@ -533,7 +524,7 @@ void musicPlayerUI(FS *fs, const String &filepath) {
 
         if (controlsNeedRedraw) drawControls();
 
-        delay(30); // Loop for responsive input
+        vTaskDelay(pdMS_TO_TICKS(5));
     }
 
     tft.fillScreen(kvxConfig.bgColor);

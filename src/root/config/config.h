@@ -71,7 +71,7 @@ public:
     // Wifi
     Credential webUI = {"admin", "bruce"};
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
-    WiFiCredential wifiAp = {"KvxputerNet", "kvxputernet"};
+    WiFiCredential wifiAp = {"kvxputer", "kvxputer"};
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
@@ -137,6 +137,10 @@ public:
     // kvxputer universal remote (kremote)
     bool kremotePortrait = false;
     bool kremoteButtonsSwapped = false;
+    // 0 = Cardputer onboard IR, 1 = M5 Unit IR (Grove), 2 = both TX LEDs
+    uint8_t kremoteIrHw = 0;
+    // Browse IR start folder on SD (empty = learned remotes path)
+    String kremoteBrowseFolder = "";
 
     // G0 long-press returns to main menu (Cardputer); sticky Esc until home clears it.
     bool g0HoldHome = true;
@@ -151,7 +155,7 @@ public:
 
     std::vector<QrCodeEntry> qrCodes = {
         {"kvxputer GitHub", "https://github.com/kvx17/kvxputer"},
-        {"kvxputer AP",     "WIFI:T:WPA;S:KvxputerNet;P:kvxputernet;;"},
+        {"kvxputer AP",     "WIFI:T:WPA;S:kvxputer;P:kvxputer;;"},
         {"Rickroll",        "https://youtu.be/dQw4w9WgXcQ"          }
     };
 
@@ -292,6 +296,8 @@ public:
 
     void setKremotePortrait(bool value);
     void setKremoteButtonsSwapped(bool value);
+    void setKremoteIrHw(uint8_t value);
+    void setKremoteBrowseFolder(const String &value);
 
     void setG0HoldHome(bool value);
     void setPdaKeyBind(int key1to8, uint8_t channelIndex);

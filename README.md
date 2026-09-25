@@ -288,7 +288,7 @@ Some boards expose **NRF24 → Config pins** (legacy vs shared SPI).
 | Module | How | Apps |
 |--------|-----|------|
 | Built-in IR LED | Board TX pin | kremote, TV-B-Gone, Custom IR, IR Read, jammer |
-| M5 IR Mod / Grove IR | Grove SDA/SCL as TX/RX | Same apps; pick pins under **Infrared → Config** |
+| [M5 Unit IR](https://docs.m5stack.com/en/unit/ir) | Grove yellow TX / white RX | kremote Settings (Cardputer / Unit / Both); other IR apps via **Infrared → Config** |
 
 StickS3 enables EXT 5V while the Infrared menu is open for Grove IR power.
 

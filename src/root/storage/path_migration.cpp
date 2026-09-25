@@ -154,6 +154,7 @@ void ensureAddonDirs(FS &fs) {
     kvx::paths::ensureDir(fs, kvx::paths::RF_PRESETS);
     kvx::paths::ensureDir(fs, kvx::paths::GPS_WDBOTH);
     kvx::paths::ensureDir(fs, kvx::paths::COMPANIONS);
+    kvx::paths::ensureDir(fs, kvx::paths::BADUSB_SCRIPTS);
 }
 
 } // namespace

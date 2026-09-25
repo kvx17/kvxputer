@@ -60,10 +60,7 @@ void WifiMenu::optionsMenu() {
     if (!WiFi.isConnected() && !WiFi.AP.started()) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
-            {"Start WiFi AP", [=]() {
-                 wifiConnectMenu(WIFI_AP);
-                 displayInfo("pwd: " + kvxConfig.wifiAp.pwd, true);
-             }},
+            {"Start WiFi AP", []() { wifiStartApInteractive(); }},
         };
     }
     if (WiFi.getMode() != WIFI_MODE_NULL) { options.push_back({"Turn Off WiFi", wifiDisconnect}); }
@@ -84,7 +81,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
-    options.push_back({"Channel Analyzer", channel_analyzer_setup});
+    options.push_back({"kvx wifi analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;

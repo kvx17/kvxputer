@@ -7,6 +7,8 @@
 #include "root/ui/settings.h"
 #include "root/app/type_convertion.h"
 #include "ir_utils.h"
+#include "menu/infrared/kremote/kremote_store.h"
+#include "menu/infrared/kremote/kremote_use.h"
 #include <IRutils.h>
 
 uint32_t swap32(uint32_t value) {
@@ -219,7 +221,7 @@ bool txIrFile(FS *fs, const String &filepath, bool hideDefaultUI) {
     return true;
 }
 
-void otherIRcodes() {
+void otherIRcodes(const char *startFolder) {
     checkIrTxPin();
     resetCodesArray();
     String filepath;
@@ -242,22 +244,28 @@ void otherIRcodes() {
 
     // select a file to tx — user captures under /kvxputer; packs stay in support_files.
     kvx::paths::ensureDir(*fs, kvx::paths::IR_PROFILES);
-    String startPath = kvx::paths::IR_PROFILES;
-    auto dirHasEntries = [](FS &fs, const char *path) -> bool {
-        File d = fs.open(path);
-        if (!d || !d.isDirectory()) {
-            if (d) d.close();
-            return false;
+    kvx::paths::ensureDir(*fs, kvx::paths::IR_REMOTES);
+    String startPath = "/";
+    if (startFolder && startFolder[0] && (*fs).exists(startFolder)) {
+        startPath = startFolder;
+    } else {
+        startPath = kvx::paths::IR_PROFILES;
+        auto dirHasEntries = [](FS &fs, const char *path) -> bool {
+            File d = fs.open(path);
+            if (!d || !d.isDirectory()) {
+                if (d) d.close();
+                return false;
+            }
+            File e = d.openNextFile();
+            bool has = (bool)e;
+            if (e) e.close();
+            d.close();
+            return has;
+        };
+        if (!dirHasEntries(*fs, startPath.c_str())) {
+            if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY2)) startPath = kvx::paths::IR_PROFILES_LEGACY2;
+            else if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY)) startPath = kvx::paths::IR_PROFILES_LEGACY;
         }
-        File e = d.openNextFile();
-        bool has = (bool)e;
-        if (e) e.close();
-        d.close();
-        return has;
-    };
-    if (!dirHasEntries(*fs, startPath.c_str())) {
-        if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY2)) startPath = kvx::paths::IR_PROFILES_LEGACY2;
-        else if ((*fs).exists(kvx::paths::IR_PROFILES_LEGACY)) startPath = kvx::paths::IR_PROFILES_LEGACY;
     }
 
     while (true) {
@@ -268,38 +276,71 @@ void otherIRcodes() {
         startPath = filepath.substring(0, filepath.lastIndexOf('/'));
         if (startPath == "") startPath = "/";
 
-        // select mode
-        bool exit = false;
-        bool mode_cmd = true;
-        options = {
-            {"Choose cmd", [&]() { mode_cmd = true; } },
-            {"Spam all",   [&]() { mode_cmd = false; }},
-            {"Menu",       [&]() { exit = true; }     },
-        };
-
-        loopOptions(options);
-
-        if (exit) return;
-
-        if (!mode_cmd) {
-            // Spam all selected
-            txIrFile(fs, filepath);
-            // After spam, loop back to file picker in the same folder
-            continue;
-        }
-
-        // Choose cmd:
-        // chooseCmdIrFile returns false = short back → loop back to file browser
-        //                          true  = long press / Main Menu → exit
-        bool goToMain = chooseCmdIrFile(fs, filepath);
-        if (goToMain) return;
-        // else: loop back to loopSD, starting in the same folder (startPath)
+        if (irFileActionMenu(fs, filepath)) return;
     }
 } // end of otherIRcodes
 
+bool irFileActionMenu(FS *fs, const String &filepath) {
+    if (fs == nullptr || filepath.length() == 0) return true;
+
+    String favSlug = kremoteSlugFromPath(filepath);
+    String displayName = favSlug;
+    if (displayName.length() == 0) {
+        int slash = filepath.lastIndexOf('/');
+        displayName = (slash >= 0) ? filepath.substring(slash + 1) : filepath;
+        int dot = displayName.lastIndexOf('.');
+        if (dot > 0) displayName = displayName.substring(0, dot);
+    }
+
+    while (true) {
+        enum { ACT_CHOOSE = 0, ACT_SPAM, ACT_VIRTUAL, ACT_FAV, ACT_MENU, ACT_NONE };
+        int action = ACT_NONE;
+        options = {
+            {"Choose cmd", [&]() { action = ACT_CHOOSE; }},
+            {"Spam all", [&]() { action = ACT_SPAM; }},
+            {"Virtual Remote", [&]() { action = ACT_VIRTUAL; }},
+        };
+        if (favSlug.length() > 0) {
+            String favLabel = kremoteIsFavorite(favSlug) ? "Remove Favorite" : "Add Favorite";
+            options.push_back({favLabel, [&]() { action = ACT_FAV; }});
+        }
+        options.push_back({"Menu", [&]() { action = ACT_MENU; }});
+
+        loopOptions(options);
+
+        // Menu / Esc: return to caller (file list or favorites list) without quitting Browse IR.
+        if (action == ACT_MENU || action == ACT_NONE) return false;
+        if (action == ACT_FAV) {
+            if (!kremoteIsFavorite(favSlug)) {
+                if (!kremoteEnsureFavoriteFile(fs, filepath, favSlug)) {
+                    displayError("Favorite save failed", true);
+                    continue;
+                }
+            }
+            bool wasFav = kremoteIsFavorite(favSlug);
+            bool nowFav = kremoteToggleFavorite(favSlug);
+            if (wasFav != nowFav) {
+                displaySuccess(nowFav ? "Added favorite" : "Removed favorite", true);
+            }
+            continue;
+        }
+        if (action == ACT_SPAM) {
+            txIrFile(fs, filepath);
+            continue;
+        }
+        if (action == ACT_VIRTUAL) {
+            kremoteVirtualRemote(fs, filepath, displayName);
+            continue;
+        }
+        // Choose cmd — Main Menu inside the command list leaves Browse IR.
+        bool goToMain = chooseCmdIrFile(fs, filepath);
+        if (goToMain) return true;
+    }
+}
+
 // IR commands
 
-void sendIRCommand(IRCode *code, bool hideDefaultUI) {
+static void sendIRCommandPin(IRCode *code, bool hideDefaultUI) {
     setup_ir_pin(kvxConfigPins.irTx, OUTPUT);
     // https://developer.flipper.net/flipperzero/doxygen/infrared_file_format.html
     if (code->type.equalsIgnoreCase("raw")) sendRawCommand(code->frequency, code->data, hideDefaultUI);
@@ -327,6 +368,17 @@ void sendIRCommand(IRCode *code, bool hideDefaultUI) {
         strToDecodeType(code->protocol.c_str()) != decode_type_t::UNKNOWN
     )
         sendDecodedCommand(code->protocol, code->data, code->bits, hideDefaultUI);
+}
+
+void sendIRCommand(IRCode *code, bool hideDefaultUI) {
+    sendIRCommandPin(code, hideDefaultUI);
+    int extra = getIrTxExtraPin();
+    if (extra >= 0 && extra != kvxConfigPins.irTx) {
+        int saved = kvxConfigPins.irTx;
+        kvxConfigPins.irTx = extra;
+        sendIRCommandPin(code, true);
+        kvxConfigPins.irTx = saved;
+    }
 }
 
 void sendNECCommand(String address, String command, bool hideDefaultUI) {
@@ -734,6 +786,28 @@ bool chooseCmdIrFile(FS *fs, const String &filepath) {
                                    addToRecentCodes(code);
                                }});
         }
+    }
+    // Favorite toggle for learned kremote_*.ir profiles (SD favorites JSON).
+    String favSlug = kremoteSlugFromPath(filepath);
+    int favOptIdx = -1;
+    if (favSlug.length() > 0) {
+        favOptIdx = (int)options.size();
+        String favLabel = kremoteIsFavorite(favSlug) ? "Remove Favorite" : "Add Favorite";
+        options.push_back({favLabel, [favSlug, favOptIdx, filepath, fs, &actionTaken]() {
+                               if (!kremoteIsFavorite(favSlug)) {
+                                   kremoteEnsureFavoriteFile(fs, filepath, favSlug);
+                               }
+                               bool wasFav = kremoteIsFavorite(favSlug);
+                               bool nowFav = kremoteToggleFavorite(favSlug);
+                               if (favOptIdx >= 0 && favOptIdx < (int)options.size()) {
+                                   options[favOptIdx].label =
+                                       nowFav ? "Remove Favorite" : "Add Favorite";
+                               }
+                               actionTaken = true;
+                               if (wasFav != nowFav) {
+                                   displaySuccess(nowFav ? "Added favorite" : "Removed favorite", true);
+                               }
+                           }});
     }
     options.push_back({"Main Menu", [&]() {
                            actionTaken = true;

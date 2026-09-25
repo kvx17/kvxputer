@@ -32,7 +32,18 @@ static void scannerDrawFooter() {
     tft.drawFastHLine(0, scannerBodyBottom(), tftWidth, kvxConfig.priColor);
     tft.setTextSize(dense);
     tft.setTextColor(fg, bg);
-    tft.drawCentreString("[Up] Up  [OK] Select  [X] Back  Down [Down]", tftWidth / 2, scannerBodyBottom() + 2, 1);
+    tft.drawCentreString("[Up] Up  [OK] Select  [Esc] Back  [Down] Down", tftWidth / 2, scannerBodyBottom() + 2, 1);
+}
+
+static void scannerDrawDetailFooter() {
+    const int dense = uiDenseFont();
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t fg = kvxConfig.priColor;
+    tft.fillRect(0, scannerBodyBottom(), tftWidth, SCANNER_FOOTER_H, bg);
+    tft.drawFastHLine(0, scannerBodyBottom(), tftWidth, kvxConfig.priColor);
+    tft.setTextSize(dense);
+    tft.setTextColor(fg, bg);
+    tft.drawCentreString("[Esc] Back", tftWidth / 2, scannerBodyBottom() + 2, 1);
 }
 
 static void scannerDrawChrome(ScannerListState &st, bool forceBar) {
@@ -226,29 +237,83 @@ void scannerListShowDetail(
 ) {
     const uint16_t bg = kvxConfig.bgColor;
     const uint16_t fg = kvxConfig.priColor;
+    const uint16_t accent = kvxConfig.secColor;
     const int bodyFont = uiBodyFont();
     const int lineH = uiRowH(bodyFont);
     const int startY = KVX_TOPBAR_H + 4;
     const int footerY = scannerBodyBottom();
     const int visible = max(1, (footerY - startY) / lineH);
+    const int maxChars = max(1, (tftWidth - 8) / uiCharW(bodyFont));
     int scroll = 0;
+
+    // Expand fields into paint rows: label (accent) + value; long values on their own line.
+    struct PaintRow {
+        String text;
+        bool isLabel;
+    };
+    std::vector<PaintRow> rows;
+    auto pushWrapped = [&](const String &text, bool isLabel) {
+        String rest = text;
+        while (rest.length() > 0) {
+            if ((int)rest.length() <= maxChars) {
+                rows.push_back({rest, isLabel});
+                break;
+            }
+            rows.push_back({rest.substring(0, maxChars), isLabel});
+            rest = rest.substring(maxChars);
+            isLabel = false; // continuations use value color
+        }
+    };
+
+    for (const auto &f : fields) {
+        String lab = f.label;
+        String val = f.value;
+        // BSSID / Beacon int: label on one line, value on the next (full width, wrap if needed)
+        bool valueBelow = lab.equalsIgnoreCase("BSSID") || lab.equalsIgnoreCase("Beacon int") ||
+                          lab.equalsIgnoreCase("Revealed");
+        if (valueBelow) {
+            pushWrapped(lab, true);
+            pushWrapped(val, false);
+        } else {
+            String combined = lab + ": " + val;
+            if ((int)combined.length() <= maxChars) {
+                // Draw as two colors in paint — store "LAB\x01VAL" marker
+                rows.push_back({lab + "\x01" + val, true});
+            } else {
+                pushWrapped(lab, true);
+                pushWrapped(val, false);
+            }
+        }
+    }
 
     auto paint = [&]() {
         TftFrame frame;
         tft.fillScreen(bg);
         drawKvxTopBar(title && title[0] ? title : "RESULT DETAILS");
-        scannerDrawFooter();
+        scannerDrawDetailFooter();
         tft.setTextSize(bodyFont);
         for (int i = 0; i < visible; i++) {
             int idx = scroll + i;
-            if (idx >= (int)fields.size()) break;
+            if (idx >= (int)rows.size()) break;
             int y = startY + i * lineH;
             tft.fillRect(0, y, tftWidth, lineH, bg);
-            String line = fields[idx].label + ": " + fields[idx].value;
-            int nchars = max(1, (tftWidth - 8) / uiCharW(bodyFont));
-            if ((int)line.length() > nchars) line = line.substring(0, nchars);
-            tft.setTextColor(fg, bg);
-            tft.drawString(line, 4, y + 1, 1);
+            const PaintRow &pr = rows[idx];
+            int sep = pr.text.indexOf('\x01');
+            if (sep >= 0) {
+                String lab = pr.text.substring(0, sep);
+                String val = pr.text.substring(sep + 1);
+                tft.setTextColor(accent, bg);
+                tft.drawString(lab + ":", 4, y + 1, 1);
+                int lx = 4 + (int)(lab.length() + 1) * uiCharW(bodyFont);
+                tft.setTextColor(fg, bg);
+                tft.drawString(val, lx + uiCharW(bodyFont), y + 1, 1);
+            } else if (pr.isLabel) {
+                tft.setTextColor(accent, bg);
+                tft.drawString(pr.text, 4, y + 1, 1);
+            } else {
+                tft.setTextColor(fg, bg);
+                tft.drawString(pr.text, 4, y + 1, 1);
+            }
         }
     };
 
@@ -269,7 +334,7 @@ void scannerListShowDetail(
             }
         }
         if (check(DownPress) || check(NextPress)) {
-            if (scroll + visible < (int)fields.size()) {
+            if (scroll + visible < (int)rows.size()) {
                 scroll++;
                 redraw = true;
             }
