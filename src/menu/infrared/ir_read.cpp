@@ -478,7 +478,7 @@ String IrRead::loop_headless(int max_loops) {
 bool IrRead::write_file(String filename, FS *fs) {
     if (fs == nullptr) return false;
 
-    if (!(*fs).exists(kvx::paths::IR_PROFILES)) (*fs).mkdir(kvx::paths::IR_PROFILES);
+    kvx::paths::ensureDir(*fs, kvx::paths::IR_PROFILES);
 
     while ((*fs).exists((String(kvx::paths::IR_PROFILES) + "/") + filename + ".ir")) {
         int ch = 1;

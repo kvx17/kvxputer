@@ -14,8 +14,9 @@ static const uint16_t KVX_GREEN = DEFAULT_SECCOLOR;
 static const uint16_t KVX_ORANGE = 0xFD20;
 static const uint16_t KVX_BG = KVX_DEFAULT_BGCOLOR;
 
-static const int KVX_HEADER_H = 26;
-static const int KVX_FOOTER_H = 18;
+// Dense chrome: Cardputer FP=2 would burn ~32px on a two-line header.
+static const int KVX_HEADER_H = 18;
+static const int KVX_FOOTER_H = 14;
 
 HidVertDisplayScope::HidVertDisplayScope() {
 #if defined(HAS_SCREEN)
@@ -45,8 +46,9 @@ HidVertDisplayScope::~HidVertDisplayScope() {
 
 void hidRemoteDrawHeader(HidRemoteTransport transport, bool connected, const char *modeLabel) {
     hidRemoteLedTick();
+    const int dense = uiDenseFont();
     tft.fillRect(0, 0, tftWidth, KVX_HEADER_H, KVX_BG);
-    tft.setTextSize(FP);
+    tft.setTextSize(dense);
     tft.setTextColor(KVX_PURPLE, KVX_BG);
     const char *leftTitle = KVXKEYBOARD_HID_NAME;
     if (connected) {
@@ -54,29 +56,37 @@ void hidRemoteDrawHeader(HidRemoteTransport transport, bool connected, const cha
         const String &host = gHidRemoteSession.getHostLabel();
         if (host.length() > 0) leftTitle = host.c_str();
     }
-    int maxChars = (tftWidth - 40) / (LW * FP);
+    // Leave room for transport tag + status dot on the right.
+    int maxChars = (tftWidth - 48) / uiCharW(dense);
     if (maxChars < 4) maxChars = 4;
     String titleLeft = String(leftTitle).substring(0, maxChars);
-    tft.drawString(titleLeft, 6, 4);
+    tft.drawString(titleLeft, 4, 2);
     tft.setTextColor(KVX_GREEN, KVX_BG);
-    tft.drawRightString(transport == HID_REMOTE_USB ? "USB" : "BLE", tftWidth - 18, 4, 1);
-    if (connected) tft.fillCircle(tftWidth - 8, 10, 3, KVX_GREEN);
-    else tft.drawCircle(tftWidth - 8, 10, 3, KVX_PURPLE);
+    tft.drawRightString(transport == HID_REMOTE_USB ? "USB" : "BLE", tftWidth - 14, 2, 1);
+    if (connected) tft.fillCircle(tftWidth - 6, 6, 2, KVX_GREEN);
+    else tft.drawCircle(tftWidth - 6, 6, 2, KVX_PURPLE);
     if (modeLabel != nullptr && modeLabel[0] != '\0') {
         tft.setTextColor(KVX_GREEN, KVX_BG);
-        tft.drawString(modeLabel, 6, 14);
+        int modeMax = max(4, (tftWidth - 8) / uiCharW(dense));
+        String mode = String(modeLabel).substring(0, modeMax);
+        tft.drawString(mode, 4, 10);
     }
-    tft.drawFastHLine(0, KVX_HEADER_H, tftWidth, KVX_PURPLE);
+    tft.drawFastHLine(0, KVX_HEADER_H - 1, tftWidth, KVX_PURPLE);
 }
 
 void hidRemoteDrawFooter(const char *hints) {
+    const int dense = uiDenseFont();
     const int y = tftHeight - KVX_FOOTER_H;
     tft.fillRect(0, y, tftWidth, KVX_FOOTER_H, KVX_BG);
     tft.drawFastHLine(0, y, tftWidth, KVX_PURPLE);
-    tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
+    tft.setTextSize(dense) /* HID pad/footer/slots stay dense */;
     tft.setTextColor(KVX_GREEN, KVX_BG);
     if (hints == nullptr) hints = "fn+Ok back";
-    tft.drawCentreString(hints, tftWidth / 2, y + 4, 1);
+    // Truncate long footers so they stay on one dense line.
+    int maxChars = max(8, (tftWidth - 8) / uiCharW(dense));
+    String shown = String(hints);
+    if ((int)shown.length() > maxChars) shown = shown.substring(0, maxChars);
+    tft.drawCentreString(shown, tftWidth / 2, y + 3, 1);
 }
 
 void hidRemoteDrawStatus(const char *line1, const char *line2) {
@@ -277,7 +287,7 @@ void hidDrawMediaPad(int flashId) {
         {"SPC", "Play", 1, 13}, {";", "Vol+", 3, 0}, {".", "Vol-", 4, 1}, {"m", "Mute", 0, 2},
         {",", "Prev", 5, 3},    {"/", "Next", 6, 4}, {"s", "Stop", 0, 5}, {"c", "Mic", 0, 6},
         {"v", "Mix", 0, 7},     {"a", "Act", 0, 8},  {"D", "Disp", 0, 9}, {"`", "Desk", 0, 10},
-        {"b", "-5s", 0, 11},    {"n", "+5s", 0, 12},
+        {"b", "-5s", 0, 11},    {"n", "+5s", 0, 12}, {"f", "F11", 0, 14},
     };
 
     for (size_t i = 0; i < sizeof(cells) / sizeof(cells[0]); i++) {
@@ -478,20 +488,21 @@ void hidDrawPttPad(bool talking) {
 
 void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected) {
     // Content-only refresh (no full fillScreen) to avoid flicker while idle.
-    hidRemoteDrawHeader(transport, connected, "Host slots");
+    hidRemoteDrawHeader(transport, connected, "Hosts");
 
     int top = 0;
     int bottom = 0;
     hidContentBounds(top, bottom);
     tft.fillRect(0, top, tftWidth, bottom - top, KVX_BG);
 
+    const int dense = uiDenseFont();
     const int slotCount = KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT;
     const int cols = 2;
     const int rows = (slotCount + cols - 1) / cols;
-    const int gap = 4;
-    const int padX = 6;
+    const int gap = 2;
+    const int padX = 4;
     const int areaH = bottom - top;
-    const int rowH = (areaH - gap * (rows - 1)) / rows;
+    const int rowH = max(uiLineH(dense) + 4, (areaH - gap * (rows - 1)) / rows);
     const int colW = (tftWidth - padX * 2 - gap) / cols;
 
     for (int i = 0; i < slotCount; i++) {
@@ -510,19 +521,19 @@ void hidRemoteDrawHostSlots(HidRemoteTransport transport, bool connected) {
             label = String(slot) + " " + gHidRemoteSession.displayNameForAddr(addr);
         }
 
-        tft.fillRoundRect(x, y, colW, rowH, 3, 0x1082);
-        tft.drawRoundRect(x, y, colW, rowH, 3, border);
-        tft.fillCircle(x + 8, y + rowH / 2, 3, border);
+        tft.fillRoundRect(x, y, colW, rowH, 2, 0x1082);
+        tft.drawRoundRect(x, y, colW, rowH, 2, border);
+        tft.fillCircle(x + 6, y + rowH / 2, 2, border);
 
-        tft.setTextSize(uiDenseFont()) /* HID pad/footer/slots stay dense */;
+        tft.setTextSize(dense) /* HID pad/footer/slots stay dense */;
         tft.setTextColor(border, 0x1082);
-        int maxChars = (colW - 18) / 6;
+        int maxChars = (colW - 14) / uiCharW(dense);
         if (maxChars < 4) maxChars = 4;
         String shown = label.substring(0, maxChars);
-        tft.drawString(shown, x + 14, y + (rowH - 8) / 2);
+        tft.drawString(shown, x + 12, y + (rowH - uiLineH(dense)) / 2);
     }
 
-    hidRemoteDrawFooter("1-6 tap=connect  hold 2s=options  S  Ok  ESC");
+    hidRemoteDrawFooter("1-6 connect  hold=opts  S  U=USB  ESC");
 }
 
 int hidRemotePickFromList(const char *title, const std::vector<String> &labels, int startIndex) {

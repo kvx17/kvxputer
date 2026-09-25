@@ -37,7 +37,26 @@ bool resolveDir(FS &fs, const char *canonical, const char *legacy, String &out) 
 void ensureDir(FS &fs, const char *path) {
     if (!path || !*path) return;
     if (fs.exists(path)) return;
-    fs.mkdir(path);
+    // Recursive: ESP32 FAT mkdir is not recursive.
+    String p = path;
+    String built = "";
+    int start = 0;
+    if (p.startsWith("/")) start = 1;
+    while (start <= (int)p.length()) {
+        int next = p.indexOf('/', start);
+        String segment;
+        if (next < 0) {
+            segment = p.substring(start);
+            start = p.length() + 1;
+        } else {
+            segment = p.substring(start, next);
+            start = next + 1;
+        }
+        if (segment.length() == 0) continue;
+        if (built.length() == 0) built = "/" + segment;
+        else built += "/" + segment;
+        if (!fs.exists(built)) fs.mkdir(built);
+    }
 }
 
 void ensureParentDirs(FS &fs, const char *filePath) {
@@ -46,28 +65,8 @@ void ensureParentDirs(FS &fs, const char *filePath) {
     int slash = p.lastIndexOf('/');
     if (slash <= 0) return;
     String dir = p.substring(0, slash);
-    // Build nested dirs
-    String built = "";
-    int start = 0;
-    if (dir.startsWith("/")) {
-        built = "";
-        start = 1;
-    }
-    while (start <= (int)dir.length()) {
-        int next = dir.indexOf('/', start);
-        String segment;
-        if (next < 0) {
-            segment = dir.substring(start);
-            start = dir.length() + 1;
-        } else {
-            segment = dir.substring(start, next);
-            start = next + 1;
-        }
-        if (segment.length() == 0) continue;
-        if (built.length() == 0) built = "/" + segment;
-        else built += "/" + segment;
-        ensureDir(fs, built.c_str());
-    }
+    // ensureDir is recursive — one call creates the full parent chain.
+    ensureDir(fs, dir.c_str());
 }
 
 const char *configPath(FS &fs) {

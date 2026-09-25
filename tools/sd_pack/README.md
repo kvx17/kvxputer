@@ -6,18 +6,19 @@ Copy the **contents** of this folder onto a Cardputer microSD root so runtime as
 /support_files/
   companions/          companion *.bin (build companion-* envs)
   wifi/                portals, wordlists, deaddrop, probes, wof, …
+  evil portals/        extra captive-portal HTML
   netops/              ciw, cctv, crawler, printer, responder/NTLM
-  infrared/
-    profiles/          Flipper-style .ir library (TVs, ACs, …)
-    remotes/           kremote learned profiles
-    esl/               ESL bitmaps
+  infrared/            Flipper-IRDB library, profiles/, remotes/, esl/
+  badusb/              Rubber Ducky, Bash Bunny, O.MG, Flipper, kvx17 payloads
   ble/                 names, FindMy keys, airtags
   rfid/                sample .rfid dumps
   media/               audio + images
   others/              misc helpers
 /root/themes/          UI themes (factory boot GIF is firmware-embedded, not here)
-/menu/scripts/         BadUSB / interpreter samples
+/menu/scripts/         interpreter samples
 ```
+
+On-device (not copied from this pack): `/kvxputer/scripts/badUSB` (BadUSB editor), `/kvxputer/infrared/remotes` (kremote), `/kvxputer/kvxuniversalremote/userSettings.json` (kremote favorites).
 
 Populated from (copied, not moved):
 

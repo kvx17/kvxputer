@@ -161,6 +161,12 @@ void tft_display::endFrame(bool present) {
     if (canvasInInternalRam()) releaseCanvas();
 }
 
+void tft_display::abortFrame() {
+    _frameDepth = 0;
+    _buffering = false;
+    resetDirty();
+}
+
 void tft_display::begin(uint32_t speed) { (void)speed; }
 
 void tft_display::init(uint8_t tc) {

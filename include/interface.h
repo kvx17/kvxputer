@@ -47,6 +47,10 @@ void InputHandler(void);
 void resetHeldNavKeys(void);
 // True while a printable key is physically held (TCA8418 ADV + matrix Cardputer).
 bool isCardputerKeyHeld(char c);
+// FN currently held (Cardputer matrix / ADV). Weak stub uses KeyStroke.fn.
+bool isFnKeyHeld(void);
+// Home-grid chord: ` + Ctrl + Backspace + Space all held.
+bool isSystemShortcutChordHeld(void);
 
 /*********************************************************************
 ** Function: pollEncoder

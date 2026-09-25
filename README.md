@@ -156,6 +156,21 @@ Notes:
 - G0 is also used for flashing: hold G0 while plugging USB if upload fails (bootloader mode).
 - StickS3 does not use this Cardputer G0 fake-off / force-home path; see [M5StickS3](#m5sticks3) for its tap/hold button map.
 
+### Home grid keyboard
+
+On the main channel grid (Cardputer / Adv):
+
+| Keys | What happens |
+|------|----------------|
+| **FN + `;`** | Brightness up 5% (5–100%) |
+| **FN + `.`** | Brightness down 5% (5–100%) |
+| **FN + `,`** | Volume down 5% (0–100) |
+| **FN + `/`** | Volume up 5% (beep at the new level) |
+| **FN + Space** | Mute (volume 0%) |
+| **backtick + Ctrl + Backspace + Space** (all four held) | Open **Mainscreen Shortcuts** |
+
+`;` `.` `,` `/` without FN still move the tile cursor. App letter shortcuts are unchanged.
+
 ---
 
 ## Modules & Add-ons
@@ -273,7 +288,7 @@ Some boards expose **NRF24 → Config pins** (legacy vs shared SPI).
 | Module | How | Apps |
 |--------|-----|------|
 | Built-in IR LED | Board TX pin | kremote, TV-B-Gone, Custom IR, IR Read, jammer |
-| M5 IR Mod / Grove IR | Grove SDA/SCL as TX/RX | Same apps; pick pins under **Infrared → Config** |
+| [M5 Unit IR](https://docs.m5stack.com/en/unit/ir) | Grove yellow TX / white RX | kremote Settings (Cardputer / Unit / Both); other IR apps via **Infrared → Config** |
 
 StickS3 enables EXT 5V while the Infrared menu is open for Grove IR power.
 
@@ -543,7 +558,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 | Tool | Purpose |
 |------|---------|
 | **Clock** | Full-screen clock; submenu opens Timer. |
-| **Charge** | Charge-friendly UI with restrained input. Sleep (S / Down / G0) blanks the panel; LED stays on at ~20% brightness showing battery color (purple at 95–100%). |
+| **Charge** | Charge-friendly UI. Up/Down steps panel brightness 0–100% (0% blanks the panel). LED stays a solid 20% battery color unless L toggles it off. S / G0 sleep the panel only. USB + charge switch off shows “Flip the charge switch”. |
 
 ### Config
 
@@ -623,6 +638,11 @@ Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on
 **AGPL-3.0-or-later.** See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Maintained at [github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer).
+
+Do you like or enjoy this project? You can support me by [buying me a coffee!](https://buymeacoffee.com/kvx17)
+
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kvx17)
+
 
 Early ideas came from Bruce (BruceDevices) and Evil-Cardputer (7h30th3r0n3); upstream notices remain where applicable, and the combined distribution is AGPL-3.0 because of the Bruce lineage. The project has since grown into its own codebase and direction.
 

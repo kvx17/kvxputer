@@ -8,6 +8,7 @@
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/ui/scanner_list.h"
 #include <NimBLEDevice.h>
 #include <globals.h>
 #include <set>
@@ -18,8 +19,55 @@ namespace {
 struct FlipperHit {
     String mac;
     String name;
-    int rssi;
+    int rssi = 0;
+    String addrType;
+    String services;
+    String txPower;
+    String appearance;
+    String mfgHex;
+    String payloadHex;
+    unsigned long firstSeen = 0;
+    unsigned long lastSeen = 0;
 };
+
+String shortMac(const String &mac) {
+    if (mac.length() < 14) return mac;
+    return mac.substring(0, 5) + ".." + mac.substring(mac.length() - 5);
+}
+
+String bytesToHex(const uint8_t *p, size_t len, size_t maxBytes = 12) {
+    String out;
+    size_t n = min(len, maxBytes);
+    for (size_t i = 0; i < n; i++) {
+        char b[4];
+        snprintf(b, sizeof(b), "%02X", p[i]);
+        out += b;
+        if (i + 1 < n) out += " ";
+    }
+    if (len > maxBytes) out += "...";
+    return out;
+}
+
+String addrTypeName(uint8_t t) {
+    switch (t) {
+        case BLE_ADDR_PUBLIC: return "public";
+        case BLE_ADDR_RANDOM: return "random";
+        case BLE_ADDR_PUBLIC_ID: return "public-id";
+        case BLE_ADDR_RANDOM_ID: return "random-id";
+        default: return "other";
+    }
+}
+
+void fillAdvertExtras(FlipperHit &h, const ScannerAdvSnap &dev) {
+    h.addrType = addrTypeName(dev.addrType);
+    if (dev.haveTXPower) h.txPower = String(dev.txPower) + " dBm";
+    if (dev.haveAppearance) h.appearance = String(dev.appearance);
+    if (dev.haveMfg && !dev.mfg.empty()) {
+        h.mfgHex = bytesToHex((const uint8_t *)dev.mfg.data(), dev.mfg.size());
+    }
+    if (!dev.payload.empty()) h.payloadHex = bytesToHex(dev.payload.data(), dev.payload.size());
+    h.services = dev.serviceUUID;
+}
 
 bool alreadyLogged(FS &fs, const String &path, const String &mac) {
     File f = fs.open(path, FILE_READ);
@@ -53,29 +101,52 @@ bool payloadHasUuid16(const uint8_t *p, size_t len, uint16_t uuid) {
     return false;
 }
 
-bool looksLikeFlipper(const NimBLEAdvertisedDevice *dev) {
-    if (!dev) return false;
-    String name = String(dev->getName().c_str());
-    if (name.indexOf("Flipper") >= 0 || name.indexOf("flipper") >= 0) return true;
+bool looksLikeFlipper(const ScannerAdvSnap &dev) {
+    if (dev.name.indexOf("Flipper") >= 0 || dev.name.indexOf("flipper") >= 0) return true;
 
     const uint16_t ids[] = {0x3080, 0x3081, 0x3082, 0x3083};
-    for (uint16_t id : ids) {
-        if (dev->isAdvertisingService(NimBLEUUID((uint16_t)id))) return true;
-    }
-    if (dev->haveServiceUUID()) {
-        NimBLEUUID u = dev->getServiceUUID();
+    if (dev.haveServiceUUID && dev.serviceUUID.length()) {
         for (uint16_t id : ids) {
-            if (u == NimBLEUUID((uint16_t)id)) return true;
+            NimBLEUUID u((uint16_t)id);
+            if (dev.serviceUUID.equalsIgnoreCase(String(u.toString().c_str()))) return true;
+            char hex[5];
+            snprintf(hex, sizeof(hex), "%04X", id);
+            if (dev.serviceUUID.indexOf(hex) >= 0) return true;
         }
     }
-
-    const std::vector<uint8_t> &payload = dev->getPayload();
-    if (!payload.empty()) {
+    if (!dev.payload.empty()) {
         for (uint16_t id : ids) {
-            if (payloadHasUuid16(payload.data(), payload.size(), id)) return true;
+            if (payloadHasUuid16(dev.payload.data(), dev.payload.size(), id)) return true;
         }
     }
     return false;
+}
+
+std::vector<String> flipperRowLabels(const std::vector<FlipperHit> &hits) {
+    std::vector<String> rows;
+    rows.reserve(hits.size());
+    for (const auto &h : hits) {
+        String label = h.name.length() ? h.name : shortMac(h.mac);
+        label += "  " + String(h.rssi) + "dBm";
+        rows.push_back(label);
+    }
+    return rows;
+}
+
+std::vector<ScannerDetailField> flipperDetail(const FlipperHit &h) {
+    std::vector<ScannerDetailField> f;
+    f.push_back({"MAC", h.mac});
+    f.push_back({"Name", h.name.length() ? h.name : "<none>"});
+    f.push_back({"RSSI", String(h.rssi) + " dBm"});
+    f.push_back({"Addr type", h.addrType.length() ? h.addrType : "?"});
+    if (h.services.length()) f.push_back({"Service", h.services});
+    if (h.txPower.length()) f.push_back({"TX power", h.txPower});
+    if (h.appearance.length()) f.push_back({"Appearance", h.appearance});
+    if (h.mfgHex.length()) f.push_back({"Mfg data", h.mfgHex});
+    if (h.payloadHex.length()) f.push_back({"Payload", h.payloadHex});
+    f.push_back({"First seen", String(h.firstSeen) + " ms"});
+    f.push_back({"Last seen", String(h.lastSeen) + " ms"});
+    return f;
 }
 
 } // namespace
@@ -89,78 +160,90 @@ void wallOfFlipperMenu() {
         logPath = String(kvx::paths::WIFI_WOF) + "/WoF.txt";
     }
 
-    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
-    NimBLEDevice::init("");
-    NimBLEScan *scan = NimBLEDevice::getScan();
-    scan->setActiveScan(true);
-    scan->setInterval(100);
-    scan->setWindow(99);
-    scan->setDuplicateFilter(false);
+    NimBLEScan *scan = scannerBleStart();
+    if (!scan) {
+        displayError("BLE scan failed", true);
+        return;
+    }
 
     std::vector<FlipperHit> hits;
     std::set<String> seen;
-    drawMainBorderWithTitle("Wall Of Flipper");
-    tft.setTextSize(FP);
-    tft.drawString("ESC to stop", 10, tftHeight - 16);
-    EscPress = false;
 
-    scan->start(0, false);
-    unsigned long lastUi = 0;
-    int lastCount = -1;
-    while (!check(EscPress) && !returnToMenu && !forceHome) {
-        NimBLEScanResults results = scan->getResults();
-        for (int i = 0; i < results.getCount(); i++) {
-            const NimBLEAdvertisedDevice *dev = results.getDevice(i);
+    ScannerListState ui;
+    scannerListBegin(ui, "Wall Of Flipper", "scanning");
+
+    auto ingest = [&]() {
+        scannerBleKeepAlive(scan);
+        const auto batch = scannerBleTakeInbox(scan);
+        std::vector<size_t> newIdx;
+        for (const auto &dev : batch) {
             if (!looksLikeFlipper(dev)) continue;
-            String mac = String(dev->getAddress().toString().c_str());
-            String name = String(dev->getName().c_str());
-            int rssi = dev->getRSSI();
+            const String &mac = dev.mac;
+            const String &name = dev.name;
+            int rssi = dev.rssi;
             if (seen.insert(mac).second) {
-                hits.push_back({mac, name, rssi});
-                if (fs && !alreadyLogged(*fs, logPath, mac)) {
-                    File out = fs->open(logPath, FILE_APPEND);
-                    if (!out) out = fs->open(logPath, FILE_WRITE);
-                    if (out) {
-                        out.println(
-                            (name.length() ? name : String("Flipper")) + " - " + mac + " - " + String(rssi) +
-                            " dBm"
-                        );
-                        out.close();
-                    }
-                }
+                FlipperHit h;
+                h.mac = mac;
+                h.name = name;
+                h.rssi = rssi;
+                h.firstSeen = millis();
+                h.lastSeen = h.firstSeen;
+                fillAdvertExtras(h, dev);
+                hits.push_back(h);
+                newIdx.push_back(hits.size() - 1);
             } else {
                 for (auto &h : hits) {
                     if (h.mac == mac) {
                         h.rssi = rssi;
-                        if (name.length()) h.name = name;
+                        h.lastSeen = millis();
+                        if (name.length() && name != h.name) h.name = name;
                         break;
                     }
                 }
             }
         }
-
-        if (millis() - lastUi > 250 || (int)hits.size() != lastCount) {
-            lastUi = millis();
-            lastCount = (int)hits.size();
-            tft.fillRect(8, 28, tftWidth - 16, tftHeight - 48, kvxConfig.bgColor);
-            tft.setTextSize(FP);
-            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-            tft.drawString("Flippers: " + String((int)hits.size()), 10, 30);
-            int y = 46;
-            int nchars = max(1, (tftWidth - 16) / uiCharW(FP));
-            for (size_t i = 0; i < hits.size() && y < uiFooterY(FP); i++) {
-                String label = hits[i].name.length() ? hits[i].name : hits[i].mac;
-                String line = label + " " + String(hits[i].rssi);
-                if ((int)line.length() > nchars) line = line.substring(0, nchars);
-                tft.drawString(line, 10, y);
-                y += uiRowH(FP);
+        if (fs) {
+            for (size_t idx : newIdx) {
+                const FlipperHit &h = hits[idx];
+                if (alreadyLogged(*fs, logPath, h.mac)) continue;
+                File out = fs->open(logPath, FILE_APPEND);
+                if (!out) out = fs->open(logPath, FILE_WRITE);
+                if (out) {
+                    out.println(
+                        (h.name.length() ? h.name : String("Flipper")) + " - " + h.mac + " - " +
+                        String(h.rssi) + " dBm"
+                    );
+                    out.close();
+                }
             }
         }
-        delay(40);
+    };
+
+    unsigned long lastPaint = 0;
+    while (true) {
+        ScannerListResult r = scannerListPoll(ui);
+        if (r == SCANNER_LIST_EXIT) break;
+        if (r == SCANNER_LIST_DETAIL && ui.cursor >= 0 && ui.cursor < (int)hits.size()) {
+            FlipperHit snap = hits[ui.cursor];
+            String detailTitle = snap.name.length() ? snap.name : "RESULT DETAILS";
+            scannerListShowDetail(detailTitle.c_str(), flipperDetail(snap), [&]() { scannerBleKeepAlive(scan); });
+            scannerListRefresh(ui);
+            lastPaint = 0;
+            continue;
+        }
+        ingest();
+        if (millis() - lastPaint > 220) {
+            lastPaint = millis();
+            String st = String(scannerBleAdvCount()) + " adv";
+            if (!hits.empty()) st += "  " + String((int)hits.size()) + " hit";
+            scannerListSetStatus(ui, st.c_str());
+            scannerListSetRows(ui, flipperRowLabels(hits));
+        }
+        delay(20);
     }
 
-    scan->stop();
-    NimBLEDevice::deinit(true);
+    scannerBleTeardown(true);
+    scannerListEnd();
     displayInfo("Logged " + String((int)hits.size()) + " Flipper(s)", true);
 }
 

@@ -54,6 +54,12 @@ int ledGetStatus();
 void ledSuppressStatus(bool suppress);
 bool ledIsStatusSuppressed();
 void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright);
+// Charge (and similar): block status/effects/force-off. ledShowApp still works.
+void ledTakeExclusive();
+void ledReleaseExclusive();
+bool ledIsExclusive();
+// One FastLED refresh after TFT PWM (do not spam show — that blinks WS2812).
+void ledKeepRequest();
 
 #else
 inline void blinkLed(int blinkTime = 50) {};
@@ -70,6 +76,10 @@ inline void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
     (void)b;
     (void)bright;
 }
+inline void ledTakeExclusive() {}
+inline void ledReleaseExclusive() {}
+inline bool ledIsExclusive() { return false; }
+inline void ledKeepRequest() {}
 #define LED_STATUS_BOOT 0
 #define LED_STATUS_IDLE 1
 #define LED_STATUS_BUSY 2

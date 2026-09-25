@@ -280,6 +280,12 @@ void tft_logger::endFrame() {
 #endif
 }
 
+void tft_logger::abortFrame() {
+#if defined(HAS_SCREEN)
+    BRUCE_TFT_DRIVER::abortFrame();
+#endif
+}
+
 bool tft_logger::isFraming() const {
 #if defined(HAS_SCREEN)
     return BRUCE_TFT_DRIVER::isFraming();

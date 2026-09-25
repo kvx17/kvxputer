@@ -27,9 +27,9 @@ Legacy Bruce entries (`BLE Keyboard`, `Media Cmds`, `Presenter mode`, `USB Keybo
 | Presenter Vertical | Portrait cluster: `/` up, `.` right, `;` left, `,` down; **P** play/pause in the center; Enter next, `5` = F5 |
 | Keyboard | Live text mirror. Press **FN** for a sticky on-screen layer (until a key, or FN again): `1`–`0`, `-`, `=` → F1–F12; Ins/PrtSc/Pause/Home/End/PgUp/PgDn/Esc/NumLk/ScrLk/Menu/Del; **t** Alt+Tab, **w** Win+Tab, **x** Ctrl+Shift+Esc, **d** Ctrl+Alt+Del. Sent keys appear on the mirror. **Opt+Ok** opens System Shortcuts |
 | System Shortcuts | Pick-and-send common Win/Mac/Linux shortcuts (Alt+Tab, Alt+F4, Ctrl+Alt+Shift+V, clipboard, window, browser, terminal, …) |
-| Media | Space play/pause, volume, track skip |
+| Media | Space play/pause, volume, track skip, **f** = F11 fullscreen (HID usage 0x44) |
 | Apple Music | macOS-oriented media controls |
-| Movie | Play/pause, seek, fullscreen |
+| Movie | Play/pause, seek, **f** = F11 fullscreen |
 | Mouse | Move cursor, click, scroll wheel |
 | Shorts | On-screen up / Space / down keys. **Ok** remaps the physical up/down keys (saved in settings) |
 | Mouse Clicker | Auto-click at configured interval |

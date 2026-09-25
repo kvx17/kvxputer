@@ -60,10 +60,7 @@ void WifiMenu::optionsMenu() {
     if (!WiFi.isConnected() && !WiFi.AP.started()) {
         options = {
             {"Connect to Wifi", lambdaHelper(wifiConnectMenu, WIFI_STA)},
-            {"Start WiFi AP", [=]() {
-                 wifiConnectMenu(WIFI_AP);
-                 displayInfo("pwd: " + kvxConfig.wifiAp.pwd, true);
-             }},
+            {"Start WiFi AP", []() { wifiStartApInteractive(); }},
         };
     }
     if (WiFi.getMode() != WIFI_MODE_NULL) { options.push_back({"Turn Off WiFi", wifiDisconnect}); }
@@ -84,7 +81,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"TelNET", telnet_setup});
     options.push_back({"SSH", lambdaHelper(ssh_setup, String(""))});
     options.push_back({"Sniffer", sniffer_setup});
-    options.push_back({"Channel Analyzer", channel_analyzer_setup});
+    options.push_back({"kvx wifi analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
@@ -130,15 +127,15 @@ void WifiMenu::configMenu() {
     std::vector<Option> wifiOptions;
 
     wifiOptions.push_back({"Change MAC", wifiMACMenu});
-    wifiOptions.push_back({"Add Evil Wifi", addEvilWifiMenu});
-    wifiOptions.push_back({"Remove Evil Wifi", removeEvilWifiMenu});
+    wifiOptions.push_back({"Add kvx Wifi", addEvilWifiMenu});
+    wifiOptions.push_back({"Remove kvx Wifi", removeEvilWifiMenu});
     wifiOptions.push_back({kvxConfig.TerminalLog ? "SSH/Telnet Log OFF" : "SSH/Telnet Log ON", [this]() {
                                kvxConfig.setTerminalLog(!kvxConfig.TerminalLog);
                                configMenu();
                            }});
 
-    // Evil Wifi Settings submenu (unchanged)
-    wifiOptions.push_back({"Evil Wifi Settings", [this]() {
+    // kvx Wifi Settings submenu
+    wifiOptions.push_back({"kvx Wifi Settings", [this]() {
                                std::vector<Option> evilOptions;
 
                                evilOptions.push_back({"Set Gateway IP", setEvilGatewayIp});
@@ -149,7 +146,7 @@ void WifiMenu::configMenu() {
                                evilOptions.push_back({"Allow /ssid access", setEvilAllowSetSsid});
                                evilOptions.push_back({"Display endpoints", setEvilAllowEndpointDisplay});
                                evilOptions.push_back({"Back", [this]() { configMenu(); }});
-                               loopOptions(evilOptions, MENU_TYPE_SUBMENU, "Evil Wifi Settings");
+                               loopOptions(evilOptions, MENU_TYPE_SUBMENU, "kvx Wifi Settings");
                            }});
 
     {

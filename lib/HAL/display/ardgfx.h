@@ -355,6 +355,7 @@ public:
 
     bool beginFrame() { return false; }
     void endFrame(bool present = true) { (void)present; }
+    void abortFrame() {}
     bool isFraming() const { return false; }
     void releaseCanvas() {}
     void suppressCanvas(bool suppress) { (void)suppress; }

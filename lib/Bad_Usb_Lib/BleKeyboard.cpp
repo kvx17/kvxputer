@@ -77,14 +77,16 @@ static const uint8_t _hidReportDescriptor[] = {
     0x08, //   REPORT_SIZE(8)
     LOGICAL_MINIMUM(1),
     0x00, //   LOGICAL_MINIMUM(0)
+    // 0xFF so F1–F24 / arrows / Insert are valid on Linux (old 0x65 boot map
+    // made some hosts drop non-boot keycodes even when usage was in range).
     LOGICAL_MAXIMUM(1),
-    0x65, //   LOGICAL_MAXIMUM(0x65) ; 101 keys
+    0xFF, //   LOGICAL_MAXIMUM(0xFF)
     USAGE_PAGE(1),
     0x07, //   USAGE_PAGE (Kbrd/Keypad)
     USAGE_MINIMUM(1),
     0x00, //   USAGE_MINIMUM (0)
     USAGE_MAXIMUM(1),
-    0x65, //   USAGE_MAXIMUM (0x65)
+    0xFF, //   USAGE_MAXIMUM (0xFF)
     HIDINPUT(1),
     0x00,              //   INPUT (Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
     END_COLLECTION(0), // END_COLLECTION
@@ -377,50 +379,63 @@ uint8_t USBPutChar(uint8_t c);
 // to the persistent key report and sends the report.  Because of the way
 // USB HID works, the host acts like the key remains pressed until we
 // call release(), releaseAll(), or otherwise clear the report and resend.
-size_t BleKeyboard::press(uint8_t k) {
+size_t BleKeyboard::pressRaw(uint8_t k) {
+    // k is a HID Usage Page 0x07 usage ID (e.g. F11 = 0x44), not ASCII / KEY_*.
     uint8_t i;
     if (k >= 0xE0 && k < 0xE8) {
-        // k is not to be changed
-    } else if (k >= 0x88) { // it's a non-printing key (not a modifier)
-        k = k - 0x88;
-    } else if (k >= 0x80) { // it's a modifier key
-        _keyReport.modifiers |= (1 << (k - 0x80));
+        _keyReport.modifiers |= (1 << (k - 0xE0));
         k = 0;
-    } else { // it's a printing key
-        k = _asciimap[k];
-        if (!k) {
-            setWriteError();
-            return 0;
-        }
-        if ((k & 0xc0) == 0xc0) {         // ALT_GR
-            _keyReport.modifiers |= 0x40; // AltGr = right Alt
-            k &= 0x3F;
-        } else if ((k & 0x80) == 0x80) {  // SHIFT
-            _keyReport.modifiers |= 0x02; // the left shift modifier
-            k &= 0x7F;
-        }
-        if (k == 0x32) // ISO_REPLACEMENT
-            k = 0x64;  // ISO_KEY
+    } else if (k == 0) {
+        sendReport(&_keyReport);
+        return 1;
     }
 
-    // Add k to the key report only if it's not already present
-    // and if there is an empty slot.
-    if (_keyReport.keys[0] != k && _keyReport.keys[1] != k && _keyReport.keys[2] != k &&
-        _keyReport.keys[3] != k && _keyReport.keys[4] != k && _keyReport.keys[5] != k) {
-
-        for (i = 0; i < 6; i++) {
-            if (_keyReport.keys[i] == 0x00) {
-                _keyReport.keys[i] = k;
-                break;
+    if (k != 0) {
+        if (_keyReport.keys[0] != k && _keyReport.keys[1] != k && _keyReport.keys[2] != k &&
+            _keyReport.keys[3] != k && _keyReport.keys[4] != k && _keyReport.keys[5] != k) {
+            for (i = 0; i < 6; i++) {
+                if (_keyReport.keys[i] == 0x00) {
+                    _keyReport.keys[i] = k;
+                    break;
+                }
             }
-        }
-        if (i == 6) {
-            setWriteError();
-            return 0;
+            if (i == 6) {
+                setWriteError();
+                return 0;
+            }
         }
     }
     sendReport(&_keyReport);
     return 1;
+}
+
+size_t BleKeyboard::press(uint8_t k) {
+    if (k >= 0xE0 && k < 0xE8) {
+        return pressRaw(k);
+    } else if (k >= 0x88) { // non-printing KEY_* (KEY_F11=0xCC → usage 0x44)
+        return pressRaw((uint8_t)(k - 0x88));
+    } else if (k >= 0x80) { // Arduino-style modifier (0x80..0x87)
+        _keyReport.modifiers |= (1 << (k - 0x80));
+        sendReport(&_keyReport);
+        return 1;
+    }
+
+    // Printing key via layout map
+    k = _asciimap[k];
+    if (!k) {
+        setWriteError();
+        return 0;
+    }
+    if ((k & 0xc0) == 0xc0) {         // ALT_GR
+        _keyReport.modifiers |= 0x40; // AltGr = right Alt
+        k &= 0x3F;
+    } else if ((k & 0x80) == 0x80) {  // SHIFT
+        _keyReport.modifiers |= 0x02; // the left shift modifier
+        k &= 0x7F;
+    }
+    if (k == 0x32) // ISO_REPLACEMENT
+        k = 0x64;  // ISO_KEY
+    return pressRaw(k);
 }
 
 size_t BleKeyboard::press(const MediaKeyReport k) {
@@ -438,34 +453,41 @@ size_t BleKeyboard::press(const MediaKeyReport k) {
 // release() takes the specified key out of the persistent key report and
 // sends the report.  This tells the OS the key is no longer pressed and that
 // it shouldn't be repeated any more.
-size_t BleKeyboard::release(uint8_t k) {
+size_t BleKeyboard::releaseRaw(uint8_t k) {
     uint8_t i;
-    if (k >= 136) { // it's a non-printing key (not a modifier)
-        k = k - 136;
-    } else if (k >= 128) { // it's a modifier key
-        _keyReport.modifiers &= ~(1 << (k - 128));
+    if (k >= 0xE0 && k < 0xE8) {
+        _keyReport.modifiers &= ~(1 << (k - 0xE0));
         k = 0;
-    } else { // it's a printing key
-        k = pgm_read_byte(_asciimap + k);
-        if (!k) { return 0; }
-        if ((k & ALT_GR) == ALT_GR) {
-            _keyReport.modifiers &= ~(0x40); // AltGr = right Alt
-            k &= 0x3F;
-        } else if ((k & SHIFT) == SHIFT) {
-            _keyReport.modifiers &= ~(0x02); // the left shift modifier
-            k &= 0x7F;
-        }
-        if (k == ISO_REPLACEMENT) { k = ISO_KEY; }
     }
-
-    // Test the key report to see if k is present.  Clear it if it exists.
-    // Check all positions in case the key is present more than once (which it shouldn't be)
     for (i = 0; i < 6; i++) {
         if (0 != k && _keyReport.keys[i] == k) { _keyReport.keys[i] = 0x00; }
     }
-
     sendReport(&_keyReport);
     return 1;
+}
+
+size_t BleKeyboard::release(uint8_t k) {
+    if (k >= 0xE0 && k < 0xE8) {
+        return releaseRaw(k);
+    } else if (k >= 0x88) { // non-printing KEY_*
+        return releaseRaw((uint8_t)(k - 0x88));
+    } else if (k >= 0x80) { // Arduino-style modifier
+        _keyReport.modifiers &= ~(1 << (k - 0x80));
+        sendReport(&_keyReport);
+        return 1;
+    }
+
+    k = _asciimap[k];
+    if (!k) { return 0; }
+    if ((k & 0xc0) == 0xc0) {
+        _keyReport.modifiers &= ~(0x40);
+        k &= 0x3F;
+    } else if ((k & 0x80) == 0x80) {
+        _keyReport.modifiers &= ~(0x02);
+        k &= 0x7F;
+    }
+    if (k == 0x32) { k = 0x64; }
+    return releaseRaw(k);
 }
 
 size_t BleKeyboard::release(const MediaKeyReport k) {

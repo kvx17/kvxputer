@@ -12,8 +12,9 @@ private:
     bool _active = false;
 };
 
-void kremoteDrawHeader(const char *title);
 void kremoteDrawFooter(const char *hints);
-void kremoteClearContent();
-void kremoteDrawPad(bool portrait, bool swapped, int flashId);
+// Draw Virtual Remote: system top bar + pad + extra key bindings.
+// present[KREMOTE_ACT_COUNT] marks which actions have a matching .ir command.
+void kremoteDrawVirtualRemote(const char *remoteName, const bool present[KREMOTE_ACT_COUNT], int flashId,
+                              int flashDigit);
 void kremoteShowButtonMap();

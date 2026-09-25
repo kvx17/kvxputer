@@ -26,6 +26,58 @@
 
 int currentScreenBrightness = -1;
 
+static const uint8_t kBrightnessMenu[] = {100, 75, 50, 25, 1};
+
+uint8_t nextBrightnessValue(uint8_t current, int dir) {
+    int v = (int)current;
+    if (dir > 0) {
+        if (v < 5) return 5;
+        if (v >= 100) return 100;
+        if (v % 5 == 0) v += 5;
+        else v = ((v / 5) + 1) * 5;
+        if (v > 100) v = 100;
+        return (uint8_t)v;
+    }
+    if (v <= 5) return 5;
+    if (v % 5 == 0) v -= 5;
+    else v = (v / 5) * 5;
+    if (v < 5) v = 5;
+    return (uint8_t)v;
+}
+
+int brightnessSettingIndex(uint8_t bright) {
+    int best = 0;
+    int bestD = 255;
+    for (int i = 0; i < 5; i++) {
+        int d = (int)bright - (int)kBrightnessMenu[i];
+        if (d < 0) d = -d;
+        if (d < bestD) {
+            bestD = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+int nextVolumeValue(int current, int dir) {
+    if (dir > 0) {
+        if (current >= 100) return 100;
+        int n = (current % 5 == 0) ? current + 5 : ((current / 5) + 1) * 5;
+        if (n > 100) n = 100;
+        return n;
+    }
+    if (current <= 0) return 0;
+    int n = (current % 5 == 0) ? current - 5 : (current / 5) * 5;
+    if (n < 0) n = 0;
+    return n;
+}
+
+int volumeSettingIndex(int volume) {
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
+    return (volume + 5) / 10;
+}
+
 // This function comes from interface.h
 void _setBrightness(uint8_t brightval) {}
 
@@ -117,12 +169,7 @@ int gsetRotation(bool set) {
 **  Handles Menu to set brightness
 **********************************************************************/
 void setBrightnessMenu() {
-    int idx = 0;
-    if (kvxConfig.bright == 100) idx = 0;
-    else if (kvxConfig.bright == 75) idx = 1;
-    else if (kvxConfig.bright == 50) idx = 2;
-    else if (kvxConfig.bright == 25) idx = 3;
-    else if (kvxConfig.bright == 1) idx = 4;
+    int idx = brightnessSettingIndex(kvxConfig.bright);
 
     options = {
         {"100%",
@@ -494,6 +541,7 @@ void setSoundConfig() {
 **********************************************************************/
 void setSoundVolume() {
     options = {
+        {"0%",   [=]() { kvxConfig.setSoundVolume(0); },   kvxConfig.soundVolume == 0  },
         {"10%",  [=]() { kvxConfig.setSoundVolume(10); },  kvxConfig.soundVolume == 10 },
         {"20%",  [=]() { kvxConfig.setSoundVolume(20); },  kvxConfig.soundVolume == 20 },
         {"30%",  [=]() { kvxConfig.setSoundVolume(30); },  kvxConfig.soundVolume == 30 },
@@ -505,7 +553,7 @@ void setSoundVolume() {
         {"90%",  [=]() { kvxConfig.setSoundVolume(90); },  kvxConfig.soundVolume == 90 },
         {"100%", [=]() { kvxConfig.setSoundVolume(100); }, kvxConfig.soundVolume == 100},
     };
-    loopOptions(options, "Volume", kvxConfig.soundVolume);
+    loopOptions(options, "Volume", volumeSettingIndex(kvxConfig.soundVolume));
 }
 
 #ifdef HAS_RGB_LED
@@ -540,7 +588,7 @@ void setWifiStartupConfig() {
 **  Handles Menu to add evil wifi names into config list
 **********************************************************************/
 void addEvilWifiMenu() {
-    String apName = keyboard("", 30, "Evil Portal SSID");
+    String apName = keyboard("", 30, "kvx Portal SSID");
     if (apName != "\x1B") kvxConfig.addEvilWifiName(apName);
 }
 
@@ -557,7 +605,7 @@ void removeEvilWifiMenu() {
 
     options.push_back({"Cancel", [=]() { backToMenu(); }});
 
-    loopOptions(options, "Evil WiFi");
+    loopOptions(options, "kvx WiFi");
 }
 
 /*********************************************************************
@@ -565,7 +613,7 @@ void removeEvilWifiMenu() {
 **  Handles menu for changing the endpoint to access captured creds
 **********************************************************************/
 void setEvilEndpointCreds() {
-    String userInput = keyboard(kvxConfig.evilPortalEndpoints.getCredsEndpoint, 30, "Evil creds endpoint");
+    String userInput = keyboard(kvxConfig.evilPortalEndpoints.getCredsEndpoint, 30, "kvx creds endpoint");
     if (userInput != "\x1B") kvxConfig.setEvilEndpointCreds(userInput);
 }
 
@@ -574,7 +622,7 @@ void setEvilEndpointCreds() {
 **  Handles menu for changing the endpoint to change evilSsid
 **********************************************************************/
 void setEvilEndpointSsid() {
-    String userInput = keyboard(kvxConfig.evilPortalEndpoints.setSsidEndpoint, 30, "Evil creds endpoint");
+    String userInput = keyboard(kvxConfig.evilPortalEndpoints.setSsidEndpoint, 30, "kvx ssid endpoint");
     if (userInput != "\x1B") kvxConfig.setEvilEndpointSsid(userInput);
 }
 
@@ -883,26 +931,42 @@ void setClock() {
 #endif
 #endif
 
+    // Only the explicit NTP choice continues into timezone + sync.
+    bool doNtp = false;
+    bool doManual = false;
+
     options = {
-        {"Via NTP Set Timezone",                                                 [&]() { kvxConfig.setAutomaticTimeUpdateViaNTP(true); } },
-        {"Set Time Manually",                                                    [&]() { kvxConfig.setAutomaticTimeUpdateViaNTP(false); }},
+        {"Set via NTP",
+         [&]() {
+             kvxConfig.setAutomaticTimeUpdateViaNTP(true);
+             doNtp = true;
+         }},
+        {"Set Time Manually",
+         [&]() {
+             kvxConfig.setAutomaticTimeUpdateViaNTP(false);
+             doManual = true;
+         }},
         {("Daylight Savings " + String(kvxConfig.dst ? "On" : "Off")).c_str(),
          [&]() {
              kvxConfig.setDST(!kvxConfig.dst);
-             updateClockTimezone();
              returnToMenu = true;
-         }                                                                                                                                 },
-        {(kvxConfig.clock24hr ? "24-Hour Format" : "12-Hour Format"),          [&]() {
+         }},
+        {(kvxConfig.clock24hr ? "24-Hour Format" : "12-Hour Format"),
+         [&]() {
              kvxConfig.setClock24Hr(!kvxConfig.clock24hr);
              returnToMenu = true;
-         }                                                          }
+         }},
     };
 
     addOptionToMainMenu();
     loopOptions(options, "Clock");
 
-    if (kvxConfig.automaticTimeUpdateViaNTP) {
+    if (doNtp) {
         if (!wifiConnected) wifiConnectMenu();
+        if (!wifiConnected) {
+            displayError("WiFi required for NTP", true);
+            return;
+        }
 
         options.clear();
 
@@ -988,11 +1052,12 @@ void setClock() {
 
         addOptionToMainMenu();
 
-        loopOptions(options, "Timezone", idx);
+        int tzSel = loopOptions(options, "Timezone", idx);
+        if (tzSel == -1 || tzSel == (int)options.size() - 1) return;
 
-        updateClockTimezone();
+        if (!updateClockTimezone()) displayError("NTP sync failed", true);
 
-    } else {
+    } else if (doManual) {
         int hr, mn, am = 0; // Initialize am to default value
         options = {};
         for (int i = 0; i < 12; i++) {
@@ -1363,11 +1428,11 @@ void setGpsBaudrateMenu() {
 **  Handles Menu to set the WiFi AP SSID
 **********************************************************************/
 void setWifiApSsidMenu() {
-    const bool isDefault = kvxConfig.wifiAp.ssid == "KvxputerNet";
+    const bool isDefault = kvxConfig.wifiAp.ssid == "kvxputer";
 
     options = {
-        {"Default (KvxputerNet)",
-         [=]() { kvxConfig.setWifiApCreds("KvxputerNet", kvxConfig.wifiAp.pwd); },
+        {"Default (kvxputer)",
+         [=]() { kvxConfig.setWifiApCreds("kvxputer", kvxConfig.wifiAp.pwd); },
          isDefault                                                                            },
         {"Custom",
          [=]() {
@@ -1388,18 +1453,18 @@ void setWifiApSsidMenu() {
 **  Handles Menu to set the WiFi AP Password
 **********************************************************************/
 void setWifiApPasswordMenu() {
-    const bool isDefault = kvxConfig.wifiAp.pwd == "kvxputernet";
+    const bool isDefault = kvxConfig.wifiAp.pwd == "kvxputer";
 
     options = {
-        {"Default (kvxputernet)",
-         [=]() { kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, "kvxputernet"); },
+        {"Default (kvxputer)",
+         [=]() { kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, "kvxputer"); },
          isDefault                                                                             },
         {"Custom",
          [=]() {
-             String newPassword = keyboard(kvxConfig.wifiAp.pwd, 32, "WiFi AP Password:", true);
+             String newPassword = keyboard(kvxConfig.wifiAp.pwd, 63, "WiFi AP Password:", true);
              if (newPassword != "\x1B") {
-                 if (!newPassword.isEmpty()) kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, newPassword);
-                 else displayError("Password cannot be empty", true);
+                 if (newPassword.length() < 8) displayError("Password min 8 chars", true);
+                 else kvxConfig.setWifiApCreds(kvxConfig.wifiAp.ssid, newPassword);
              }
          },                                                                          !isDefault},
     };

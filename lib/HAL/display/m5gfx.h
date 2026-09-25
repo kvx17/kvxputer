@@ -99,6 +99,7 @@ public:
 
     bool beginFrame();
     void endFrame(bool present = true);
+    void abortFrame();
     bool isFraming() const { return _buffering; }
     void releaseCanvas();
     void suppressCanvas(bool suppress);

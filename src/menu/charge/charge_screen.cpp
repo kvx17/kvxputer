@@ -28,10 +28,19 @@ static const int kClockColorCount = (int)(sizeof(kClockColors) / sizeof(kClockCo
 
 static uint8_t stepBrightness(uint8_t cur, int dir) {
     int next = dir > 0 ? (int)cur + 10 : (int)cur - 10;
-    if (next < 1) next = 1;
+    if (next < 0) next = 0;
     if (next > 100) next = 100;
     return (uint8_t)next;
 }
+
+#ifdef HAS_KEYBOARD
+static bool chargeLetterEdge(char c, bool *wasHeld, bool armed) {
+    bool phys = isCardputerKeyHeld(c);
+    bool edge = armed && phys && !*wasHeld;
+    *wasHeld = phys;
+    return edge;
+}
+#endif
 
 static uint16_t chargeLevelColor(int percent) {
     if (percent < 0) percent = 0;
@@ -110,8 +119,9 @@ static void drawMonthCalendar(int x, int y, int w, int h, const struct tm &t, ui
             if (d == mday) {
                 int rw = cellW - 2;
                 int rh = cellH - 1;
-                if (rw > 2 && rh > 2) tft.fillRect(cx + 1, cy, rw, rh, color);
-                tft.setTextColor(bg, color);
+                const uint16_t accent = kvxConfig.secColor;
+                if (rw > 2 && rh > 2) tft.fillRect(cx + 1, cy, rw, rh, accent);
+                tft.setTextColor(bg, accent);
                 tft.drawCentreString(buf, cx + cellW / 2, ty, 1);
                 tft.setTextColor(color, bg);
             } else {
@@ -155,61 +165,74 @@ static void drawChargeBar(int x, int y, int w, int h, int percent, uint16_t col,
 }
 
 #ifdef HAS_RGB_LED
-static constexpr uint8_t CHARGE_SLEEP_LED_BRIGHT = 51; // ~20% of 255
+static constexpr uint8_t CHARGE_LED_BRIGHT = 51; // 20% of 255; never follows panel brightness
 
-static void chargeLedUpdate(const ChargeInfo &info, bool ledOn, bool screenOff) {
-    ledPauseEffects(true);
-    // L toggles LED while blanked; otherwise sleep keeps dim battery color on.
-    if (!ledOn) {
-        ledShowApp(0, 0, 0, 0);
-        return;
+static int chargeLedStablePercent(int percent, bool reset = false) {
+    static int held = -1;
+    if (reset) {
+        held = -1;
+        return -1;
     }
-    if (screenOff) {
-        CRGB base = batteryStatusLedColor(info.percent);
-        if (info.percent <= 5 && ((millis() / 500) % 2 == 0)) {
-            ledShowApp(0, 0, 0, 0);
-            return;
-        }
-        ledShowApp(base.r, base.g, base.b, CHARGE_SLEEP_LED_BRIGHT);
-        return;
+    if (percent < 1) percent = 1;
+    if (percent > 100) percent = 100;
+    if (held < 0) {
+        held = percent;
+        return held;
     }
-    uint8_t bright = kvxConfig.ledBright > 0 ? (uint8_t)(255 * kvxConfig.ledBright / 100) : 128;
-    CRGB base = batteryStatusLedColor(info.percent);
-    if (info.percent <= 5 && ((millis() / 500) % 2 == 0)) {
-        ledShowApp(0, 0, 0, bright);
-        return;
-    }
-    float phase = (sinf(millis() / 1400.0f * PI) + 1.0f) * 0.5f;
-    uint8_t scale = (info.state == CHARGE_CHARGING || info.state == CHARGE_FULL)
-                        ? (uint8_t)(140 + phase * 115)
-                        : (uint8_t)200;
-    CRGB c = base;
-    c.r = (uint8_t)((uint16_t)c.r * scale / 255);
-    c.g = (uint8_t)((uint16_t)c.g * scale / 255);
-    c.b = (uint8_t)((uint16_t)c.b * scale / 255);
-    ledShowApp(c.r, c.g, c.b, bright);
+    // Wide hysteresis so ADC noise around the 95% purple/green band cannot flicker.
+    if (percent >= held + 12 || percent <= held - 12) held = percent;
+    return held;
+}
+
+static void chargeLedPaint(int percent, bool ledOn, bool force) {
+    static bool lastOn = false;
+    static uint8_t lastR = 255, lastG = 255, lastB = 255;
+
+    CRGB c = CRGB(0, 0, 0);
+    if (ledOn) c = batteryStatusLedColor(percent);
+    const bool changed = (ledOn != lastOn) || (c.r != lastR) || (c.g != lastG) || (c.b != lastB);
+    if (!force && !changed) return;
+
+    lastOn = ledOn;
+    lastR = c.r;
+    lastG = c.g;
+    lastB = c.b;
+    // Always 20% while Charge owns the LED; L only toggles on/off, never brightness.
+    // Exclusive path only shows when color/on changes — no periodic FastLED.show.
+    ledShowApp(c.r, c.g, c.b, ledOn ? CHARGE_LED_BRIGHT : 0);
+}
+
+static void chargeLedSync(int percent, bool ledOn, bool force) {
+    chargeLedPaint(chargeLedStablePercent(percent), ledOn, force);
 }
 #endif
 
 static void chargeGoIdleOff(bool *ledOn) {
-    // Blank panel only; keep LED on at sleep brightness (L still toggles).
-    (void)ledOn;
+    // Panel off only. LED stays at current ledOn — L is the only off switch.
     chargeUserSleep = true;
     isScreenOff = true;
     dimmer = false;
     setBrightness(0, false);
-    // Kill sticky '.' auto-repeat so wake/exit cannot keep seeing DownPress.
+#ifdef HAS_RGB_LED
+    delay(5);
+    ChargeInfo info = readChargeInfo();
+    const bool keepLed = (ledOn != nullptr) ? *ledOn : true;
+    chargeLedSync(info.percent, keepLed, false);
+    ledKeepRequest();
+#else
+    (void)ledOn;
+#endif
     resetHeldNavKeys();
 }
 
 static void chargeWakeDisplay(uint8_t bright, bool *ledOn) {
+    (void)ledOn;
     chargeUserSleep = false;
     isScreenOff = false;
     dimmer = false;
     if (bright < 1) bright = 1;
     setBrightness(bright, false);
     resetHeldNavKeys();
-    if (ledOn) *ledOn = true;
 #ifdef HAS_RGB_LED
     ledPauseEffects(true);
 #endif
@@ -217,8 +240,11 @@ static void chargeWakeDisplay(uint8_t bright, bool *ledOn) {
 
 static void chargeExit() {
 #ifdef HAS_RGB_LED
+    ledReleaseExclusive();
+    ledSuppressStatus(false);
     ledPauseEffects(false);
 #endif
+    tftSuppressCanvas(false);
     chargeUserSleep = false;
     chargeModeActive = false;
     chargeModeBright = -1;
@@ -253,117 +279,93 @@ void runChargeLoop() {
     isScreenOff = false;
     dimmer = false;
     previousMillis = millis();
+    // Long grace so sticky Down/G0/`.` from the menu cannot blank on open.
+    chargeInputGraceUntil = millis() + 2500;
 
-    // Use normal UI brightness (floor 25%) — 10% on a black fill looks "off".
+#ifdef HAS_RGB_LED
+    ledTakeExclusive();
+    ledSuppressStatus(true);
+    ledPauseEffects(true);
+    chargeLedStablePercent(0, true);
+#endif
+
     uint8_t chargeBright = kvxConfig.bright;
-    if (chargeBright < 25) chargeBright = 25;
+    if (chargeBright < 1) chargeBright = 1;
     if (chargeBright > 100) chargeBright = 100;
     chargeModeBright = (int)chargeBright;
 
+    // Wake the logger/panel first so fillScreen actually hits the TFT.
     panelSleep(false);
     setBrightness(chargeBright, false);
 
+    tftAbortFrame();
+    tftSuppressCanvas(true);
+    tft.fillScreen(KVX_DEFAULT_BGCOLOR);
+
+#ifdef HAS_RGB_LED
+    {
+        // LED on at 20% battery color even if settings ledBright is 0.
+        ChargeInfo bootInfo = readChargeInfo();
+        chargeLedSync(bootInfo.percent, true, true);
+    }
+#endif
+
     unsigned long enteredAt = millis();
     chargeClearInput();
-    // Ignore stale blank flags from G0/power-save during hand-off.
     chargeUserSleep = false;
     isScreenOff = false;
+    dimmer = false;
     previousMillis = millis();
 
     unsigned long lastRefresh = 0;
     bool screenOff = false;
     bool ledOn = true;
     bool firstPaint = true;
+    bool uiReady = false;
+    bool sleepArmed = false; // true only after first paint + grace + keys released
+    bool brightTouched = false; // Down-to-0 sleep only after user moved brightness
     bool fullHold = false;
     bool fullBeeped = false;
     ChargeState prevState = CHARGE_BATTERY;
+    bool prevSwitchOff = false;
     bool forceRedraw = true;
     bool showCalendar = true;
     int colorIndex = 0;
     int lastCalDay = -1;
     int lastCalMon = -1;
-    // Only honor G0 blanking after the user has been in-app for a bit, so a
-    // GPIO0 glitch or leftover isScreenOff cannot black the panel on open.
-    const unsigned long INPUT_GRACE_MS = 800;
+#ifdef HAS_KEYBOARD
+    bool lWasHeld = false;
+    bool sWasHeld = false;
+    bool cWasHeld = false;
+#endif
+    // Only honor G0/S/Down blanking after the clock is on and keys are idle.
+    const unsigned long INPUT_GRACE_MS = 2500;
     // After wake, ignore Down briefly so a sticky '.' repeat cannot re-blank.
     unsigned long ignoreDownUntil = 0;
 
     static char lastClock[16];
     static char lastDate[24];
     static char lastHint[40];
+    static uint16_t lastHintCol = 0;
     static char lastFoot[40];
     static char lastPct[8];
     static int lastBarPct = -1;
     lastClock[0] = lastDate[0] = lastHint[0] = lastFoot[0] = lastPct[0] = '\0';
     lastBarPct = -1;
+    lastHintCol = 0;
 
     for (;;) {
         previousMillis = millis();
         const bool pastGrace = (millis() - enteredAt) > INPUT_GRACE_MS;
         const bool ignoreDown = millis() < ignoreDownUntil;
 
-        // G0 tap (InputHandler) sets chargeUserSleep — join after grace only.
-        // Sleep blanks the panel; LED stays dim battery-colored (L still toggles).
-        if (!screenOff && pastGrace && chargeUserSleep) {
-            screenOff = true;
-            isScreenOff = true;
+        // Until the clock is painted and grace ends, eat leftover menu keys and
+        // clear any G0 sleep flag so open never lands on a blank panel.
+        if (!sleepArmed) {
+            chargeUserSleep = false;
+            isScreenOff = false;
             dimmer = false;
-            setBrightness(0, false);
-            resetHeldNavKeys();
-            ignoreDownUntil = millis() + 600;
-        }
-
-        if (screenOff) {
-            bool wake = false;
-            bool toggleLed = false;
-
-            if (check(EscPress)) wake = true;
-            else if (check(SelPress)) wake = true;
-            else if (check(UpPress) || check(PrevPress)) wake = true;
-            else if (!ignoreDown && check(DownPress)) {
-                // Down while blank: keep the panel off (LED stays unless L toggled it).
-                check(NextPress);
-                resetHeldNavKeys();
-                ignoreDownUntil = millis() + 600;
-            }
-#ifdef HAS_KEYBOARD
-            else if (AnyKeyPress) {
-                char letter = checkLetterShortcutPress();
-                if (letter == 's' || letter == 'S') {
-                    check(AnyKeyPress);
-                    wake = true;
-                } else if (letter == 'l' || letter == 'L') {
-                    check(AnyKeyPress);
-                    toggleLed = true;
-                }
-            }
-#endif
-            // G0 wake path clears chargeUserSleep + isScreenOff in InputHandler.
-            if (!chargeUserSleep && !isScreenOff) wake = true;
-
-            if (toggleLed) ledOn = !ledOn;
-
-            ChargeInfo idleInfo = readChargeInfo();
-#ifdef HAS_RGB_LED
-            chargeLedUpdate(idleInfo, ledOn, true);
-#endif
-            if (wake) {
-                chargeWakeDisplay(chargeBright, &ledOn);
-                screenOff = false;
-                forceRedraw = true;
-                ignoreDownUntil = millis() + 600;
-                continue; // do not fall through into Down→sleep same frame
-            }
-            prevState = idleInfo.state;
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
-        }
-
-        if (pastGrace && (check(EscPress) || forceHome)) {
-            chargeExit();
-            return;
-        }
-        if (!pastGrace) {
+            screenOff = false;
             check(EscPress);
             check(DownPress);
             check(NextPress);
@@ -371,63 +373,138 @@ void runChargeLoop() {
             check(PrevPress);
             check(SelPress);
             check(AnyKeyPress);
+            if (uiReady && pastGrace) {
+                sleepArmed = true;
+                chargeClearInput();
+            }
         }
 
 #ifdef HAS_KEYBOARD
-        if (pastGrace && AnyKeyPress) {
-            char letter = checkLetterShortcutPress();
-            if (letter == 's' || letter == 'S') {
-                check(AnyKeyPress);
-                chargeGoIdleOff(&ledOn);
-                screenOff = true;
-                ignoreDownUntil = millis() + 600;
-                continue;
-            } else if (letter == 'c' || letter == 'C') {
-                check(AnyKeyPress);
-                showCalendar = !showCalendar;
-                forceRedraw = true;
-            } else if (letter == 'l' || letter == 'L') {
-                check(AnyKeyPress);
-                ledOn = !ledOn;
-            }
+        const bool lEdge = chargeLetterEdge('l', &lWasHeld, uiReady);
+        const bool sEdge = chargeLetterEdge('s', &sWasHeld, sleepArmed);
+        const bool cEdge = chargeLetterEdge('c', &cWasHeld, sleepArmed);
+        bool ledDirty = false;
+        if (lEdge) {
+            ledOn = !ledOn;
+            ledDirty = true;
+            check(AnyKeyPress);
         }
+#else
+        const bool sEdge = false;
+        bool ledDirty = false;
 #endif
 
-        // Down tap: blank display, stay off until Up/Esc/S/G0 wake.
-        if (pastGrace && !ignoreDown && check(DownPress)) {
-            check(NextPress); // '.' also pulses Next on Cardputer
+        // G0 tap (InputHandler) sets chargeUserSleep — join only when armed.
+        // Panel off only; LED keeper keeps battery color (L toggles).
+        if (!screenOff && sleepArmed && chargeUserSleep) {
             chargeGoIdleOff(&ledOn);
             screenOff = true;
             ignoreDownUntil = millis() + 600;
+            ledDirty = true;
+        } else if (!sleepArmed && chargeUserSleep) {
+            chargeUserSleep = false;
+        }
+
+        if (screenOff) {
+            bool wake = false;
+
+            if (sEdge) wake = true;
+            if (check(EscPress)) wake = true;
+            else if (check(SelPress)) wake = true;
+            else if (check(UpPress) || check(PrevPress)) {
+                check(UpPress);
+                check(PrevPress);
+                // Up from 0% brightness steps back to 10%; S/G0 sleep restores last level.
+                if (chargeBright < 10) chargeBright = 10;
+                wake = true;
+            } else if (!ignoreDown && check(DownPress)) {
+                // Already blank: stay off (LED stays unless L toggled it).
+                check(NextPress);
+                resetHeldNavKeys();
+                ignoreDownUntil = millis() + 400;
+            }
+            // G0 wake: InputHandler only clears chargeUserSleep.
+            if (uiReady && !chargeUserSleep) wake = true;
+
+            ChargeInfo idleInfo = readChargeInfo();
+#ifdef HAS_RGB_LED
+            chargeLedSync(idleInfo.percent, ledOn, false);
+#endif
+            if (wake) {
+                if (chargeBright < 1) chargeBright = 10;
+                chargeModeBright = (int)chargeBright;
+                chargeWakeDisplay(chargeBright, &ledOn);
+#ifdef HAS_RGB_LED
+                chargeLedSync(idleInfo.percent, ledOn, false);
+                ledKeepRequest();
+#endif
+                screenOff = false;
+                forceRedraw = true;
+                ignoreDownUntil = millis() + 400;
+                continue;
+            }
+            prevState = idleInfo.state;
+            vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
+        if (sleepArmed && (check(EscPress) || forceHome)) {
+            chargeExit();
+            return;
+        }
+
+#ifdef HAS_KEYBOARD
+        if (sEdge) {
+            chargeGoIdleOff(&ledOn);
+            screenOff = true;
+            ignoreDownUntil = millis() + 400;
+            continue;
+        }
+        if (cEdge) {
+            showCalendar = !showCalendar;
+            forceRedraw = true;
+        }
+#endif
+
         int brightDir = 0;
-        if (pastGrace && (check(UpPress) || check(PrevPress))) brightDir = +1;
-        else if (pastGrace && !ignoreDown && check(NextPress)) brightDir = -1;
+        if (sleepArmed && (check(UpPress) || check(PrevPress))) {
+            check(UpPress);
+            check(PrevPress);
+            brightDir = +1;
+        } else if (sleepArmed && !ignoreDown && (check(DownPress) || check(NextPress))) {
+            check(DownPress);
+            check(NextPress); // '.' also pulses Next on Cardputer
+            brightDir = -1;
+        }
 #ifdef HAS_ENCODER
         int32_t rot = drainRotarySteps();
-        if (pastGrace && rot != 0) brightDir = rot > 0 ? +1 : -1;
+        if (sleepArmed && rot != 0) brightDir = rot > 0 ? +1 : -1;
 #endif
         if (brightDir != 0) {
+            brightTouched = true;
             chargeBright = stepBrightness(chargeBright, brightDir);
-            chargeModeBright = chargeBright;
+            chargeModeBright = (int)chargeBright;
+            // Down-to-0 blanks only after the user has moved brightness this session.
+            if (chargeBright == 0 && brightTouched) {
+                chargeGoIdleOff(&ledOn);
+                screenOff = true;
+                ignoreDownUntil = millis() + 400;
+                continue;
+            }
+            if (chargeBright < 1) chargeBright = 1;
             setBrightness(chargeBright, false);
             if (fullHold) fullHold = false;
         }
 
-        if (pastGrace && check(SelPress)) {
+        if (sleepArmed && check(SelPress)) {
             colorIndex = (colorIndex + 1) % kClockColorCount;
             forceRedraw = true;
             if (fullHold) fullHold = false;
-        } else if (pastGrace) {
+        } else if (sleepArmed) {
             check(AnyKeyPress);
         }
 
         ChargeInfo info = readChargeInfo();
-#ifdef HAS_RGB_LED
-        chargeLedUpdate(info, ledOn, false);
-#endif
         if (info.state == CHARGE_FULL && prevState != CHARGE_FULL) {
             fullHold = true;
 #if defined(HAS_NS4168_SPKR)
@@ -441,8 +518,15 @@ void runChargeLoop() {
             fullHold = false;
             fullBeeped = false;
         }
+        const bool stateChanged = (info.state != prevState) || (info.chargeSwitchOff != prevSwitchOff);
         prevState = info.state;
+        prevSwitchOff = info.chargeSwitchOff;
+        if (stateChanged) {
+            lastHint[0] = '\0';
+            lastRefresh = 0;
+        }
 
+        const bool panelWrote = firstPaint;
         if (firstPaint || forceRedraw || millis() - lastRefresh > 1000) {
             lastRefresh = millis();
             if (firstPaint) setBrightness(chargeBright, false);
@@ -474,8 +558,11 @@ void runChargeLoop() {
             char pctBuf[8];
             snprintf(pctBuf, sizeof(pctBuf), "%d%%", pct);
 
-            const int kFootH = 10;
-            const int kHintH = 10;
+            // Dense HUD under FP=2: body FP glyphs are 16px tall and clip in the
+            // bottom strip — use uiDenseFont so "Battery x.xxV" and shortcuts fit.
+            const int dense = uiDenseFont();
+            const int kFootH = uiLineH(dense) + 2;
+            const int kHintH = uiLineH(dense) + 2;
             const int kBarH = 12;
             int hintY = tftHeight - kFootH - kHintH;
             int barY = hintY - kBarH - 3;
@@ -557,7 +644,7 @@ void runChargeLoop() {
 
             char hintBuf[40];
             uint16_t hintCol = batCol;
-            if (info.state == CHARGE_USB) {
+            if (info.chargeSwitchOff) {
                 strncpy(hintBuf, "Flip the charge switch", sizeof(hintBuf) - 1);
                 hintBuf[sizeof(hintBuf) - 1] = '\0';
                 hintCol = TFT_YELLOW;
@@ -570,18 +657,24 @@ void runChargeLoop() {
                     info.milliVolts / 1000,
                     (info.milliVolts % 1000) / 10
                 );
+                // Plugged in: "Charging x.xxV" is always yellow.
+                if (info.state == CHARGE_CHARGING || info.state == CHARGE_USB) hintCol = TFT_YELLOW;
             }
-            drawField(4, hintY, tftWidth - 8, kHintH, hintBuf, lastHint, sizeof(lastHint), FP, hintCol, bg, true);
+            if (hintCol != lastHintCol) lastHint[0] = '\0';
+            lastHintCol = hintCol;
+            drawField(
+                4, hintY, tftWidth - 8, kHintH, hintBuf, lastHint, sizeof(lastHint), dense, hintCol, bg, true
+            );
 
             drawField(
                 4,
                 tftHeight - kFootH,
                 tftWidth - 8,
                 kFootH,
-                "S/. sleep  L LED  C cal  ESC",
+                ";/. bright  S sleep  L  C",
                 lastFoot,
                 sizeof(lastFoot),
-                FP,
+                dense,
                 TFT_DARKGREY,
                 bg,
                 true
@@ -589,7 +682,13 @@ void runChargeLoop() {
 
             forceRedraw = false;
             firstPaint = false;
+            uiReady = true;
         }
+
+#ifdef HAS_RGB_LED
+        chargeLedSync(info.percent, ledOn, ledDirty);
+        if (panelWrote) ledKeepRequest();
+#endif
 
         vTaskDelay(pdMS_TO_TICKS(20));
     }

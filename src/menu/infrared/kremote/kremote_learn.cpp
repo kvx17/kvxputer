@@ -1,5 +1,6 @@
 #include "kremote_learn.h"
 #include "kremote_store.h"
+#include "kremote_use.h"
 #include "menu/infrared/ir_utils.h"
 #include "root/config/configPins.h"
 #include "root/input/mykeyboard.h"
@@ -199,6 +200,10 @@ static int krPickProfile(std::vector<KremoteProfile> &list, const char *title) {
 }
 
 void kremoteLearnFlow() {
+    struct KrIrGuard {
+        KrIrGuard() { kremoteBeginIrHw(); }
+        ~KrIrGuard() { kremoteEndIrHw(); }
+    } hw;
     std::vector<Option> modeOpts = {
         {"New Remote", []() {}},
         {"Update Remote", []() {}},

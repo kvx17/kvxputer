@@ -8,7 +8,7 @@
 namespace {
 
 constexpr const char *NVS_NS   = "kvx_paths";
-constexpr const char *NVS_KEY  = "migrated_v1";
+constexpr const char *NVS_KEY  = "migrated_v3";
 
 struct DirMigration {
     const char *legacy;
@@ -21,22 +21,24 @@ struct FileMigration {
 };
 
 const DirMigration kDirMigrations[] = {
-    {"/BruceIR",                kvx::paths::IR_PROFILES},
-    {"/BruceRFID",              kvx::paths::RFID},
-    {"/rfid/hf",                kvx::paths::RFID_HF},
-    {"/BrucePCAP",              kvx::paths::WIFI_CAPTURES},
-    {"/BruceEvilCreds",         kvx::paths::WIFI_PORTAL_CREDS},
-    {"/BruceResponder",         kvx::paths::NETOPS_RESPONDER},
-    {"/Bruce/Terminal",         kvx::paths::NETOPS_TERMINAL},
-    {"/BruceRF",                kvx::paths::RF_PRESETS},
-    {"/BruceMIC",               kvx::paths::MEDIA_RECORDINGS},
-    {"/BruceGPS",               kvx::paths::GPS_TRACKS},
-    {"/BruceWardriving",        kvx::paths::GPS_WARDRIVING},
-    {"/BruceSniffer",           kvx::paths::BLE_CAPTURES},
-    {"/BruceIButton",           kvx::paths::IBUTTON},
-    {"/scripts",                kvx::paths::MENU_SCRIPTS},
-    {"/BruceScripts",           kvx::paths::MENU_SCRIPTS},
-    {"/BruceJS",                kvx::paths::MENU_SCRIPTS},
+    // Only migrate small legacy capture trees — never copy the large
+    // /support_files/infrared packs (those stay as read-only libraries).
+    {"/BruceIR",                              kvx::paths::IR_PROFILES},
+    {"/BruceRFID",                            kvx::paths::RFID},
+    {"/rfid/hf",                              kvx::paths::RFID_HF},
+    {"/BrucePCAP",                            kvx::paths::WIFI_CAPTURES},
+    {"/BruceEvilCreds",                       kvx::paths::WIFI_PORTAL_CREDS},
+    {"/BruceResponder",                       kvx::paths::NETOPS_RESPONDER},
+    {"/Bruce/Terminal",                       kvx::paths::NETOPS_TERMINAL},
+    {"/BruceRF",                              kvx::paths::RF_PRESETS},
+    {"/BruceMIC",                             kvx::paths::MEDIA_RECORDINGS},
+    {"/BruceGPS",                             kvx::paths::GPS_TRACKS},
+    {"/BruceWardriving",                      kvx::paths::GPS_WARDRIVING},
+    {"/BruceSniffer",                         kvx::paths::BLE_CAPTURES},
+    {"/BruceIButton",                         kvx::paths::IBUTTON},
+    {"/scripts",                              kvx::paths::MENU_SCRIPTS},
+    {"/BruceScripts",                         kvx::paths::MENU_SCRIPTS},
+    {"/BruceJS",                              kvx::paths::MENU_SCRIPTS},
 };
 
 const FileMigration kFileMigrations[] = {
@@ -132,9 +134,11 @@ void migrateOnFs(FS &fs, const char *label) {
     kvx::paths::ensureDir(fs, kvx::paths::ROOT);
     kvx::paths::ensureDir(fs, "/menu");
     kvx::paths::ensureDir(fs, "/support_files");
+    kvx::paths::ensureDir(fs, "/kvxputer");
 }
 
 void ensureAddonDirs(FS &fs) {
+    kvx::paths::ensureDir(fs, "/kvxputer");
     kvx::paths::ensureDir(fs, kvx::paths::WIFI_PROBES);
     kvx::paths::ensureDir(fs, kvx::paths::WIFI_WORDLISTS);
     kvx::paths::ensureDir(fs, kvx::paths::WIFI_DEADDROP);
@@ -145,8 +149,12 @@ void ensureAddonDirs(FS &fs) {
     kvx::paths::ensureDir(fs, kvx::paths::NETOPS_CIW);
     kvx::paths::ensureDir(fs, kvx::paths::BLE_AIRTAGS);
     kvx::paths::ensureDir(fs, kvx::paths::IR_ESL);
+    kvx::paths::ensureDir(fs, kvx::paths::IR_PROFILES);
     kvx::paths::ensureDir(fs, kvx::paths::IR_REMOTES);
+    kvx::paths::ensureDir(fs, kvx::paths::RF_PRESETS);
+    kvx::paths::ensureDir(fs, kvx::paths::GPS_WDBOTH);
     kvx::paths::ensureDir(fs, kvx::paths::COMPANIONS);
+    kvx::paths::ensureDir(fs, kvx::paths::BADUSB_SCRIPTS);
 }
 
 } // namespace

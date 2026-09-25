@@ -11,6 +11,7 @@
 #include <FastLED.h>
 #include <driver/rmt_tx.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 CRGB leds[LED_COUNT];
@@ -110,8 +111,47 @@ CRGB batteryStatusLedColor(int percent) {
 
 TaskHandle_t ledEffectTaskHandle = NULL;
 static volatile bool ledEffectsPaused = false;
+static volatile bool ledExclusive = false;
 
 void ledPauseEffects(bool pause) { ledEffectsPaused = pause; }
+
+static SemaphoreHandle_t ledShowMux = NULL;
+static TaskHandle_t ledKeepTaskHandle = NULL;
+static volatile uint8_t ledKeepR = 0, ledKeepG = 0, ledKeepB = 0, ledKeepBright = 0;
+static volatile bool ledKeepDirty = false;
+
+static void ledPushLocked() {
+    if (ledShowMux && xSemaphoreTake(ledShowMux, pdMS_TO_TICKS(40)) != pdTRUE) return;
+    FastLED.show();
+    if (ledShowMux) xSemaphoreGive(ledShowMux);
+}
+
+static void ledKeepTask(void *) {
+    for (;;) {
+        if (ledExclusive && ledKeepDirty) {
+            ledKeepDirty = false;
+            fill_solid(leds, LED_COUNT, CRGB(ledKeepR, ledKeepG, ledKeepB));
+            FastLED.setBrightness(ledKeepBright);
+            if (ledShowMux && xSemaphoreTake(ledShowMux, pdMS_TO_TICKS(40)) == pdTRUE) {
+                FastLED.show();
+                xSemaphoreGive(ledShowMux);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(30));
+    }
+}
+
+static void ledEnsureKeepTask() {
+    if (!ledShowMux) ledShowMux = xSemaphoreCreateMutex();
+    if (ledKeepTaskHandle == NULL) {
+        xTaskCreate(ledKeepTask, "LedKeep", 2048, NULL, 2, &ledKeepTaskHandle);
+    }
+}
+
+void ledKeepRequest() {
+    if (!ledExclusive) return;
+    ledKeepDirty = true;
+}
 
 static int ledStatusNow = LED_STATUS_IDLE;
 static int ledStatusBeforeOff = LED_STATUS_IDLE;
@@ -124,10 +164,11 @@ static CRGB ledStatusColor(int /*status*/) {
 static CRGB ledColorFromConfig() { return CRGB((uint32_t)kvxConfig.ledColor); }
 
 static void ledForceOff() {
+    if (ledExclusive) return;
     ledPauseEffects(true);
     fill_solid(leds, LED_COUNT, CRGB::Black);
     FastLED.setBrightness(0);
-    FastLED.show();
+    ledPushLocked();
 }
 
 static void ledPreviewBrightness(int value) {
@@ -138,15 +179,16 @@ static void ledPreviewBrightness(int value) {
     FastLED.setBrightness(255 * value / 100);
     if (kvxConfig.ledEffect > LED_EFFECT_SOLID) {
         ledPauseEffects(false);
-        FastLED.show();
+        ledPushLocked();
     } else {
         fill_solid(leds, LED_COUNT, ledColorFromConfig());
-        FastLED.show();
+        ledPushLocked();
     }
 }
 
 /** Apply saved color / effect / brightness (mainscreen idle, after settings). */
 static void ledApplyUserConfig() {
+    if (ledExclusive) return;
     if (kvxConfig.ledBright == 0) {
         ledForceOff();
         return;
@@ -158,7 +200,7 @@ static void ledApplyUserConfig() {
     } else {
         ledEffects(false);
         fill_solid(leds, LED_COUNT, ledColorFromConfig());
-        FastLED.show();
+        ledPushLocked();
     }
 }
 
@@ -167,20 +209,53 @@ void ledSuppressStatus(bool suppress) {
     if (suppress) ledPauseEffects(true);
 }
 
-bool ledIsStatusSuppressed() { return ledStatusHeld; }
+bool ledIsStatusSuppressed() { return ledStatusHeld || ledExclusive; }
+
+void ledTakeExclusive() {
+    if (!ledShowMux) ledShowMux = xSemaphoreCreateMutex();
+    ledExclusive = true;
+    ledStatusHeld = true;
+    isPreviewLed = false;
+    ledPauseEffects(true);
+    ledKeepDirty = false;
+    ledEnsureKeepTask();
+    // Do not vTaskSuspend: interrupting FastLED.show mid-RMT wedges the LED off.
+}
+
+void ledReleaseExclusive() {
+    ledKeepDirty = false;
+    ledExclusive = false;
+    ledStatusHeld = false;
+}
+
+bool ledIsExclusive() { return ledExclusive; }
 
 void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
-    if (isPreviewLed) return;
+    if (isPreviewLed && !ledExclusive) return;
     ledPauseEffects(true);
+    const bool same =
+        (ledKeepR == r && ledKeepG == g && ledKeepB == b && ledKeepBright == bright);
+    ledKeepR = r;
+    ledKeepG = g;
+    ledKeepB = b;
+    ledKeepBright = bright;
+    if (ledExclusive) {
+        ledEnsureKeepTask();
+        // Paint only on change. Periodic FastLED.show of the same color blinks WS2812.
+        if (!same) ledKeepDirty = true;
+        return;
+    }
     fill_solid(leds, LED_COUNT, CRGB(r, g, b));
     FastLED.setBrightness(bright);
-    FastLED.show();
+    ledPushLocked();
 }
 
 void ledSetStatus(int status) {
     if (isPreviewLed) return;
+    if (ledExclusive) return;
 
     if (status == LED_STATUS_OFF) {
+        if (ledStatusHeld) return;
         if (ledStatusNow != LED_STATUS_OFF) ledStatusBeforeOff = ledStatusNow;
         ledStatusNow = LED_STATUS_OFF;
         ledForceOff();
@@ -188,11 +263,11 @@ void ledSetStatus(int status) {
     }
 
     ledStatusNow = status;
+    if (ledStatusHeld) return;
     if (kvxConfig.ledBright == 0) {
         ledForceOff();
         return;
     }
-    if (ledStatusHeld) return;
 
     // Idle: honor LED Color / Effect / Brightness from settings.
     // Busy/boot: purple (or green boot tick via ledBootTick) as UI feedback.
@@ -204,15 +279,15 @@ void ledSetStatus(int status) {
     ledPauseEffects(true);
     fill_solid(leds, LED_COUNT, ledStatusColor(status));
     FastLED.setBrightness(255 * kvxConfig.ledBright / 100);
-    FastLED.show();
+    ledPushLocked();
 }
 
 void ledBootTick(bool purple) {
-    if (isPreviewLed || kvxConfig.ledBright == 0) return;
+    if (ledExclusive || isPreviewLed || kvxConfig.ledBright == 0) return;
     ledPauseEffects(true);
     fill_solid(leds, LED_COUNT, purple ? CRGB(0x96, 0x00, 0x64) : CRGB::Green);
     FastLED.setBrightness(255 * kvxConfig.ledBright / 100);
-    FastLED.show();
+    ledPushLocked();
 }
 
 void ledRestoreStatus() {
@@ -230,7 +305,7 @@ void ledEffectTask(void *pvParameters) {
     int frame = 0;
     uint64_t start_time = esp_timer_get_time() / 1000;
     while (1) {
-        if (ledEffectsPaused) {
+        if (ledEffectsPaused || ledExclusive) {
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
@@ -297,10 +372,20 @@ void ledEffectTask(void *pvParameters) {
 #endif
 
         } else if (ledEffect == LED_EFFECT_BATTERY_STATUS) {
+            // Battery color is nearly static — do not FastLED.show() at 20 Hz
+            // (that starves menu redraw / SPI on Cardputer). Poll slowly and
+            // only push frames when the color actually changes.
+            // Charge owns the LED via ledExclusive; never paint or blink here.
+            if (ledExclusive || ledEffectsPaused) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+                continue;
+            }
             static int cachedPct = 100;
+            static CRGB lastShown = CRGB::Black;
+            static bool haveShown = false;
             static unsigned long lastBatMs = 0;
             unsigned long nowMs = millis();
-            if (lastBatMs == 0 || nowMs - lastBatMs >= 1000) {
+            if (lastBatMs == 0 || nowMs - lastBatMs >= 2000) {
                 lastBatMs = nowMs;
                 int p = getBattery();
                 if (p < 0) p = 0;
@@ -308,8 +393,16 @@ void ledEffectTask(void *pvParameters) {
                 cachedPct = p;
             }
             CRGB c = batteryStatusLedColor(cachedPct);
+            // Low-battery blink is mainscreen-only; Charge never blinks.
             if (cachedPct <= 5 && ((nowMs / 500) % 2 == 0)) c = CRGB::Black;
-            fill_solid(leds, LED_COUNT, c);
+            if (!haveShown || c.r != lastShown.r || c.g != lastShown.g || c.b != lastShown.b) {
+                fill_solid(leds, LED_COUNT, c);
+                ledPushLocked();
+                lastShown = c;
+                haveShown = true;
+            }
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
 
 #if LED_COUNT > 1
         } else if (ledEffect == LED_EFFECT_CHASE || ledEffect == LED_EFFECT_CHASE_TAIL) {
@@ -448,7 +541,7 @@ void ledEffectTask(void *pvParameters) {
             frame++;
         }
 
-        FastLED.show();
+        ledPushLocked();
         vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
@@ -525,7 +618,7 @@ void setLedColor(CRGB color) {
 #endif
     } else {
         for (int i = 0; i < LED_COUNT; i++) leds[i] = color;
-        FastLED.show();
+        ledPushLocked();
     }
 }
 
@@ -540,7 +633,7 @@ void setLedBrightness(int value) {
     value = max(0, min(100, value));
     int bright = 255 * value / 100;
     FastLED.setBrightness(bright);
-    FastLED.show();
+    ledPushLocked();
 }
 
 #define BrucePurple 9830500 // Custom purple color for Bruce
@@ -741,7 +834,7 @@ void setLedEffectConfig() {
                  setLedEffect(LED_EFFECT_COLOR_CYCLE);
                  return false;
              }},
-            {"Battery Status",
+            {"Battery Charge",
              [=]() { applyEffect(LED_EFFECT_BATTERY_STATUS); },
              kvxConfig.ledEffect == LED_EFFECT_BATTERY_STATUS,
              [](void *pointer, bool shouldRender) {
@@ -821,7 +914,16 @@ void setLedEffectConfig() {
 
         addOptionToMainMenu();
 
-        int selectedOption = loopOptions(options, kvxConfig.ledEffect);
+        // Menu index != effect enum (Battery Charge is enum 10 but often row 3).
+        int startIdx = 0;
+        for (size_t i = 0; i < options.size(); i++) {
+            if (options[i].selected) {
+                startIdx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        int selectedOption = loopOptions(options, startIdx);
         if (selectedOption == -1 || selectedOption == options.size() - 1) {
             ledPreviewMode(false);
             ledSetup();
@@ -924,11 +1026,16 @@ void ledSetup() { ledApplyUserConfig(); }
 
 void ledEffects(bool enable) {
     if (enable) {
+        if (ledExclusive) return;
         if (ledEffectTaskHandle == NULL) {
             xTaskCreate(ledEffectTask, "LedEffect", 2048, NULL, 1, &ledEffectTaskHandle);
         }
         ledPauseEffects(false);
     } else {
+        if (ledExclusive) {
+            ledPauseEffects(true);
+            return;
+        }
         if (ledEffectTaskHandle != NULL) {
             vTaskDelete(ledEffectTaskHandle);
             ledEffectTaskHandle = NULL;

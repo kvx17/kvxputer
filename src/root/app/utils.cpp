@@ -59,6 +59,17 @@ static ChargeState gLastChargeState = CHARGE_BATTERY;
 static volatile bool gBatReading = false;
 static int gShownPercent = 50;
 static bool gRailLatch = false;
+#ifdef ANALOG_BAT_PIN
+static uint8_t gRailOnStreak = 0;
+static uint8_t gRailOffStreak = 0;
+#endif
+static bool gUsbStable = false;
+static bool gUsbSeen = false;
+static unsigned long gUsbEdgeAt = 0;
+static ChargeState gPubState = CHARGE_BATTERY;
+static ChargeState gCandState = CHARGE_BATTERY;
+static uint8_t gCandStreak = 0;
+static bool gPubReady = false;
 
 static void noteBatterySample(int mv) {
     unsigned long now = millis();
@@ -89,6 +100,22 @@ bool isUsbCablePresent() {
     return false;
 }
 
+static bool usbPresenceStable() {
+    const bool now = isUsbCablePresent();
+    if (!gUsbSeen) {
+        gUsbSeen = true;
+        gUsbStable = now;
+        gUsbEdgeAt = millis();
+        return gUsbStable;
+    }
+    if (now == gUsbStable) {
+        gUsbEdgeAt = millis();
+        return gUsbStable;
+    }
+    if (millis() - gUsbEdgeAt >= 500) gUsbStable = now;
+    return gUsbStable;
+}
+
 int getBatteryMilliVolts() {
 #ifdef USE_BQ27220_VIA_I2C
     gLastBatMv = (int)bq.getVolt(VOLT_MODE::VOLT);
@@ -103,25 +130,43 @@ int getBatteryMilliVolts() {
     static int lastGoodMv = 0;
     if (!adcInitialized) {
         pinMode(ANALOG_BAT_PIN, INPUT);
+        analogSetPinAttenuation(ANALOG_BAT_PIN, ADC_11db);
         adcInitialized = true;
     }
     uint32_t sum = 0;
     for (int i = 0; i < 4; i++) sum += analogReadMilliVolts(ANALOG_BAT_PIN);
     int raw = (int)((float)(sum / 4) * ANALOG_BAT_MULTIPLIER);
 
-    // Charge switch OFF: GPIO10 sees the 5 V USB rail (~4.1–6.6 V after the divider),
-    // not the pack. Latch until a mid-range pack reading comes back.
-    if (raw > 4200) gRailLatch = true;
-    else if (lastGoodMv > 0 && lastGoodMv < 3980 && raw >= 4050) gRailLatch = true;
-    else if (gRailLatch && raw >= 2800 && raw < 4000) gRailLatch = false;
+    // Cardputer charge switch: OFF feeds the USB rail into GPIO10 (~4.5–6.0 V
+    // after the divider). ON feeds the pack (~3.3–4.20 V). Wide hysteresis so
+    // USB plug-in spikes cannot bounce the latch, and a full pack (~4.15 V)
+    // can still unlatch.
+    static const int kRailOnMv = 4320;
+    static const int kRailOffMv = 4220;
+    static const int kPackMinMv = 2900;
+    static const int kStreakNeed = 8;
+
+    if (raw >= kRailOnMv) {
+        if (gRailOffStreak < 20) gRailOffStreak++;
+        gRailOnStreak = 0;
+        if (gRailOffStreak >= kStreakNeed) gRailLatch = true;
+    } else if (raw >= kPackMinMv && raw <= kRailOffMv) {
+        if (gRailOnStreak < 20) gRailOnStreak++;
+        gRailOffStreak = 0;
+        if (gRailOnStreak >= kStreakNeed) gRailLatch = false;
+    } else {
+        // Deadband (4150–4400) or garbage: hold the last latch.
+        gRailOnStreak = 0;
+        gRailOffStreak = 0;
+    }
 
     int mv = raw;
     if (gRailLatch) {
         mv = lastGoodMv > 0 ? lastGoodMv : 3700;
-    } else if (raw > 4200 || raw < 2800) {
+    } else if (raw > 4280 || raw < kPackMinMv) {
         mv = lastGoodMv > 0 ? lastGoodMv : 3700;
-    } else if (lastGoodMv > 0 && abs(raw - lastGoodMv) > 200) {
-        mv = lastGoodMv + (raw > lastGoodMv ? 40 : -40);
+    } else if (lastGoodMv > 0 && abs(raw - lastGoodMv) > 80) {
+        mv = lastGoodMv + (raw > lastGoodMv ? 15 : -15);
         lastGoodMv = mv;
     } else {
         lastGoodMv = mv;
@@ -159,7 +204,7 @@ ChargeInfo readChargeInfo() {
     ChargeInfo info;
     info.milliVolts = getBatteryMilliVolts();
     info.trendMvPerMin = getBatteryTrendMilliVoltsPerMin();
-    info.usb = isUsbCablePresent();
+    info.usb = usbPresenceStable();
 
 #ifdef USE_BQ27220_VIA_I2C
     info.estimated = false;
@@ -181,40 +226,43 @@ ChargeInfo readChargeInfo() {
 #else
     info.estimated = true;
     info.percent = milliVoltsToPercent(info.milliVolts);
-    bool rising = info.trendMvPerMin >= 25;
-    bool holdingHigh = info.milliVolts >= 4000 && info.milliVolts <= 4200 && info.trendMvPerMin > -25;
-    if (info.percent >= 99 && info.milliVolts >= 4120 && info.milliVolts <= 4200 &&
-        (gLastChargeState == CHARGE_CHARGING || gLastChargeState == CHARGE_FULL)) {
-        if (gFullStreak < 10) gFullStreak++;
-    } else {
-        gFullStreak = 0;
-    }
-    bool full = gFullStreak >= 3 && !gRailLatch;
+    info.chargeSwitchOff = gRailLatch;
 
+    ChargeState next;
     if (gRailLatch) {
         info.percent = gShownPercent;
         if (info.percent > 99) info.percent = 99;
-        info.state = info.usb ? CHARGE_USB : CHARGE_BATTERY;
+        next = CHARGE_USB;
         gFullStreak = 0;
-        gLastChargeState = info.state;
-        return info;
-    }
-
-    if (full) {
-        info.state = CHARGE_FULL;
     } else if (info.usb) {
-        if (rising) info.state = CHARGE_CHARGING;
-        else info.state = CHARGE_USB;
-    } else if (rising) {
-        info.state = CHARGE_CHARGING;
-    } else if (gLastChargeState == CHARGE_CHARGING && holdingHigh && info.trendMvPerMin > -40) {
-        info.state = CHARGE_CHARGING;
+        if (info.percent >= 99 && info.milliVolts >= 4120) {
+            if (gFullStreak < 10) gFullStreak++;
+        } else {
+            gFullStreak = 0;
+        }
+        next = (gFullStreak >= 5) ? CHARGE_FULL : CHARGE_CHARGING;
+        gShownPercent = info.percent;
+        if (next != CHARGE_FULL && info.percent > 99) info.percent = 99;
     } else {
-        info.state = CHARGE_BATTERY;
+        gFullStreak = 0;
+        next = CHARGE_BATTERY;
+        gShownPercent = info.percent;
+        if (info.percent > 99) info.percent = 99;
     }
 
-    gShownPercent = info.percent;
-    if (info.state != CHARGE_FULL && info.percent > 99) info.percent = 99;
+    if (next != gCandState) {
+        gCandState = next;
+        gCandStreak = 1;
+    } else if (gCandStreak < 20) {
+        gCandStreak++;
+    }
+    if (!gPubReady || gCandStreak >= 8) {
+        gPubState = gCandState;
+        gPubReady = true;
+    }
+    info.state = gPubState;
+    gLastChargeState = info.state;
+    return info;
 #endif
     gLastChargeState = info.state;
     return info;
@@ -237,11 +285,10 @@ int getBattery() {
     return 0;
 }
 
-void updateClockTimezone() {
+bool updateClockTimezone() {
     timeClient.begin();
-    timeClient.update();
-
     timeClient.setTimeOffset(kvxConfig.tmz * 3600);
+    if (!timeClient.update() && !timeClient.forceUpdate()) { return false; }
 
     localTime = timeClient.getEpochTime() + (kvxConfig.dst ? 3600 : 0);
 
@@ -261,6 +308,7 @@ void updateClockTimezone() {
     // Update Internal clock to system time
     struct timeval tv = {.tv_sec = localTime};
     settimeofday(&tv, nullptr);
+    return true;
 }
 
 #if !defined(HAS_RTC)

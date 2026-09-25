@@ -1,11 +1,13 @@
 #include "charge_menu.h"
 #include "charge_screen.h"
-#include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
 #include "root/ui/display.h"
-#include "root/ui/settings.h"
 #include "root/ui/theme.h"
+#ifdef HAS_RGB_LED
+#include "root/hal/led_control.h"
+#endif
 #include <globals.h>
+#include <interface.h>
 
 void ChargeMenu::optionsMenu() {
     chargeModeActive = true;
@@ -13,12 +15,12 @@ void ChargeMenu::optionsMenu() {
     isScreenOff = false;
     dimmer = false;
     previousMillis = millis();
-
-    uint8_t bright = kvxConfig.bright;
-    if (bright < 25) bright = 25;
-    chargeModeBright = (int)bright;
-    panelSleep(false);
-    setBrightness(bright, false);
+    chargeInputGraceUntil = millis() + 2500;
+#ifdef HAS_RGB_LED
+    ledTakeExclusive();
+    ledSuppressStatus(true);
+    ledPauseEffects(true);
+#endif
 
     check(SelPress);
     check(UpPress);
@@ -27,6 +29,7 @@ void ChargeMenu::optionsMenu() {
     check(NextPress);
     check(AnyKeyPress);
     KeyStroke.Clear();
+    resetHeldNavKeys();
     runChargeLoop();
 }
 

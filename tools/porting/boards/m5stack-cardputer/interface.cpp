@@ -97,6 +97,27 @@ bool isCardputerKeyHeld(char c) {
     return false;
 }
 
+bool isFnKeyHeld(void) {
+    if (UseTCA8418) return fn_key_pressed;
+    return Keyboard.keysState().fn;
+}
+
+bool isSystemShortcutChordHeld(void) {
+    if (UseTCA8418) {
+        const bool tick = navHoldEsc || tcaCharHeld[(unsigned char)'`'];
+        const bool space = tcaCharHeld[(unsigned char)' '];
+        return tick && space && navHoldCtrl && navHoldDel;
+    }
+    Keyboard_Class::KeysState status = Keyboard.keysState();
+    bool tick = false;
+    bool space = false;
+    for (auto i : status.word) {
+        if (i == '`') tick = true;
+        if (i == ' ') space = true;
+    }
+    return tick && space && status.ctrl && status.del;
+}
+
 int handleSpecialKeys(uint8_t row, uint8_t col, bool pressed);
 void mapRawKeyToPhysical(uint8_t rawValue, uint8_t &row, uint8_t &col);
 
@@ -265,17 +286,28 @@ void pollEncoder(void) {
 void _setBrightness(uint8_t brightval) {
     if (brightval == 0 && chargeModeActive && !chargeUserSleep) return;
     if (brightval == 0) {
-        analogWrite(TFT_BL, brightval);
+        analogWrite(TFT_BL, 0);
+#ifdef HAS_RGB_LED
+        if (chargeModeActive) ledKeepRequest();
+#endif
         return;
     }
     int bl;
     if (chargeModeActive) {
-        // Nightstand: 1% must be visibly dimmer than MINBRIGHT (160/255).
+        // Nightstand: linear to near-off, then 0 blanks.
         bl = 12 + (int)(243 * (int)brightval / 100);
     } else {
-        bl = MINBRIGHT + round(((255 - MINBRIGHT) * brightval / 100));
+        // PWM below ~110 flickers off on this panel. Map 5–100% onto 115–255
+        // so FN 5% stays steadily on (Charge still uses the darker ramp above).
+        int pct = brightval < 5 ? 5 : (brightval > 100 ? 100 : brightval);
+        bl = 115 + (int)(140 * (pct - 5) / 95);
+        if (bl < 115) bl = 115;
+        if (bl > 255) bl = 255;
     }
     analogWrite(TFT_BL, bl);
+#ifdef HAS_RGB_LED
+    if (chargeModeActive) ledKeepRequest();
+#endif
 }
 
 /*********************************************************************
@@ -325,23 +357,15 @@ void InputHandler(void) {
         AnyKeyPress = true;
     }
     if (!g0Low && g0WasLow) {
-        if (!g0HoldFired) {
-            if (isScreenOff || chargeUserSleep) {
-                if (chargeModeActive) {
-                    chargeUserSleep = false;
-                    isScreenOff = false;
-                    dimmer = false;
-                    if (chargeModeBright >= 0) _setBrightness((uint8_t)chargeModeBright);
-                    else _setBrightness(kvxConfig.bright);
-                } else {
-                    wakeUpScreen();
+        if (!g0HoldFired && (millis() - g0PressAt >= 50)) {
+            if (chargeModeActive) {
+                // Charge owns backlight and LED. G0 only flips a flag after
+                // launch grace so a GPIO0 glitch cannot black the panel on open.
+                if (millis() >= chargeInputGraceUntil) {
+                    chargeUserSleep = !chargeUserSleep;
                 }
-            } else if (chargeModeActive) {
-                // Charge owns blanking: allow brightness 0 via chargeUserSleep.
-                // Keep dim battery LED on (Charge loop drives it); do not LED_STATUS_OFF.
-                chargeUserSleep = true;
-                isScreenOff = true;
-                turnOffDisplay();
+            } else if (isScreenOff) {
+                wakeUpScreen();
             } else {
                 isScreenOff = true;
                 turnOffDisplay();

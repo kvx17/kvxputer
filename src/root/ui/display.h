@@ -42,6 +42,7 @@ struct TftFrame {
 
 void tftReleaseFrameCanvas();
 void tftSuppressCanvas(bool suppress);
+void tftAbortFrame();
 
 void panelSleep(bool on);
 void turnOffDisplay();
