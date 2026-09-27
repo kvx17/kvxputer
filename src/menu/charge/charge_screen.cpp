@@ -272,8 +272,7 @@ static void chargeClearInput() {
 }
 
 void runChargeLoop() {
-    // Arm charge mode BEFORE any brightness write so _setBrightness uses the
-    // nightstand ramp and the power-saver cannot fade the panel out.
+    // Arm charge mode BEFORE any brightness write so power-save cannot fade out.
     chargeModeActive = true;
     chargeUserSleep = false;
     isScreenOff = false;
@@ -282,33 +281,35 @@ void runChargeLoop() {
     // Long grace so sticky Down/G0/`.` from the menu cannot blank on open.
     chargeInputGraceUntil = millis() + 2500;
 
+    // Visible floor — match main UI so open never looks blank.
+    uint8_t chargeBright = kvxConfig.bright;
+    if (chargeBright < 25) chargeBright = 25;
+    if (chargeBright > 100) chargeBright = 100;
+    chargeModeBright = (int)chargeBright;
+
 #ifdef HAS_RGB_LED
     ledTakeExclusive();
     ledSuppressStatus(true);
     ledPauseEffects(true);
     chargeLedStablePercent(0, true);
+    // Paint LED BEFORE setBrightness. Otherwise ledKeepRequest() while keep is
+    // still 0/0/0/0 pushes a black frame and the LED stays off on open.
+    {
+        ChargeInfo bootInfo = readChargeInfo();
+        chargeLedSync(bootInfo.percent, true, true);
+    }
 #endif
 
-    uint8_t chargeBright = kvxConfig.bright;
-    if (chargeBright < 1) chargeBright = 1;
-    if (chargeBright > 100) chargeBright = 100;
-    chargeModeBright = (int)chargeBright;
-
-    // Wake the logger/panel first so fillScreen actually hits the TFT.
+    // Wake panel + backlight (visible PWM map — see cardputer _setBrightness).
     panelSleep(false);
+    chargeUserSleep = false;
+    isScreenOff = false;
+    dimmer = false;
     setBrightness(chargeBright, false);
 
     tftAbortFrame();
     tftSuppressCanvas(true);
     tft.fillScreen(KVX_DEFAULT_BGCOLOR);
-
-#ifdef HAS_RGB_LED
-    {
-        // LED on at 20% battery color even if settings ledBright is 0.
-        ChargeInfo bootInfo = readChargeInfo();
-        chargeLedSync(bootInfo.percent, true, true);
-    }
-#endif
 
     unsigned long enteredAt = millis();
     chargeClearInput();
@@ -316,6 +317,8 @@ void runChargeLoop() {
     isScreenOff = false;
     dimmer = false;
     previousMillis = millis();
+    // Re-assert backlight after canvas/fill — open must never leave BL at 0.
+    setBrightness(chargeBright, false);
 
     unsigned long lastRefresh = 0;
     bool screenOff = false;
@@ -323,7 +326,8 @@ void runChargeLoop() {
     bool firstPaint = true;
     bool uiReady = false;
     bool sleepArmed = false; // true only after first paint + grace + keys released
-    bool brightTouched = false; // Down-to-0 sleep only after user moved brightness
+    bool brightTouched = false; // user moved brightness this session
+    bool allowBrightDown = false; // Down cannot dim until user has pressed Up once
     bool fullHold = false;
     bool fullBeeped = false;
     ChargeState prevState = CHARGE_BATTERY;
@@ -376,6 +380,7 @@ void runChargeLoop() {
             if (uiReady && pastGrace) {
                 sleepArmed = true;
                 chargeClearInput();
+                ignoreDownUntil = millis() + 800;
             }
         }
 
@@ -414,8 +419,7 @@ void runChargeLoop() {
             else if (check(UpPress) || check(PrevPress)) {
                 check(UpPress);
                 check(PrevPress);
-                // Up from 0% brightness steps back to 10%; S/G0 sleep restores last level.
-                if (chargeBright < 10) chargeBright = 10;
+                if (chargeBright < 25) chargeBright = 25;
                 wake = true;
             } else if (!ignoreDown && check(DownPress)) {
                 // Already blank: stay off (LED stays unless L toggled it).
@@ -431,11 +435,11 @@ void runChargeLoop() {
             chargeLedSync(idleInfo.percent, ledOn, false);
 #endif
             if (wake) {
-                if (chargeBright < 1) chargeBright = 10;
+                if (chargeBright < 25) chargeBright = 25;
                 chargeModeBright = (int)chargeBright;
                 chargeWakeDisplay(chargeBright, &ledOn);
 #ifdef HAS_RGB_LED
-                chargeLedSync(idleInfo.percent, ledOn, false);
+                chargeLedSync(idleInfo.percent, ledOn, true);
                 ledKeepRequest();
 #endif
                 screenOff = false;
@@ -471,14 +475,25 @@ void runChargeLoop() {
             check(UpPress);
             check(PrevPress);
             brightDir = +1;
-        } else if (sleepArmed && !ignoreDown && (check(DownPress) || check(NextPress))) {
+            allowBrightDown = true;
+        } else if (sleepArmed && allowBrightDown && !ignoreDown &&
+                   (check(DownPress) || check(NextPress))) {
+            // Ignore Down until the user has brightened once — sticky '.' from
+            // the main-menu grid was dimming straight to 0 on open.
             check(DownPress);
-            check(NextPress); // '.' also pulses Next on Cardputer
+            check(NextPress);
             brightDir = -1;
+        } else if (sleepArmed && !allowBrightDown && !ignoreDown) {
+            check(DownPress);
+            check(NextPress);
         }
 #ifdef HAS_ENCODER
         int32_t rot = drainRotarySteps();
-        if (sleepArmed && rot != 0) brightDir = rot > 0 ? +1 : -1;
+        if (sleepArmed && rot != 0) {
+            brightDir = rot > 0 ? +1 : -1;
+            if (brightDir > 0) allowBrightDown = true;
+            if (brightDir < 0 && !allowBrightDown) brightDir = 0;
+        }
 #endif
         if (brightDir != 0) {
             brightTouched = true;
@@ -529,7 +544,11 @@ void runChargeLoop() {
         const bool panelWrote = firstPaint;
         if (firstPaint || forceRedraw || millis() - lastRefresh > 1000) {
             lastRefresh = millis();
-            if (firstPaint) setBrightness(chargeBright, false);
+            if (firstPaint) {
+                chargeUserSleep = false;
+                isScreenOff = false;
+                setBrightness(chargeBright, false);
+            }
             uint16_t batCol = chargeLevelColor(info.percent);
             uint16_t clockColor = kClockColors[colorIndex];
             uint16_t bg = KVX_DEFAULT_BGCOLOR;
