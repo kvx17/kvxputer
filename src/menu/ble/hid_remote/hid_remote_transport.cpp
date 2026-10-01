@@ -5,6 +5,7 @@
 #include "root/hal/led_control.h"
 #include "root/ui/display.h"
 #include "root/config/config.h"
+#include <interface.h>
 
 #if HID_SLOT_DEBUG
 #define HID_SLOT_LOG(fmt, ...) Serial.printf("HID_SLOT " fmt "\n", ##__VA_ARGS__)
@@ -25,6 +26,73 @@
 #include <globals.h>
 
 HidRemoteTransportSession gHidRemoteSession;
+
+// Set only when the user holds Esc to leave a connect/pair wait.
+// A stuck Esc level must not set this — that was bouncing the pair screen.
+static bool gHidWaitUserCancel = false;
+
+bool HidRemoteTransportSession::consumeUserCancel() {
+    const bool v = gHidWaitUserCancel;
+    gHidWaitUserCancel = false;
+    return v;
+}
+
+// ADV: backtick level comes from the TCA hold map (no matrix rescan).
+// Matrix Cardputer must NOT call isCardputerKeyHeld here — that rescans the
+// matrix from this task while the input task also scans, and the ghost read
+// is the backtick key, which cancelled pairing immediately.
+static bool hidPairBacktickDown() {
+#if defined(ARDUINO_M5STACK_CARDPUTER)
+    extern bool UseTCA8418;
+    if (UseTCA8418) return isCardputerKeyHeld('`');
+#endif
+    return false;
+}
+
+struct HidPairCancel {
+    bool sawClear = false;
+    unsigned long armAt = 0;
+    unsigned long holdStart = 0;
+    unsigned long lastDown = 0;
+
+    void begin() {
+        EscPress = false;
+        SelPress = false;
+        sawClear = false;
+        holdStart = 0;
+        lastDown = 0;
+        armAt = millis() + 400;
+    }
+
+    // True only after Esc has been seen released, then held again.
+    // A level that is already stuck down never counts. Brief gaps are ignored
+    // so the input task clearing EscPress between polls does not drop the hold.
+    bool poll() {
+        const bool down = hidPairBacktickDown() || EscPress;
+        EscPress = false;
+        if (down) lastDown = millis();
+        if (millis() < armAt) {
+            sawClear = false;
+            holdStart = 0;
+            return false;
+        }
+        const bool recent = lastDown != 0 && (millis() - lastDown) < 180;
+        if (!down && !recent) {
+            sawClear = true;
+            holdStart = 0;
+            return false;
+        }
+        if (!sawClear) {
+            holdStart = 0;
+            return false;
+        }
+        if (holdStart == 0) {
+            if (!down) return false;
+            holdStart = millis();
+        }
+        return (millis() - holdStart) >= 500;
+    }
+};
 
 static bool gRandomHidMac = false;
 
@@ -145,18 +213,42 @@ static void teardownUsb(HidRemoteTransportSession &s) {
     s.connected = false;
 }
 
+static void prepareBleRam() {
+    // Free the big internal-DRAM holders *before* the DMA gate so BLE can
+    // start on Cardputer without the user hunting WiFi/SD menus first.
+    uiRamEnterHeavy();
+#ifdef HAS_RGB_LED
+    ledEffects(false);
+#endif
+    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+        Serial.println("[HID] Releasing WiFi for BLE...");
+        wifiDisconnect();
+        delay(100);
+    }
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+        WiFi.mode(WIFI_OFF);
+        delay(50);
+    }
+    // Mode OFF can leave the driver loaded; deinit reclaims DMA buffers.
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    delay(80);
+}
+
 static bool ensureBle(HidRemoteTransportSession &s) {
 #if defined(CONFIG_BT_ENABLED)
-    if (s.bleHid != nullptr && s.isConnected()) {
+    // Reuse a live stack. begin()/pair used to tear NimBLE down and re-init on
+    // every call; that fragments DMA and surfaces "Low RAM: free WiFi/SD first"
+    // even though BLE was already running.
+    if (s.bleHid != nullptr && NimBLEDevice::isInitialized()) {
         s.keyboardHid = s.bleHid;
         s.keyboardActive = true;
         s.mouseActive = true;
-        s.connected = true;
+        s.connected = s.bleHid->isConnected() || s.isConnected();
+        BLEConnected = s.connected;
         return true;
     }
 
-    // Tear down any existing BLE first — leftover NimBLE/hid_ble holds the DMA
-    // block that radioHasMemForBle() is about to require.
 #if !defined(LITE_VERSION)
     if (hid_ble != nullptr && hid_ble != s.bleHid) {
         safeCleanupDuckyBLE(hid_ble);
@@ -176,15 +268,12 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         delay(150);
     }
 
-#ifdef HAS_RGB_LED
-    ledEffects(false);
-#endif
+    prepareBleRam();
 
     if (!radioHasMemForBle()) {
         displayError("Low RAM: free WiFi/SD first", true);
         return false;
     }
-    uiRamEnterHeavy();
 
     setHidRemoteBleMac();
 
@@ -255,11 +344,25 @@ static void teardownBle(HidRemoteTransportSession &s) {
         NimBLEDevice::deinit(true);
     }
     delay(50);
+    uiRamLeaveHeavy();
 #endif
 }
 
 bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability caps) {
-    end();
+    // Keep a live BLE session. Calling end() here used to deinit NimBLE on every
+    // pair/reconnect attempt, fragment DMA, and trip the Low RAM gate.
+    if (t == HID_REMOTE_BLE && transport == HID_REMOTE_BLE && bleHid != nullptr &&
+        NimBLEDevice::isInitialized()) {
+        keyboardHid = bleHid;
+        keyboardActive = true;
+        mouseActive = true;
+        connected = bleHid->isConnected() || isConnected();
+        BLEConnected = connected;
+        refreshHostLabel();
+        return true;
+    }
+
+    if (transport == HID_REMOTE_BLE || transport == HID_REMOTE_USB) end();
     transport = t;
     connected = false;
 
@@ -400,14 +503,57 @@ static bool bleHidLinkReady() {
     return secured && subscribed;
 }
 
-static bool buildHidAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = false) {
+// New-pair discovery: complete local name in the primary packet (BleKeyboard
+// begin() shape). Phones list "kvxKeyboard" from this. Do not pack HID UUID
+// here — that forced an 8-char truncated name and hid the device in search.
+static bool buildPairAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = false) {
+    if (adv == nullptr) return false;
+    String deviceName = kvxConfig.hidRemoteBleName;
+    if (deviceName.isEmpty()) deviceName = KVXKEYBOARD_HID_NAME;
+    if (deviceName.length() > 26) deviceName = deviceName.substring(0, 26);
+    const std::string gapName(deviceName.c_str());
+    NimBLEDevice::setDeviceName(gapName);
+
+    adv->setConnectableMode(BLE_GAP_CONN_MODE_UND);
+    adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
+    adv->setScanFilter(false, false);
+    if (fastIntervals) {
+        adv->setMinInterval(32);
+        adv->setMaxInterval(48);
+    } else {
+        adv->setMinInterval(80);
+        adv->setMaxInterval(160);
+    }
+
+    NimBLEAdvertisementData advData;
+    advData.setFlags(BLE_HS_ADV_F_DISC_GEN);
+    advData.setName(gapName, true);
+    advData.setAppearance(HID_REMOTE_BLE_APPEARANCE);
+    if (!adv->setAdvertisementData(advData)) {
+        NimBLEAdvertisementData nameOnly;
+        nameOnly.setFlags(BLE_HS_ADV_F_DISC_GEN);
+        nameOnly.setName(gapName, true);
+        if (!adv->setAdvertisementData(nameOnly)) return false;
+    }
+    // Clears m_advDataSet so start() re-pushes (NimBLE 2.5).
+    adv->enableScanResponse(false);
+    return true;
+}
+
+// Reconnect / exclusive-host: full HID payload bonded hosts expect (BlueZ,
+// iOS, Windows). Pairing temporarily replaced this with the name-only packet
+// and broke slot reconnect until forget+reboot.
+static bool buildReconnectAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = false) {
     if (adv == nullptr) return false;
     String deviceName = kvxConfig.hidRemoteBleName;
     if (deviceName.isEmpty()) deviceName = KVXKEYBOARD_HID_NAME;
     NimBLEDevice::setDeviceName(std::string(deviceName.c_str()));
 
+    adv->setConnectableMode(BLE_GAP_CONN_MODE_UND);
+    adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
+    adv->setScanFilter(false, false);
+
     NimBLEAdvertisementData advData;
-    // General discoverable + BR/EDR not supported (Linux/Windows prefer this)
     advData.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
     advData.setAppearance(HID_REMOTE_BLE_APPEARANCE);
     advData.addServiceUUID(NimBLEUUID((uint16_t)0x1812));
@@ -416,24 +562,25 @@ static bool buildHidAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = f
     } else {
         advData.setName(std::string(deviceName.substring(0, 8).c_str()), false);
     }
-    adv->setAdvertisementData(advData);
+    if (!adv->setAdvertisementData(advData)) return false;
 
     NimBLEAdvertisementData scanData;
     scanData.setName(std::string(deviceName.c_str()), true);
-    adv->setScanResponseData(scanData);
-    adv->setAppearance(HID_REMOTE_BLE_APPEARANCE);
-    adv->setDiscoverableMode(BLE_GAP_DISC_MODE_GEN);
-    adv->setConnectableMode(BLE_GAP_CONN_MODE_UND);
+    (void)adv->setScanResponseData(scanData);
     adv->enableScanResponse(true);
-    // Units are 0.625 ms. Faster intervals help Windows/Android rediscovery.
     if (fastIntervals) {
-        adv->setMinInterval(32);  // 20 ms
-        adv->setMaxInterval(48);  // 30 ms
+        adv->setMinInterval(32);
+        adv->setMaxInterval(48);
     } else {
-        adv->setMinInterval(80);  // 50 ms
-        adv->setMaxInterval(160); // 100 ms
+        adv->setMinInterval(80);
+        adv->setMaxInterval(160);
     }
     return true;
+}
+
+static bool buildHidAdvertisement(NimBLEAdvertising *adv, bool fastIntervals = false) {
+    // Default for whitelist / any-bonded helpers: reconnect-shaped HID ADV.
+    return buildReconnectAdvertisement(adv, fastIntervals);
 }
 #endif
 
@@ -491,35 +638,11 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         }
     }
 
-    // NimBLE can store more bonds than UI slots (8 vs 6). Capture all of them
-    // so a parked host not shown in a slot still cannot steal a new-pair wait.
-    static const int kMaxPriorBonds = 8;
-    String priorBonds[kMaxPriorBonds];
-    int priorBondCount = 0;
-    if (acceptNewOnly && NimBLEDevice::isInitialized()) {
-        const int n = NimBLEDevice::getNumBonds();
-        for (int i = 0; i < n && priorBondCount < kMaxPriorBonds; i++) {
-            priorBonds[priorBondCount++] =
-                String(NimBLEDevice::getBondedAddress(i).toString().c_str());
-        }
-    }
-
     // Live peer belongs to a different remembered slot.
     auto isOtherSlotPeer = [&](int liveBond) -> bool {
         for (int i = 0; i < otherSlotCount; i++) {
             if (liveBond >= 0 && otherSlotBonds[i] == liveBond) return true;
             if (connectionMatchesAddr(otherSlotAddrs[i])) return true;
-        }
-        return false;
-    };
-
-    auto isPriorKnownPeer = [&]() -> bool {
-        for (int i = 0; i < priorBondCount; i++) {
-            if (connectionMatchesAddr(priorBonds[i])) return true;
-        }
-        for (int slot = 1; slot <= KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT; slot++) {
-            String slotted = kvxConfig.getHidRemoteHostSlot(slot);
-            if (slotted.length() && connectionMatchesAddr(slotted)) return true;
         }
         return false;
     };
@@ -589,7 +712,15 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         lastUiPhase = phase;
         lastUiPaint = millis();
         const char *line2 = nullptr;
-        if (exclusiveHost && expectedAddr.length()) {
+        if (acceptNewOnly) {
+            // Keep the advertised name on screen for the whole wait. The menu
+            // paints it first; clearing it made the pair screen look like it
+            // had already given up.
+            static String pairNameCache;
+            pairNameCache = kvxConfig.hidRemoteBleName;
+            if (pairNameCache.isEmpty()) pairNameCache = KVXKEYBOARD_HID_NAME;
+            line2 = pairNameCache.c_str();
+        } else if (exclusiveHost && expectedAddr.length()) {
             // Keep host label on screen while phase text changes.
             static String hostLabelCache;
             hostLabelCache = gHidRemoteSession.displayNameForAddr(expectedAddr);
@@ -608,22 +739,22 @@ bool HidRemoteTransportSession::waitConnectedExpected(
     hidRemoteLedSet(acceptNewOnly ? HID_REMOTE_LED_PAIRING : HID_REMOTE_LED_CONNECTING);
     paintWaitUi(0, acceptNewOnly ? "Pair new host only" : "Waiting for host...");
     HID_SLOT_LOG(
-        "wait expect='%s' new=%d any=%d excl=%d exclude='%s' expectBond=%d excludeBond=%d prior=%d",
+        "wait expect='%s' new=%d any=%d excl=%d exclude='%s' expectBond=%d excludeBond=%d",
         expectedAddr.c_str(),
         (int)acceptNewOnly,
         (int)acceptAny,
         (int)exclusiveHost,
         excludeAddr.c_str(),
         expectedBond,
-        excludeBond,
-        priorBondCount
+        excludeBond
     );
 
-    // Menu confirm (Ok/Enter) and leftover Esc from the slot list must not
-    // abort pairing the instant the wait starts.
-    EscPress = false;
-    SelPress = false;
-    const unsigned long ignoreEscUntil = millis() + 400;
+    // The key that opened this wait must not count as cancel. Esc stays
+    // ignored until it has been seen released and is then held again.
+    // A stuck Esc level never sets sawClear, so it cannot close the screen.
+    gHidWaitUserCancel = false;
+    HidPairCancel pairCancel;
+    pairCancel.begin();
 
     if (acceptNewOnly || exclusiveHost) {
         resumeAdv();
@@ -634,7 +765,11 @@ bool HidRemoteTransportSession::waitConnectedExpected(
     while (true) {
         hidRemoteLedTick();
         if (forceHome) break;
-        if (millis() >= ignoreEscUntil && check(EscPress)) break;
+        if (pairCancel.poll()) {
+            gHidWaitUserCancel = true;
+            SelPress = false;
+            break;
+        }
         NimBLEServer *server = NimBLEDevice::isInitialized() ? NimBLEDevice::getServer() : nullptr;
         const int gapLinks = (server != nullptr) ? (int)server->getConnectedCount() : 0;
 
@@ -699,10 +834,18 @@ bool HidRemoteTransportSession::waitConnectedExpected(
             if (acceptAny) {
                 if (hidReady) knownRight = true;
             } else if (acceptNewOnly) {
-                // New peers create a NimBLE bond during handshake. Do NOT treat
-                // "now bonded" as known — only reject hosts that were already
-                // bonded/slotted before this pair wait started.
-                if (isPriorKnownPeer()) knownWrong = true;
+                // Filling an empty slot. A phone that already bonded (or whose
+                // slot was cleared) must be allowed in. Reject only a host that
+                // is already stored in a different slot so it cannot steal this one.
+                bool otherSlot = false;
+                for (int slot = 1; slot <= KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT; slot++) {
+                    String slotted = kvxConfig.getHidRemoteHostSlot(slot);
+                    if (slotted.length() && connectionMatchesAddr(slotted)) {
+                        otherSlot = true;
+                        break;
+                    }
+                }
+                if (otherSlot) knownWrong = true;
                 else if (hidReady) knownRight = true;
             } else {
                 // Exclusive switch: only the selected host may stay connected.
@@ -752,6 +895,15 @@ bool HidRemoteTransportSession::waitConnectedExpected(
                     bondIndexForConnection()
                 );
                 return true;
+            }
+
+            // A bonded phone that connects but never finishes HID blocks ADV
+            // (ESP32 can't advertise while linked). Drop it so pair can show
+            // up again for the host the user is actually pairing.
+            if (acceptNewOnly && peerAge > 8000 && !hidReady) {
+                rejectPeer("pair-stall");
+                delay(40);
+                continue;
             }
 
             // Candidate host still handshaking — keep waiting (no ADV restart).
@@ -1213,6 +1365,8 @@ bool HidRemoteTransportSession::advertiseStop() {
     delay(50);
     clearBleWhitelist();
     adv->setScanFilter(false, false);
+    // Non-connectable while idle on the host list. advertiseOpen() must set
+    // UND again before start — leaving this sticky was why phones saw nothing.
     adv->setConnectableMode(BLE_GAP_CONN_MODE_NON);
     HID_SLOT_LOG("adv stop");
     return true;
@@ -1228,22 +1382,40 @@ bool HidRemoteTransportSession::advertiseOpen() {
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
     if (adv == nullptr) return false;
 
+    // Cannot advertise while linked (single connection).
+    NimBLEServer *server = NimBLEDevice::getServer();
+    if (server != nullptr && server->getConnectedCount() > 0) {
+        unsigned long t0 = millis();
+        while (server->getConnectedCount() > 0 && (millis() - t0) < 2000) {
+            server->disconnect(server->getPeerInfo(0).getConnHandle());
+            delay(40);
+        }
+        if (server->getConnectedCount() > 0) {
+            HID_SLOT_LOG("adv open blocked: still connected");
+            return false;
+        }
+    }
+
     adv->stop();
-    delay(50);
+    delay(100);
     clearBleWhitelist();
     adv->setScanFilter(false, false);
-    buildHidAdvertisement(adv, true);
+
+    if (!buildPairAdvertisement(adv, true)) {
+        HID_SLOT_LOG("adv open build failed");
+        return false;
+    }
 
     bool ok = adv->start();
     if (!ok || !adv->isAdvertising()) {
-        delay(80);
+        delay(120);
         ok = adv->start();
     }
     if (!ok || !adv->isAdvertising()) {
-        delay(80);
+        delay(120);
         ok = adv->start();
     }
-    HID_SLOT_LOG("adv open ok=%d", (int)(ok || adv->isAdvertising()));
+    HID_SLOT_LOG("adv open ok=%d active=%d", (int)ok, (int)(adv->isAdvertising()));
     return ok || adv->isAdvertising();
 #else
     return false;
@@ -1258,7 +1430,8 @@ bool HidRemoteTransportSession::advertiseReconnect() {
     if (adv == nullptr) return false;
 
     // BlueZ aborts mid-reconnect if we stop/restart ADV while it is connecting.
-    // If we are already connectable+advertising with no scan filter, leave it alone.
+    // Keep-alive only after a reconnect-shaped start. A leftover pair advert
+    // (name-only, no HID UUID) must be rebuilt or bonded hosts never return.
     if (adv->isAdvertising()) {
         HID_SLOT_LOG("adv reconnect keep-alive");
         return true;
@@ -1266,8 +1439,10 @@ bool HidRemoteTransportSession::advertiseReconnect() {
 
     clearBleWhitelist();
     adv->setScanFilter(false, false);
-    // Fast intervals + full HID payload: works for iOS, Android, Windows, Linux.
-    buildHidAdvertisement(adv, true);
+    if (!buildReconnectAdvertisement(adv, true)) {
+        HID_SLOT_LOG("adv reconnect build failed");
+        return false;
+    }
 
     bool ok = adv->start();
     if (!ok || !adv->isAdvertising()) {
@@ -1755,18 +1930,29 @@ bool HidRemoteTransportSession::switchToSlot(int slot1to8, unsigned long timeout
 
 bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeoutMs) {
 #if defined(CONFIG_BT_ENABLED)
-    if (transport != HID_REMOTE_BLE) return false;
     if (slot1to8 < 1 || slot1to8 > KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT) return false;
-    if (bleHid == nullptr || !NimBLEDevice::isInitialized()) return false;
+    gHidWaitUserCancel = false;
+
+    // Soft ensure only — never end()/deinit the live stack just to pair.
+    if (transport != HID_REMOTE_BLE || bleHid == nullptr || !NimBLEDevice::isInitialized()) {
+        if (!ensureBle(*this)) return false;
+        transport = HID_REMOTE_BLE;
+    }
 
     disconnectHost(false);
     delay(300);
     clearBleWhitelist();
 
-    // A single ADV start failure after disconnect used to abort pairing and
-    // dump the user back on the host-slot list. Keep waiting; the pair loop
-    // retries advertising.
-    (void)advertiseOpen();
+    // Same open-advert path as a successful BleKeyboard::begin() — phones only
+    // listed the device when that recipe was on the air.
+    if (!advertiseOpen()) {
+        delay(250);
+        if (!advertiseOpen()) {
+            HID_SLOT_LOG("pairIntoSlot %d adv failed", slot1to8);
+            return false;
+        }
+    }
+
     HID_SLOT_LOG("pairIntoSlot %d", slot1to8);
     if (!waitConnectedExpected(String(""), timeoutMs)) {
         advertiseStop();
@@ -1774,7 +1960,10 @@ bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeout
     }
 
     String addr = getConnectedAddress();
-    if (addr.isEmpty()) return false;
+    if (addr.isEmpty()) {
+        advertiseStop();
+        return false;
+    }
 
     int existing = kvxConfig.findHidRemoteHostSlotForAddr(addr);
     if (existing > 0 && existing != slot1to8) kvxConfig.clearHidRemoteHostSlot(existing);
@@ -1790,6 +1979,7 @@ bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeout
     dedupeHostSlots();
     advertiseStop();
     refreshHostLabel();
+    gHidWaitUserCancel = false;
     return true;
 #else
     (void)slot1to8;

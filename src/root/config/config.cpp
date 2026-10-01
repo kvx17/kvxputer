@@ -97,6 +97,8 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteMouseSensitivity"] = hidRemoteMouseSensitivity;
     setting["hidRemoteJoyInvertY"] = hidRemoteJoyInvertY;
     setting["hidRemoteJigglerInterval"] = hidRemoteJigglerInterval;
+    setting["hidRemoteJigglerAmount"] = hidRemoteJigglerAmount;
+    setting["hidRemoteJigglerDir"] = hidRemoteJigglerDir;
     setting["hidRemoteStealthMin"] = hidRemoteStealthMin;
     setting["hidRemoteStealthMax"] = hidRemoteStealthMax;
     setting["hidRemoteClickerDelay"] = hidRemoteClickerDelay;
@@ -109,6 +111,9 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["kremoteButtonsSwapped"] = kremoteButtonsSwapped;
     setting["kremoteIrHw"] = kremoteIrHw;
     setting["kremoteBrowseFolder"] = kremoteBrowseFolder;
+    setting["rokuIp"] = rokuIp;
+    setting["rokuName"] = rokuName;
+    setting["rokuSerial"] = rokuSerial;
     setting["g0HoldHome"] = g0HoldHome;
     setting["pdaWcFace"] = pdaWcFace;
     JsonArray pdaBind = setting["pdaKeyBind"].to<JsonArray>();
@@ -568,6 +573,15 @@ void KvxputerConfig::fromFile(bool checkFS) {
     if (!setting["hidRemoteJigglerInterval"].isNull()) {
         hidRemoteJigglerInterval = setting["hidRemoteJigglerInterval"].as<int>();
     }
+    if (!setting["hidRemoteJigglerAmount"].isNull()) {
+        hidRemoteJigglerAmount = setting["hidRemoteJigglerAmount"].as<int>();
+        if (hidRemoteJigglerAmount < 1) hidRemoteJigglerAmount = 1;
+        if (hidRemoteJigglerAmount > 50) hidRemoteJigglerAmount = 50;
+    }
+    if (!setting["hidRemoteJigglerDir"].isNull()) {
+        hidRemoteJigglerDir = setting["hidRemoteJigglerDir"].as<int>() % 3;
+        if (hidRemoteJigglerDir < 0) hidRemoteJigglerDir = 0;
+    }
     if (!setting["hidRemoteStealthMin"].isNull()) {
         hidRemoteStealthMin = setting["hidRemoteStealthMin"].as<int>();
     }
@@ -611,6 +625,9 @@ void KvxputerConfig::fromFile(bool checkFS) {
         if (p.length() && !p.startsWith("/")) p = "/" + p;
         kremoteBrowseFolder = p;
     }
+    if (!setting["rokuIp"].isNull()) rokuIp = setting["rokuIp"].as<String>();
+    if (!setting["rokuName"].isNull()) rokuName = setting["rokuName"].as<String>();
+    if (!setting["rokuSerial"].isNull()) rokuSerial = setting["rokuSerial"].as<String>();
     if (!setting["g0HoldHome"].isNull()) {
         g0HoldHome = setting["g0HoldHome"].as<bool>();
     }
@@ -1231,6 +1248,20 @@ void KvxputerConfig::setHidRemoteJigglerInterval(int value) {
     saveFile();
 }
 
+void KvxputerConfig::setHidRemoteJigglerAmount(int value) {
+    if (value < 1) value = 1;
+    if (value > 50) value = 50;
+    hidRemoteJigglerAmount = value;
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteJigglerDir(int value) {
+    if (value < 0) value = 0;
+    if (value > 2) value = value % 3;
+    hidRemoteJigglerDir = value;
+    saveFile();
+}
+
 void KvxputerConfig::setHidRemoteStealthMin(int value) {
     if (value < 10) value = 10;
     hidRemoteStealthMin = value;
@@ -1300,6 +1331,13 @@ void KvxputerConfig::setKremoteBrowseFolder(const String &value) {
     while (p.length() > 1 && p.endsWith("/")) p.remove(p.length() - 1);
     if (p.length() && !p.startsWith("/")) p = "/" + p;
     kremoteBrowseFolder = p;
+    saveFile();
+}
+
+void KvxputerConfig::setRokuDevice(const String &ip, const String &name, const String &serial) {
+    rokuIp = ip;
+    rokuName = name;
+    rokuSerial = serial;
     saveFile();
 }
 

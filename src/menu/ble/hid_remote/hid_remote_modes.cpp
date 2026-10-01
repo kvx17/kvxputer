@@ -1125,27 +1125,84 @@ static bool runClicker(HidRemoteTransportSession &s) {
     return true;
 }
 
+static const char *jigglerDirLabel(int dir) {
+    if (dir == 1) return "Up-Down";
+    if (dir == 2) return "Random";
+    return "Left-Right";
+}
+
+static void jigglerPickDelta(int amount, int dir, int8_t &dx, int8_t &dy, bool stealth) {
+    if (amount < 1) amount = 1;
+    if (amount > 50) amount = 50;
+    dx = 0;
+    dy = 0;
+    if (stealth) {
+        if (dir == 0) {
+            dx = (int8_t)random(-amount, amount + 1);
+            if (dx == 0) dx = 1;
+        } else if (dir == 1) {
+            dy = (int8_t)random(-amount, amount + 1);
+            if (dy == 0) dy = 1;
+        } else {
+            dx = (int8_t)random(-amount, amount + 1);
+            dy = (int8_t)random(-amount, amount + 1);
+            if (dx == 0 && dy == 0) dx = 1;
+        }
+        return;
+    }
+    // Normal jiggler: fixed step out (caller sends the return move).
+    if (dir == 0) dx = (int8_t)amount;
+    else if (dir == 1) dy = (int8_t)amount;
+    else if (random(0, 2) == 0) dx = (int8_t)(random(0, 2) ? amount : -amount);
+    else dy = (int8_t)(random(0, 2) ? amount : -amount);
+}
+
 static void drawJigglerPanel(bool stealth, bool running, bool full) {
     if (full) {
         hidClearContentArea();
         tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
+        int y = 32;
         if (stealth) {
-            tft.drawString("Min (-/=): " + String(kvxConfig.hidRemoteStealthMin) + "s", 8, 32);
-            tft.drawString("Max (+): " + String(kvxConfig.hidRemoteStealthMax) + "s", 8, 48);
+            tft.drawString("Min (-/=): " + String(kvxConfig.hidRemoteStealthMin) + "s", 8, y);
+            y += 14;
+            tft.drawString("Max ([ ]): " + String(kvxConfig.hidRemoteStealthMax) + "s", 8, y);
+            y += 14;
         } else {
-            tft.drawString("Interval (-/=): " + String(kvxConfig.hidRemoteJigglerInterval) + "s", 8, 32);
+            tft.drawString("Interval (-/=): " + String(kvxConfig.hidRemoteJigglerInterval) + "s", 8, y);
+            y += 14;
         }
-        tft.drawString("Space: start/stop", 8, stealth ? 64 : 48);
+        tft.drawString("Amount (,/): " + String(kvxConfig.hidRemoteJigglerAmount) + "px", 8, y);
+        y += 14;
+        tft.drawString(String("Dir (d): ") + jigglerDirLabel(kvxConfig.hidRemoteJigglerDir), 8, y);
+        y += 14;
+        tft.drawString("Space: start/stop", 8, y);
     }
-    tft.fillRect(8, stealth ? 78 : 62, tftWidth - 16, 16, 0x0841);
+    const int statusY = stealth ? 102 : 88;
+    tft.fillRect(8, statusY - 2, tftWidth - 16, 16, 0x0841);
     tft.setTextColor(running ? 0x9818 : 0x07E0, 0x0841);
-    tft.drawString(running ? "ACTIVE" : "PAUSED", 8, stealth ? 80 : 64);
+    tft.drawString(running ? "ACTIVE" : "PAUSED", 8, statusY);
 }
 
 static bool runJiggler(HidRemoteTransportSession &s, bool stealth) {
     bool running = false;
+    bool spaceHeld = false;
     unsigned long nextMove = 0;
+    unsigned long lastHeader = 0;
+
+    auto scheduleNext = [&]() {
+        unsigned long now = millis();
+        if (stealth) {
+            int lo = kvxConfig.hidRemoteStealthMin;
+            int hi = kvxConfig.hidRemoteStealthMax;
+            if (hi < lo) hi = lo;
+            nextMove = now + (unsigned long)random(lo, hi + 1) * 1000UL;
+        } else {
+            unsigned long ms = (unsigned long)kvxConfig.hidRemoteJigglerInterval * 1000UL;
+            if (ms < 1000UL) ms = 1000UL;
+            nextMove = now + ms;
+        }
+    };
 
     hidRemoteDrawHeader(s.transport, s.isConnected(), stealth ? "Stealth Jiggler" : "Mouse Jiggler");
     drawJigglerPanel(stealth, running, true);
@@ -1153,40 +1210,73 @@ static bool runJiggler(HidRemoteTransportSession &s, bool stealth) {
 
     while (true) {
         if (forceHome) break;
+        hidRemoteLedTick();
         keyStroke key = _getKeyPress();
         if (checkModeExit(key)) break;
 
         char c = strokeChar(key);
-        if (c == ' ' && key.pressed) {
+        // Edge-trigger Space. Matrix Cardputer keeps reporting the held key every
+        // poll; treating that as a new press toggled ACTIVE off after the first move.
+        const bool spaceNow = key.pressed && c == ' ';
+        if (spaceNow && !spaceHeld) {
             running = !running;
-            if (running) nextMove = millis();
+            if (running) {
+                nextMove = millis(); // move immediately, then schedule after
+            }
             drawJigglerPanel(stealth, running, false);
-        } else if ((c == '-' || c == '_') && key.pressed) {
+        }
+        spaceHeld = spaceNow;
+
+        if ((c == '-' || c == '_') && key.pressed) {
             if (stealth) kvxConfig.setHidRemoteStealthMin(kvxConfig.hidRemoteStealthMin - 5);
             else kvxConfig.setHidRemoteJigglerInterval(kvxConfig.hidRemoteJigglerInterval - 5);
+            if (running) scheduleNext();
             drawJigglerPanel(stealth, running, true);
         } else if ((c == '=' || c == '+') && key.pressed) {
-            if (stealth) {
-                kvxConfig.setHidRemoteStealthMax(kvxConfig.hidRemoteStealthMax + 10);
-            } else {
-                kvxConfig.setHidRemoteJigglerInterval(kvxConfig.hidRemoteJigglerInterval + 5);
-            }
+            if (stealth) kvxConfig.setHidRemoteStealthMax(kvxConfig.hidRemoteStealthMax + 10);
+            else kvxConfig.setHidRemoteJigglerInterval(kvxConfig.hidRemoteJigglerInterval + 5);
+            if (running) scheduleNext();
+            drawJigglerPanel(stealth, running, true);
+        } else if ((c == '[' || c == '{') && key.pressed && stealth) {
+            kvxConfig.setHidRemoteStealthMax(kvxConfig.hidRemoteStealthMax - 10);
+            if (running) scheduleNext();
+            drawJigglerPanel(stealth, running, true);
+        } else if ((c == ']' || c == '}') && key.pressed && stealth) {
+            kvxConfig.setHidRemoteStealthMax(kvxConfig.hidRemoteStealthMax + 10);
+            if (running) scheduleNext();
+            drawJigglerPanel(stealth, running, true);
+        } else if ((c == ',' || c == '<') && key.pressed) {
+            kvxConfig.setHidRemoteJigglerAmount(kvxConfig.hidRemoteJigglerAmount - 1);
+            drawJigglerPanel(stealth, running, true);
+        } else if ((c == '/' || c == '?') && key.pressed) {
+            kvxConfig.setHidRemoteJigglerAmount(kvxConfig.hidRemoteJigglerAmount + 1);
+            drawJigglerPanel(stealth, running, true);
+        } else if ((c == 'd' || c == 'D') && key.pressed) {
+            kvxConfig.setHidRemoteJigglerDir((kvxConfig.hidRemoteJigglerDir + 1) % 3);
             drawJigglerPanel(stealth, running, true);
         }
 
-        if (running && millis() >= nextMove) {
-            if (stealth) {
-                int dx = random(-2, 3);
-                int dy = random(-2, 3);
-                if (dx == 0 && dy == 0) dx = 1;
-                s.mouseMove((int8_t)dx, (int8_t)dy);
-                nextMove = millis() + random(kvxConfig.hidRemoteStealthMin, kvxConfig.hidRemoteStealthMax + 1) * 1000UL;
-            } else {
-                s.mouseMove(2, 0);
-                delay(20);
-                s.mouseMove(-2, 0);
-                nextMove = millis() + (unsigned long)kvxConfig.hidRemoteJigglerInterval * 1000UL;
+        if (running && (long)(millis() - nextMove) >= 0) {
+            int8_t dx = 0;
+            int8_t dy = 0;
+            jigglerPickDelta(
+                kvxConfig.hidRemoteJigglerAmount, kvxConfig.hidRemoteJigglerDir, dx, dy, stealth
+            );
+            s.mouseMove(dx, dy);
+            if (!stealth) {
+                delay(25);
+                s.mouseMove((int8_t)-dx, (int8_t)-dy);
             }
+            scheduleNext();
+            drawJigglerPanel(stealth, running, false);
+        }
+
+        if (millis() - lastHeader > 5000) {
+            lastHeader = millis();
+            hidRemoteDrawHeader(
+                s.transport, s.isConnected(), stealth ? "Stealth Jiggler" : "Mouse Jiggler"
+            );
+            hidRemoteDrawFooter("fn+Ok back");
         }
 
         delay(8);

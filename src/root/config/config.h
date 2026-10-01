@@ -125,6 +125,8 @@ public:
     int hidRemoteMouseSensitivity = 5;
     bool hidRemoteJoyInvertY = false;
     int hidRemoteJigglerInterval = 30;
+    int hidRemoteJigglerAmount = 2;  // pixels per jiggle step (1..50)
+    int hidRemoteJigglerDir = 0;     // 0=left-right, 1=up-down, 2=random
     int hidRemoteStealthMin = 45;
     int hidRemoteStealthMax = 120;
     int hidRemoteClickerDelay = 100;
@@ -141,6 +143,11 @@ public:
     uint8_t kremoteIrHw = 0;
     // Browse IR start folder on SD (empty = learned remotes path)
     String kremoteBrowseFolder = "";
+
+    // LAN Roku remote (ECP)
+    String rokuIp = "";
+    String rokuName = "";
+    String rokuSerial = "";
 
     // G0 long-press returns to main menu (Cardputer); sticky Esc until home clears it.
     bool g0HoldHome = true;
@@ -286,6 +293,8 @@ public:
     void setHidRemoteMouseSensitivity(int value);
     void setHidRemoteJoyInvertY(bool value);
     void setHidRemoteJigglerInterval(int value);
+    void setHidRemoteJigglerAmount(int value);
+    void setHidRemoteJigglerDir(int value);
     void setHidRemoteStealthMin(int value);
     void setHidRemoteStealthMax(int value);
     void setHidRemoteClickerDelay(int value);
@@ -298,6 +307,7 @@ public:
     void setKremoteButtonsSwapped(bool value);
     void setKremoteIrHw(uint8_t value);
     void setKremoteBrowseFolder(const String &value);
+    void setRokuDevice(const String &ip, const String &name, const String &serial);
 
     void setG0HoldHome(bool value);
     void setPdaKeyBind(int key1to8, uint8_t channelIndex);

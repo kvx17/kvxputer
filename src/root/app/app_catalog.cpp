@@ -22,6 +22,7 @@
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
 #include "menu/wifi/wifi_atks.h"
+#include "menu/wifi/roku/roku.h"
 #include "menu/ble/ble_common.h"
 #include "menu/ble/ble_spam.h"
 #include "menu/ble/hid_remote/hid_remote.h"
@@ -141,6 +142,7 @@ static bool devModeOn() { return kvxConfig.devMode; }
 static void launchWifiSta() { wifiConnectMenu(WIFI_STA); }
 static void launchWifiAp() { wifiStartApInteractive(); }
 static void launchWifiOff() { wifiDisconnect(); }
+static void launchRoku() { rokuMenu(); }
 static void launchApInfo() { displayAPInfo(); }
 static void launchWifiAtk() { wifi_atk_menu(); }
 static void launchEvilPortal() { EvilPortal(); }
@@ -398,6 +400,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"evil_portal", "Evil Portal", "WiFi", false, alwaysOn, launchEvilPortal},
         {"netcut", "NetCut", "WiFi", false, alwaysOn, launchNetcut},
         {"wifi_config", "WiFi Config", "WiFi", false, alwaysOn, launchWifiConfig},
+        {"roku", "Roku Remote", "WiFi", true, alwaysOn, launchRoku},
         {"beacon_spam", "Beacon SPAM", "WiFi", false, alwaysOn, launchBeacon},
         {"deauth_flood", "Deauth Flood", "WiFi", false, alwaysOn, launchDeauthFlood},
         {"enhanced_deauth", "Enhanced Deauth", "WiFi", false, alwaysOn, launchEnhancedDeauth},

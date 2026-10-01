@@ -8,6 +8,7 @@
 #include "root/hal/radio_mem.h"
 #include <cstring>
 #include <globals.h>
+#include <interface.h>
 
 static const uint16_t KVX_PURPLE = DEFAULT_PRICOLOR;
 static const uint16_t KVX_GREEN = DEFAULT_SECCOLOR;
@@ -47,8 +48,20 @@ HidVertDisplayScope::~HidVertDisplayScope() {
 void hidRemoteDrawHeader(HidRemoteTransport transport, bool connected, const char *modeLabel) {
     hidRemoteLedTick();
     const int dense = uiDenseFont();
+    const int cw = uiCharW(dense);
     tft.fillRect(0, 0, tftWidth, KVX_HEADER_H, KVX_BG);
     tft.setTextSize(dense);
+
+    uint8_t bat = getBattery();
+    String batStr;
+    if (bat > 0) batStr = String(bat) + "%";
+    const char *tr = transport == HID_REMOTE_USB ? "USB" : "BLE";
+    const int cellW = (bat > 0) ? 12 : 0;
+    const int batTextW = batStr.length() ? (int)batStr.length() * cw : 0;
+    const int trW = (int)strlen(tr) * cw;
+    // percent + gap + cell + gap + transport + gap + status dot
+    const int rightReserve = batTextW + (batTextW ? 2 : 0) + cellW + 4 + trW + 10;
+
     tft.setTextColor(KVX_PURPLE, KVX_BG);
     const char *leftTitle = KVXKEYBOARD_HID_NAME;
     if (connected) {
@@ -56,20 +69,35 @@ void hidRemoteDrawHeader(HidRemoteTransport transport, bool connected, const cha
         const String &host = gHidRemoteSession.getHostLabel();
         if (host.length() > 0) leftTitle = host.c_str();
     }
-    // Leave room for transport tag + status dot on the right.
-    int maxChars = (tftWidth - 48) / uiCharW(dense);
+    int maxChars = (tftWidth - rightReserve - 8) / cw;
     if (maxChars < 4) maxChars = 4;
-    String titleLeft = String(leftTitle).substring(0, maxChars);
-    tft.drawString(titleLeft, 4, 2);
+    tft.drawString(String(leftTitle).substring(0, maxChars), 4, 2);
+
+    int x = tftWidth - 4;
+    if (bat > 0) {
+        const uint16_t batColor = bat < 16 ? (uint16_t)0xF800 : KVX_GREEN;
+        tft.setTextColor(batColor, KVX_BG);
+        tft.drawRightString(batStr, x, 2, 1);
+        x -= batTextW + 2;
+        const int bx = x - cellW;
+        tft.drawRect(bx, 3, 10, 8, batColor);
+        tft.fillRect(bx + 10, 5, 2, 4, batColor);
+        int fill = (8 * (int)bat) / 100;
+        if (fill < 1 && bat > 0) fill = 1;
+        if (fill > 0) tft.fillRect(bx + 1, 4, fill, 6, batColor);
+        x = bx - 4;
+    }
+
     tft.setTextColor(KVX_GREEN, KVX_BG);
-    tft.drawRightString(transport == HID_REMOTE_USB ? "USB" : "BLE", tftWidth - 14, 2, 1);
-    if (connected) tft.fillCircle(tftWidth - 6, 6, 2, KVX_GREEN);
-    else tft.drawCircle(tftWidth - 6, 6, 2, KVX_PURPLE);
+    tft.drawRightString(tr, x, 2, 1);
+    const int dotX = x - trW - 6;
+    if (connected) tft.fillCircle(dotX, 6, 2, KVX_GREEN);
+    else tft.drawCircle(dotX, 6, 2, KVX_PURPLE);
+
     if (modeLabel != nullptr && modeLabel[0] != '\0') {
         tft.setTextColor(KVX_GREEN, KVX_BG);
-        int modeMax = max(4, (tftWidth - 8) / uiCharW(dense));
-        String mode = String(modeLabel).substring(0, modeMax);
-        tft.drawString(mode, 4, 10);
+        int modeMax = max(4, (tftWidth - 8) / cw);
+        tft.drawString(String(modeLabel).substring(0, modeMax), 4, 10);
     }
     tft.drawFastHLine(0, KVX_HEADER_H - 1, tftWidth, KVX_PURPLE);
 }

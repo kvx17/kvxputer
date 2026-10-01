@@ -61,6 +61,8 @@ public:
     bool switchToHost(const String &addr, unsigned long timeoutMs = 30000);
     bool switchToSlot(int slot1to8, unsigned long timeoutMs = 30000);
     bool pairIntoSlot(int slot1to8, unsigned long timeoutMs = 0);
+    // True once after a wait ended because the user held Esc. Other failures are false.
+    bool consumeUserCancel();
     bool reconnectNewHost();
 
     void pressKey(uint8_t key);

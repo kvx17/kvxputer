@@ -37,6 +37,7 @@
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
+#include "menu/wifi/roku/roku.h"
 
 #if defined(EVIL_EXTENSIONS)
 #include "menu/wifi/probe/probe.h"
@@ -103,6 +104,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
+    options.push_back({"Roku Remote", rokuMenu});
     options.push_back({"Config", [this]() { configMenu(); }});
 
 #if defined(EVIL_EXTENSIONS)
