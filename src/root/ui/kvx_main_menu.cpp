@@ -17,7 +17,8 @@ static constexpr int KVX_ROWS = 2;
 static constexpr int KVX_SLOTS = KVX_COLS * KVX_ROWS;
 static constexpr int KVX_FOOTER_H = 26;
 
-// Invalidate after leaving the grid (submenu / other screens overwrote the panel).
+// Page changes and returns from a submenu must repaint the whole grid.
+// A selection change only repaints the two tiles and the footer.
 static int s_lastIndex = -1;
 static int s_lastPage = -1;
 
@@ -125,6 +126,9 @@ static void drawOneTile(
 ) {
     int x, y;
     tileXY(g, itemIdx, x, y);
+    // Icon arcs are larger than a tile. Clip so a selection change cannot
+    // repaint the neighbor and shimmer the grid.
+    tft.setClipRect(x, y, g.cellW, g.cellH);
     bool selected = (itemIdx == selectedIdx);
     MenuItemInterface *item = (itemIdx < count) ? items[itemIdx] : nullptr;
     if (item) drawChannelTile(x, y, g.cellW, g.cellH, selected, item, g.scale * 0.5f);
@@ -132,20 +136,24 @@ static void drawOneTile(
         tft.fillRoundRect(x, y, g.cellW, g.cellH, 6, kvxConfig.bgColor);
         tft.drawRoundRect(x, y, g.cellW, g.cellH, 6, getColorVariation(kvxConfig.priColor, 10, -1));
     }
+    tft.clearClipRect();
+}
+
+static void invalidateKvxGridCache() {
+    s_lastIndex = -1;
+    s_lastPage = -1;
 }
 
 static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items) {
-    // Offscreen canvas then one present — avoids erase/redraw flash while navigating.
-    TftFrame frame;
     const int count = (int)items.size();
     if (count == 0) return;
 
     const int page = globalIndex / KVX_SLOTS;
     GridGeom g = computeGridGeom(globalIndex, count);
-
     const bool fullRedraw = (s_lastIndex < 0 || s_lastPage != page);
 
     if (fullRedraw) {
+        TftFrame frame;
         tft.fillScreen(kvxConfig.bgColor);
         drawKvxTopBar("kvxputer");
         tft.fillRect(0, g.top, tftWidth, g.gridH + 4, kvxConfig.bgColor);
@@ -161,23 +169,22 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
 
         drawFooter(globalIndex, items);
     } else if (s_lastIndex != globalIndex) {
-        // Same page: only flip selection highlight + footer (small dirty blit).
+        // Separate presents. One frame would union the tiles and the footer
+        // into a single blit of almost the whole panel.
         if (s_lastIndex >= g.pageStart && s_lastIndex < g.pageStart + KVX_SLOTS) {
+            TftFrame frame;
             drawOneTile(g, s_lastIndex, globalIndex, count, items);
         }
         if (globalIndex >= g.pageStart && globalIndex < g.pageStart + KVX_SLOTS) {
+            TftFrame frame;
             drawOneTile(g, globalIndex, globalIndex, count, items);
         }
+        TftFrame footer;
         drawFooter(globalIndex, items);
     }
 
     s_lastIndex = globalIndex;
     s_lastPage = page;
-}
-
-static void invalidateKvxGridCache() {
-    s_lastIndex = -1;
-    s_lastPage = -1;
 }
 
 int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
@@ -307,6 +314,7 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             kvxConfig.setDevMode(true);
             displayInfo("Dev Mode Enabled", true);
             invalidateKvxGridCache();
+            redraw = true;
         }
 
         static const unsigned long MENU_SELECT_IGNORE_MS = 600;
@@ -314,7 +322,6 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             ledSetStatus(LED_STATUS_BUSY);
             items[index]->optionsMenu();
             ledSetStatus(LED_STATUS_IDLE);
-            // Submenu overwrote the panel — next draw must be a full frame.
             invalidateKvxGridCache();
             redraw = true;
             if (forceHome) {

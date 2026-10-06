@@ -234,8 +234,13 @@ static void updateLed() {
 #endif
 }
 
+static void clearBody() {
+    const int top = 26;
+    tft.fillRect(6, top, tftWidth - 12, tftHeight - top - 6, kvxConfig.bgColor);
+}
+
 static void drawWelcome() {
-    drawMainBorderWithTitle("BadUSB Hunter");
+    clearBody();
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
@@ -249,7 +254,7 @@ static void drawWelcome() {
 }
 
 static void drawDevice(const UsbDeviceInfo &device) {
-    drawMainBorderWithTitle("BadUSB Hunter");
+    clearBody();
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
     int y = 28;
@@ -303,7 +308,7 @@ void badusbHunterMenu() {
     s_ledOn = false;
 
     ledTakeExclusive();
-    tft.fillScreen(kvxConfig.bgColor);
+    drawMainBorderWithTitle("BadUSB Hunter", true);
     drawWelcome();
 
     if (!installHost()) {
@@ -312,7 +317,7 @@ void badusbHunterMenu() {
         return;
     }
 
-    bool showingWelcome = true;
+    uint8_t shownAddr = 0; // 0 = welcome screen
 
     while (!returnToMenu && !forceHome) {
         if (check(EscPress)) break;
@@ -324,33 +329,36 @@ void badusbHunterMenu() {
         uint8_t addr = s_newAddr;
         if (addr) {
             s_newAddr = 0;
-            processDevice(addr);
-            drawDevice(s_device);
-            showingWelcome = false;
+            if (addr != shownAddr) {
+                processDevice(addr);
+                drawDevice(s_device);
+                shownAddr = addr;
+            }
         }
 
         if (s_devGone) {
             s_devGone = false;
             s_connected = false;
             s_device = {};
-            drawWelcome();
-            showingWelcome = true;
+            if (shownAddr != 0) {
+                drawWelcome();
+                shownAddr = 0;
+            }
             ledShowApp(0, 0, 0, 0);
         }
 
-        // Also poll address list in case callback missed a hotplug.
-        if (!s_connected && s_client) {
+        // Poll address list only while idle — avoid reprocessing a connected device.
+        if (!s_connected && shownAddr == 0 && s_client) {
             uint8_t list[8];
             int n = 0;
             if (usb_host_device_addr_list_fill(8, list, &n) == ESP_OK && n > 0) {
                 processDevice(list[0]);
                 drawDevice(s_device);
-                showingWelcome = false;
+                shownAddr = list[0];
             }
         }
 
         updateLed();
-        (void)showingWelcome;
         delay(40);
     }
 

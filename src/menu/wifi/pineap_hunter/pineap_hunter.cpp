@@ -31,6 +31,11 @@ struct PineRecord {
 static const size_t kMaxBssids = 50;
 static const uint32_t kScanIntervalMs = 2000;
 
+static void clearBody() {
+    const int top = 26;
+    tft.fillRect(6, top, tftWidth - 12, tftHeight - top - 6, kvxConfig.bgColor);
+}
+
 static void addScanResult(
     std::map<String, std::vector<SsidRecord>> &buffer, const String &bssid, const String &essid, int32_t rssi
 ) {
@@ -48,7 +53,6 @@ static void addScanResult(
 
 static void maintainBuffer(std::map<String, std::vector<SsidRecord>> &buffer) {
     while (buffer.size() > kMaxBssids) {
-        // Drop the oldest BSSID by newest SSID lastSeen among its records.
         String oldestKey;
         uint32_t oldest = UINT32_MAX;
         for (const auto &entry : buffer) {
@@ -87,8 +91,18 @@ static std::vector<PineRecord> detectPineaps(
     return out;
 }
 
+// True when the visible list content changed enough to warrant a redraw.
+static bool pinesVisuallyChanged(const std::vector<PineRecord> &a, const std::vector<PineRecord> &b) {
+    if (a.size() != b.size()) return true;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].bssid != b[i].bssid) return true;
+        if (a[i].essids.size() != b[i].essids.size()) return true;
+    }
+    return false;
+}
+
 static void drawMainList(const std::vector<PineRecord> &pines, int cursor, int alertSsids, int totalScans) {
-    drawMainBorderWithTitle("PineAP Hunter");
+    clearBody();
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
     const int x0 = 8;
@@ -97,9 +111,9 @@ static void drawMainList(const std::vector<PineRecord> &pines, int cursor, int a
     const int bottom = uiFooterY(dense);
 
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.drawString(
-        "thr " + String(alertSsids) + " SSIDs  scans " + String(totalScans) + "  UP/DN", x0, y, 1
-    );
+    char head[48];
+    snprintf(head, sizeof(head), "thr %2d SSIDs  scans %4d  UP/DN", alertSsids, totalScans);
+    tft.drawString(head, x0, y, 1);
     y += lh + 2;
 
     if (pines.empty()) {
@@ -116,7 +130,14 @@ static void drawMainList(const std::vector<PineRecord> &pines, int cursor, int a
             tft.setTextColor(
                 sel ? kvxConfig.bgColor : kvxConfig.priColor, sel ? kvxConfig.priColor : kvxConfig.bgColor
             );
-            String line = pines[i].bssid.substring(0, 17) + "  " + String((int)pines[i].essids.size());
+            char line[40];
+            snprintf(
+                line,
+                sizeof(line),
+                "%-17s %2d",
+                pines[i].bssid.substring(0, 17).c_str(),
+                (int)pines[i].essids.size()
+            );
             tft.drawString(line, x0, y, 1);
             y += lh;
         }
@@ -127,7 +148,7 @@ static void drawMainList(const std::vector<PineRecord> &pines, int cursor, int a
 }
 
 static void drawSsidList(const PineRecord &pine, int cursor) {
-    drawMainBorderWithTitle("PineAP SSIDs");
+    clearBody();
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
     const int x0 = 8;
@@ -139,7 +160,6 @@ static void drawSsidList(const PineRecord &pine, int cursor) {
     tft.drawString(pine.bssid, x0, y, 1);
     y += lh + 2;
 
-    // +1 for Back row
     int total = (int)pine.essids.size() + 1;
     int rows = (bottom - y) / lh;
     if (rows < 1) rows = 1;
@@ -155,7 +175,9 @@ static void drawSsidList(const PineRecord &pine, int cursor) {
         if (i == 0) line = "< Back";
         else {
             const auto &r = pine.essids[i - 1];
-            line = String(r.rssi) + "  " + r.essid;
+            char buf[40];
+            snprintf(buf, sizeof(buf), "%4d  %s", (int)r.rssi, r.essid.c_str());
+            line = buf;
             if (line.length() > 28) line = line.substring(0, 28);
         }
         tft.drawString(line, x0, y, 1);
@@ -186,12 +208,17 @@ void pineapHunterMenu() {
     int viewMode = 0; // 0 = main list, 2 = SSID list
     int selectedPine = 0;
     int totalScans = 0;
+    int paintedScans = -1;
+    int paintedAlert = -1;
+    int paintedCursor = -1;
+    int paintedView = -1;
+    int paintedSelected = -1;
     uint32_t lastScan = 0;
     uint32_t lastBeepMs = 0;
     size_t lastPineCount = 0;
     bool needsRedraw = true;
 
-    tft.fillScreen(kvxConfig.bgColor);
+    drawMainBorderWithTitle("PineAP Hunter", true);
 
     while (!returnToMenu && !forceHome) {
         if (check(EscPress)) break;
@@ -223,21 +250,27 @@ void pineapHunterMenu() {
                 delay(200);
             }
         } else {
-            const PineRecord &pine = pines[selectedPine];
-            int total = (int)pine.essids.size() + 1;
-            if (check(PrevPress) && total > 0) {
-                cursor = (cursor - 1 + total) % total;
-                needsRedraw = true;
-            }
-            if (check(NextPress) && total > 0) {
-                cursor = (cursor + 1) % total;
-                needsRedraw = true;
-            }
-            if (check(SelPress)) {
+            if (selectedPine >= (int)pines.size()) {
                 viewMode = 0;
-                cursor = selectedPine;
+                cursor = 0;
                 needsRedraw = true;
-                delay(200);
+            } else {
+                const PineRecord &pine = pines[selectedPine];
+                int total = (int)pine.essids.size() + 1;
+                if (check(PrevPress) && total > 0) {
+                    cursor = (cursor - 1 + total) % total;
+                    needsRedraw = true;
+                }
+                if (check(NextPress) && total > 0) {
+                    cursor = (cursor + 1) % total;
+                    needsRedraw = true;
+                }
+                if (check(SelPress)) {
+                    viewMode = 0;
+                    cursor = selectedPine;
+                    needsRedraw = true;
+                    delay(200);
+                }
             }
         }
 
@@ -251,20 +284,37 @@ void pineapHunterMenu() {
                 }
                 totalScans++;
                 maintainBuffer(buffer);
-                pines = detectPineaps(buffer, alertSsids);
-                if (cursor >= (int)pines.size()) cursor = pines.empty() ? 0 : (int)pines.size() - 1;
-                if (selectedPine >= (int)pines.size()) selectedPine = 0;
-                if (pines.size() > lastPineCount && (now - lastBeepMs > 500)) {
+                std::vector<PineRecord> next = detectPineaps(buffer, alertSsids);
+                if (cursor >= (int)next.size()) cursor = next.empty() ? 0 : (int)next.size() - 1;
+                if (selectedPine >= (int)next.size()) selectedPine = 0;
+                if (next.size() > lastPineCount && (now - lastBeepMs > 500)) {
                     _tone(4000, 50);
                     lastBeepMs = now;
                 }
-                lastPineCount = pines.size();
+                lastPineCount = next.size();
+                // Only mark dirty when the visible list actually changes.
+                if (viewMode == 0) {
+                    if (pinesVisuallyChanged(pines, next) || totalScans != paintedScans ||
+                        alertSsids != paintedAlert) {
+                        needsRedraw = true;
+                    }
+                } else if (selectedPine < (int)next.size()) {
+                    // SSID detail: redraw if that BSSID's SSID set grew/changed.
+                    bool sameBssid = selectedPine < (int)pines.size() &&
+                                     pines[selectedPine].bssid == next[selectedPine].bssid;
+                    size_t oldN = (selectedPine < (int)pines.size()) ? pines[selectedPine].essids.size() : 0;
+                    if (!sameBssid || next[selectedPine].essids.size() != oldN) needsRedraw = true;
+                }
+                pines = std::move(next);
+            } else if (totalScans != paintedScans) {
+                // Still bump scan counter display occasionally even with 0 APs.
                 needsRedraw = true;
             }
             WiFi.scanDelete();
         }
 
-        if (needsRedraw) {
+        if (needsRedraw || cursor != paintedCursor || viewMode != paintedView ||
+            selectedPine != paintedSelected || alertSsids != paintedAlert) {
             needsRedraw = false;
             if (viewMode == 2 && selectedPine < (int)pines.size()) {
                 drawSsidList(pines[selectedPine], cursor);
@@ -272,9 +322,14 @@ void pineapHunterMenu() {
                 viewMode = 0;
                 drawMainList(pines, cursor, alertSsids, totalScans);
             }
+            paintedScans = totalScans;
+            paintedAlert = alertSsids;
+            paintedCursor = cursor;
+            paintedView = viewMode;
+            paintedSelected = selectedPine;
         }
 
-        delay(20);
+        delay(40);
     }
 
     wifiDisconnect();
