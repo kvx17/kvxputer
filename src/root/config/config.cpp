@@ -97,6 +97,8 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["hidRemoteMouseSensitivity"] = hidRemoteMouseSensitivity;
     setting["hidRemoteJoyInvertY"] = hidRemoteJoyInvertY;
     setting["hidRemoteJigglerInterval"] = hidRemoteJigglerInterval;
+    setting["hidRemoteJigglerAmount"] = hidRemoteJigglerAmount;
+    setting["hidRemoteJigglerDir"] = hidRemoteJigglerDir;
     setting["hidRemoteStealthMin"] = hidRemoteStealthMin;
     setting["hidRemoteStealthMax"] = hidRemoteStealthMax;
     setting["hidRemoteClickerDelay"] = hidRemoteClickerDelay;
@@ -109,6 +111,15 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["kremoteButtonsSwapped"] = kremoteButtonsSwapped;
     setting["kremoteIrHw"] = kremoteIrHw;
     setting["kremoteBrowseFolder"] = kremoteBrowseFolder;
+    setting["rokuIp"] = rokuIp;
+    setting["rokuName"] = rokuName;
+    setting["rokuSerial"] = rokuSerial;
+    setting["morseWpm"] = morseWpm;
+    setting["jamDetectAlertPerSec"] = jamDetectAlertPerSec;
+    setting["jamDetectRssiFloor"] = jamDetectRssiFloor;
+    setting["bleHunterAlertPkts"] = bleHunterAlertPkts;
+    setting["bleHunterRssiFloor"] = bleHunterRssiFloor;
+    setting["pineapAlertSsids"] = pineapAlertSsids;
     setting["g0HoldHome"] = g0HoldHome;
     setting["pdaWcFace"] = pdaWcFace;
     JsonArray pdaBind = setting["pdaKeyBind"].to<JsonArray>();
@@ -119,6 +130,9 @@ JsonDocument KvxputerConfig::toJson() const {
 
     JsonObject sc = setting["mainscreenShortcuts"].to<JsonObject>();
     for (const auto &pair : mainscreenShortcuts) { sc[pair.first] = pair.second; }
+
+    JsonObject sch = setting["mainscreenShortcutHolds"].to<JsonObject>();
+    for (const auto &pair : mainscreenShortcutHolds) { sch[pair.first] = pair.second; }
 
     JsonArray qrArray = setting["qrCodes"].to<JsonArray>();
     for (const auto &entry : qrCodes) {
@@ -568,6 +582,15 @@ void KvxputerConfig::fromFile(bool checkFS) {
     if (!setting["hidRemoteJigglerInterval"].isNull()) {
         hidRemoteJigglerInterval = setting["hidRemoteJigglerInterval"].as<int>();
     }
+    if (!setting["hidRemoteJigglerAmount"].isNull()) {
+        hidRemoteJigglerAmount = setting["hidRemoteJigglerAmount"].as<int>();
+        if (hidRemoteJigglerAmount < 1) hidRemoteJigglerAmount = 1;
+        if (hidRemoteJigglerAmount > 50) hidRemoteJigglerAmount = 50;
+    }
+    if (!setting["hidRemoteJigglerDir"].isNull()) {
+        hidRemoteJigglerDir = setting["hidRemoteJigglerDir"].as<int>() % 3;
+        if (hidRemoteJigglerDir < 0) hidRemoteJigglerDir = 0;
+    }
     if (!setting["hidRemoteStealthMin"].isNull()) {
         hidRemoteStealthMin = setting["hidRemoteStealthMin"].as<int>();
     }
@@ -611,6 +634,40 @@ void KvxputerConfig::fromFile(bool checkFS) {
         if (p.length() && !p.startsWith("/")) p = "/" + p;
         kremoteBrowseFolder = p;
     }
+    if (!setting["rokuIp"].isNull()) rokuIp = setting["rokuIp"].as<String>();
+    if (!setting["rokuName"].isNull()) rokuName = setting["rokuName"].as<String>();
+    if (!setting["rokuSerial"].isNull()) rokuSerial = setting["rokuSerial"].as<String>();
+    if (!setting["morseWpm"].isNull()) {
+        int w = setting["morseWpm"].as<int>();
+        if (w < 5) w = 5;
+        if (w > 40) w = 40;
+        morseWpm = (uint8_t)w;
+    }
+    if (!setting["jamDetectAlertPerSec"].isNull()) {
+        jamDetectAlertPerSec = setting["jamDetectAlertPerSec"].as<int>();
+        if (jamDetectAlertPerSec < 5) jamDetectAlertPerSec = 5;
+        if (jamDetectAlertPerSec > 250) jamDetectAlertPerSec = 250;
+    }
+    if (!setting["jamDetectRssiFloor"].isNull()) {
+        jamDetectRssiFloor = setting["jamDetectRssiFloor"].as<int>();
+        if (jamDetectRssiFloor < -100) jamDetectRssiFloor = -100;
+        if (jamDetectRssiFloor > -10) jamDetectRssiFloor = -10;
+    }
+    if (!setting["bleHunterAlertPkts"].isNull()) {
+        bleHunterAlertPkts = setting["bleHunterAlertPkts"].as<int>();
+        if (bleHunterAlertPkts < 0) bleHunterAlertPkts = 0;
+        if (bleHunterAlertPkts > 100) bleHunterAlertPkts = 100;
+    }
+    if (!setting["bleHunterRssiFloor"].isNull()) {
+        bleHunterRssiFloor = setting["bleHunterRssiFloor"].as<int>();
+        if (bleHunterRssiFloor < -100) bleHunterRssiFloor = -100;
+        if (bleHunterRssiFloor > -10) bleHunterRssiFloor = -10;
+    }
+    if (!setting["pineapAlertSsids"].isNull()) {
+        pineapAlertSsids = setting["pineapAlertSsids"].as<int>();
+        if (pineapAlertSsids < 2) pineapAlertSsids = 2;
+        if (pineapAlertSsids > 50) pineapAlertSsids = 50;
+    }
     if (!setting["g0HoldHome"].isNull()) {
         g0HoldHome = setting["g0HoldHome"].as<bool>();
     }
@@ -644,6 +701,14 @@ void KvxputerConfig::fromFile(bool checkFS) {
         JsonObject sc = setting["mainscreenShortcuts"].as<JsonObject>();
         for (JsonPair kv : sc) {
             mainscreenShortcuts[String(kv.key().c_str())] = kv.value().as<String>();
+        }
+    }
+
+    if (!setting["mainscreenShortcutHolds"].isNull()) {
+        mainscreenShortcutHolds.clear();
+        JsonObject sch = setting["mainscreenShortcutHolds"].as<JsonObject>();
+        for (JsonPair kv : sch) {
+            mainscreenShortcutHolds[String(kv.key().c_str())] = kv.value().as<String>();
         }
     }
 
@@ -798,6 +863,44 @@ void KvxputerConfig::validateSoundEnabledValue() {
 
 void KvxputerConfig::validateSoundVolumeValue() {
     if (soundVolume > 100) soundVolume = 100;
+}
+
+void KvxputerConfig::setJamDetectAlertPerSec(int value) {
+    if (value < 5) value = 5;
+    if (value > 250) value = 250;
+    jamDetectAlertPerSec = value;
+    saveFile();
+}
+
+void KvxputerConfig::setJamDetectRssiFloor(int value) {
+    if (value < -100) value = -100;
+    if (value > -10) value = -10;
+    // Snap to 5 dBm steps (same range Nemo uses for DH RSSI).
+    value = (value / 5) * 5;
+    jamDetectRssiFloor = value;
+    saveFile();
+}
+
+void KvxputerConfig::setBleHunterAlertPkts(int value) {
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+    bleHunterAlertPkts = value;
+    saveFile();
+}
+
+void KvxputerConfig::setBleHunterRssiFloor(int value) {
+    if (value < -100) value = -100;
+    if (value > -10) value = -10;
+    value = (value / 5) * 5;
+    bleHunterRssiFloor = value;
+    saveFile();
+}
+
+void KvxputerConfig::setPineapAlertSsids(int value) {
+    if (value < 2) value = 2;
+    if (value > 50) value = 50;
+    pineapAlertSsids = value;
+    saveFile();
 }
 
 void KvxputerConfig::setWifiAtStartup(int value) {
@@ -1231,6 +1334,20 @@ void KvxputerConfig::setHidRemoteJigglerInterval(int value) {
     saveFile();
 }
 
+void KvxputerConfig::setHidRemoteJigglerAmount(int value) {
+    if (value < 1) value = 1;
+    if (value > 50) value = 50;
+    hidRemoteJigglerAmount = value;
+    saveFile();
+}
+
+void KvxputerConfig::setHidRemoteJigglerDir(int value) {
+    if (value < 0) value = 0;
+    if (value > 2) value = value % 3;
+    hidRemoteJigglerDir = value;
+    saveFile();
+}
+
 void KvxputerConfig::setHidRemoteStealthMin(int value) {
     if (value < 10) value = 10;
     hidRemoteStealthMin = value;
@@ -1300,6 +1417,13 @@ void KvxputerConfig::setKremoteBrowseFolder(const String &value) {
     while (p.length() > 1 && p.endsWith("/")) p.remove(p.length() - 1);
     if (p.length() && !p.startsWith("/")) p = "/" + p;
     kremoteBrowseFolder = p;
+    saveFile();
+}
+
+void KvxputerConfig::setRokuDevice(const String &ip, const String &name, const String &serial) {
+    rokuIp = ip;
+    rokuName = name;
+    rokuSerial = serial;
     saveFile();
 }
 

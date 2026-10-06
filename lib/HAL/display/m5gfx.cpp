@@ -49,6 +49,17 @@ void tft_display::markDirty(int32_t x, int32_t y, int32_t w, int32_t h) {
         h = -h;
     }
     if (w <= 0 || h <= 0) return;
+    if (_clipOn) {
+        int32_t x1c = x + w;
+        int32_t y1c = y + h;
+        if (x < _cx0) x = _cx0;
+        if (y < _cy0) y = _cy0;
+        if (x1c > _cx1) x1c = _cx1;
+        if (y1c > _cy1) y1c = _cy1;
+        w = x1c - x;
+        h = y1c - y;
+        if (w <= 0 || h <= 0) return;
+    }
     const int32_t x1 = x + w;
     const int32_t y1 = y + h;
     if (x < _dx0) _dx0 = (int16_t)x;
@@ -74,26 +85,12 @@ void tft_display::presentDirty() {
     const int32_t sh = ey - sy;
     if (sw <= 0 || sh <= 0) return;
 
-    // Full-frame: one sprite blit. Partial: push only dirty rows so menu
-    // selection changes do not re-SPI the whole 240x135 panel (less tear/jitter).
-    if (sx == 0 && sy == 0 && sw == bw && sh == bh) {
-        _fb->pushSprite(0, 0);
-        return;
-    }
-
-    const uint16_t *buf = (const uint16_t *)_fb->getBuffer();
-    if (!buf) {
-        M5.Display.setClipRect(sx, sy, sw, sh);
-        _fb->pushSprite(0, 0);
-        M5.Display.clearClipRect();
-        return;
-    }
-
-    M5.Display.startWrite();
-    for (int32_t row = 0; row < sh; row++) {
-        M5.Display.pushImage(sx, sy + row, sw, 1, buf + (sy + row) * bw + sx);
-    }
-    M5.Display.endWrite();
+    // One sprite blit. Per-row pushImage of the raw buffer swaps colors and
+    // leaves a gap between scanlines, which reads as jitter. Clip keeps the
+    // transfer to the dirty area without a second pixel buffer.
+    M5.Display.setClipRect(sx, sy, sw, sh);
+    _fb->pushSprite(0, 0);
+    M5.Display.clearClipRect();
 }
 
 void tft_display::releaseCanvas() {

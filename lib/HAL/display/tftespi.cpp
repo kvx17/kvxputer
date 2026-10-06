@@ -32,6 +32,17 @@ void tft_display::markDirty(int32_t x, int32_t y, int32_t w, int32_t h) {
         h = -h;
     }
     if (w <= 0 || h <= 0) return;
+    if (_clipOn) {
+        int32_t x1c = x + w;
+        int32_t y1c = y + h;
+        if (x < _cx0) x = _cx0;
+        if (y < _cy0) y = _cy0;
+        if (x1c > _cx1) x1c = _cx1;
+        if (y1c > _cy1) y1c = _cy1;
+        w = x1c - x;
+        h = y1c - y;
+        if (w <= 0 || h <= 0) return;
+    }
     const int32_t x1 = x + w;
     const int32_t y1 = y + h;
     if (x < _dx0) _dx0 = (int16_t)x;
@@ -69,8 +80,16 @@ void tft_display::presentDirty() {
     const int32_t sw = ex - sx;
     const int32_t sh = ey - sy;
     if (sw <= 0 || sh <= 0) return;
-    if (sx == 0 && sy == 0 && sw == bw && sh == bh) _fb->pushSprite(0, 0);
-    else _fb->pushSprite(sx, sy, sx, sy, sw, sh);
+    if (sx == 0 && sy == 0 && sw == bw && sh == bh) {
+        _fb->pushSprite(0, 0);
+        return;
+    }
+    // Cropped pushSprite writes one row per SPI transaction. The gaps between
+    // those transactions are the menu shimmer. Hold the bus for the whole rect.
+    startWrite();
+    _fb->pushSprite(sx, sy, sx, sy, sw, sh);
+    endWrite();
+    _fb->setWindow(0, 0, bw - 1, bh - 1);
 }
 
 void tft_display::releaseCanvas() {

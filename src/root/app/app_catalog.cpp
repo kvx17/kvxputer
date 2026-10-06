@@ -22,9 +22,17 @@
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
 #include "menu/wifi/wifi_atks.h"
+#include "menu/wifi/roku/roku.h"
 #include "menu/ble/ble_common.h"
 #include "menu/ble/ble_spam.h"
 #include "menu/ble/hid_remote/hid_remote.h"
+#ifndef LITE_VERSION
+#include "menu/ble/ble_hunter/ble_hunter.h"
+#include "menu/wifi/pineap_hunter/pineap_hunter.h"
+#if defined(SOC_USB_OTG_SUPPORTED)
+#include "menu/usb/badusb_hunter/badusb_hunter.h"
+#endif
+#endif
 #include "menu/gps/wardriving.h"
 #include "menu/nrf24/nrf_common.h"
 #include "menu/nrf24/nrf_jammer.h"
@@ -42,6 +50,15 @@
 #include "menu/others/badusb_ble/ducky_typer.h"
 #include "menu/others/calculator.h"
 #include "menu/others/qrcode_menu.h"
+#if defined(HAS_KEYBOARD)
+#include "menu/others/passgen/passgen.h"
+#include "menu/others/barcode/barcode.h"
+#include "menu/others/combo/combo.h"
+#if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
+#include "menu/others/dtmf/dtmf.h"
+#include "menu/others/morse/morse.h"
+#endif
+#endif
 #include "menu/others/timer.h"
 #if defined(HAS_NS4168_SPKR)
 #include "menu/others/audio.h"
@@ -51,6 +68,7 @@
 #endif
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_menu.h"
+#include "menu/others/drone/drone.h"
 #endif
 #include "menu/charge/charge_screen.h"
 
@@ -141,6 +159,7 @@ static bool devModeOn() { return kvxConfig.devMode; }
 static void launchWifiSta() { wifiConnectMenu(WIFI_STA); }
 static void launchWifiAp() { wifiStartApInteractive(); }
 static void launchWifiOff() { wifiDisconnect(); }
+static void launchRoku() { rokuMenu(); }
 static void launchApInfo() { displayAPInfo(); }
 static void launchWifiAtk() { wifi_atk_menu(); }
 static void launchEvilPortal() { EvilPortal(); }
@@ -158,6 +177,7 @@ static void launchSsh() { ssh_setup(""); }
 static void launchSniffer() { sniffer_setup(); }
 static void launchChannelAnalyzer() { channel_analyzer_setup(); }
 static void launchJamDetect() { jam_detect_setup(); }
+static void launchPineapHunter() { pineapHunterMenu(); }
 static void launchScanHosts() {
     bool doScan = true;
     if (!WiFi.isConnected()) doScan = wifiConnectMenu();
@@ -188,6 +208,7 @@ static void launchC5Serial() { c5SerialMenu(); }
 static void launchHidBle() { hidRemoteMenu(HID_REMOTE_LAUNCH_BLE); }
 static void launchMediaCmds() { MediaCommands(hid_ble, true); }
 static void launchBleScan() { ble_scan(); }
+static void launchBleHunter() { bleHunterMenu(); }
 static void launchIbeacon() { ibeacon("Bruce", "e4c159a0-8c82-11e6-bdf4-0800200c9a66", 0x004C); }
 static void launchBadBle() { ducky_setup(hid_ble, true); }
 static void launchBleKeyboard() { ducky_keyboard(hid_ble, true); }
@@ -315,11 +336,21 @@ static void launchSdCard() {
 }
 static void launchQrcode() { qrcode_menu(); }
 static void launchCalculator() { calculatorApp(); }
+#if defined(HAS_KEYBOARD)
+static void launchPassgen() { passgenMenu(); }
+static void launchBarcode() { barcodeMenu(); }
+static void launchCombo() { comboMenu(); }
+#if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
+static void launchDtmf() { dtmfMenu(); }
+static void launchMorse() { morseMenu(); }
+#endif
+#endif
 #if defined(HAS_NS4168_SPKR)
 static void launchMediaPlayer() { mediaPlayerApp(); }
 #endif
 #ifndef LITE_VERSION
 static void launchPda() { pdaMenu(); }
+static void launchDroneId() { droneIdMenu(); }
 #endif
 static void launchTimer() { Timer(); }
 static void launchClock() { runClockLoop(true); }
@@ -337,6 +368,7 @@ static void launchMicMenu() { mainMenu.othersMenu.micMenu(); }
 #endif
 #if defined(SOC_USB_OTG_SUPPORTED)
 static void launchMassStorage() { MassStorage(); }
+static void launchBadusbHunter() { badusbHunterMenu(); }
 #endif
 #endif
 #if defined(EVIL_EXTENSIONS)
@@ -398,6 +430,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"evil_portal", "Evil Portal", "WiFi", false, alwaysOn, launchEvilPortal},
         {"netcut", "NetCut", "WiFi", false, alwaysOn, launchNetcut},
         {"wifi_config", "WiFi Config", "WiFi", false, alwaysOn, launchWifiConfig},
+        {"roku", "Roku Remote", "WiFi", true, alwaysOn, launchRoku},
         {"beacon_spam", "Beacon SPAM", "WiFi", false, alwaysOn, launchBeacon},
         {"deauth_flood", "Deauth Flood", "WiFi", false, alwaysOn, launchDeauthFlood},
         {"enhanced_deauth", "Enhanced Deauth", "WiFi", false, alwaysOn, launchEnhancedDeauth},
@@ -410,6 +443,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"sniffer", "Sniffer", "WiFi", true, notLite, launchSniffer},
         {"channel_analyzer", "kvx wifi analyzer", "WiFi", true, notLite, launchChannelAnalyzer},
         {"jam_detect", "Jam Detect", "WiFi", true, notLite, launchJamDetect},
+        {"pineap_hunter", "PineAP Hunter", "WiFi", true, notLite, launchPineapHunter},
         {"scan_hosts", "Scan Hosts", "WiFi", true, notLite, launchScanHosts},
         {"wireguard", "Wireguard", "WiFi", false, notLite, launchWireguard},
         {"responder", "Responder", "WiFi", false, notLite, launchResponder},
@@ -433,6 +467,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"hid_ble", "kvxkeyboard HID", "BLE", false, notLite, launchHidBle},
         {"media_cmds", "Media Cmds", "BLE", false, notLite, launchMediaCmds},
         {"ble_scan", "BLE Scan", "BLE", true, alwaysOn, launchBleScan},
+        {"ble_hunter", "BLE Hunter", "BLE", true, notLite, launchBleHunter},
         {"ibeacon", "iBeacon", "BLE", false, notLite, launchIbeacon},
         {"bad_ble", "Bad BLE", "BLE", false, notLite, launchBadBle},
         {"ble_keyboard", "BLE Keyboard", "BLE", false, notLite, launchBleKeyboard},
@@ -569,18 +604,29 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"hid_usb", "kvxkeyboard HID", "USB", false, notLite, launchHidUsb},
         {"bad_usb", "BadUSB", "USB", false, notLite, launchBadUsb},
 #if defined(SOC_USB_OTG_SUPPORTED)
+        {"badusb_hunter", "BadUSB Hunter", "USB", true, notLite, launchBadusbHunter},
         {"mass_storage", "Mass Storage", "USB", false, notLite, launchMassStorage},
 #endif
 #endif
 
         // Tools
         {"qrcode", "QRCodes", "Tools", false, alwaysOn, launchQrcode},
+#if defined(HAS_KEYBOARD)
+        {"barcode", "Barcode", "Tools", false, alwaysOn, launchBarcode},
+        {"passgen", "Passgen", "Tools", false, alwaysOn, launchPassgen},
+        {"combo", "Combo Cracker", "Tools", false, alwaysOn, launchCombo},
+#if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
+        {"dtmf", "DTMF", "Tools", false, notLite, launchDtmf},
+        {"morse", "Morse", "Tools", false, notLite, launchMorse},
+#endif
+#endif
         {"tools_calc", "Calculator", "Tools", false, alwaysOn, launchCalculator},
 #if defined(HAS_NS4168_SPKR)
         {"media_player", "Media Player", "Tools", false, notLite, launchMediaPlayer},
 #endif
 #ifndef LITE_VERSION
         {"pda", "PDA", "Tools", false, notLite, launchPda},
+        {"drone_id", "Drone ID", "Tools", false, notLite, launchDroneId},
         {"ibutton", "iButton", "Tools", false, notLite, launchIbutton},
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
         {"mic_menu", "Microphone", "Tools", false, notLite, launchMicMenu},
@@ -739,18 +785,22 @@ static bool appCatalogKeystrokeReserved(const keyStroke &key) {
 
 static bool purgeReservedShortcuts() {
     bool changed = false;
-    auto it = kvxConfig.mainscreenShortcuts.begin();
-    while (it != kvxConfig.mainscreenShortcuts.end()) {
-        bool drop = it->first.isEmpty();
-        const String &k = it->first;
-        for (size_t i = 0; !drop && i < k.length(); i++) {
-            if (appCatalogKeyReserved(k[i])) drop = true;
+    auto purgeMap = [&](std::map<String, String> &m) {
+        auto it = m.begin();
+        while (it != m.end()) {
+            bool drop = it->first.isEmpty();
+            const String &k = it->first;
+            for (size_t i = 0; !drop && i < k.length(); i++) {
+                if (appCatalogKeyReserved(k[i])) drop = true;
+            }
+            if (drop) {
+                it = m.erase(it);
+                changed = true;
+            } else ++it;
         }
-        if (drop) {
-            it = kvxConfig.mainscreenShortcuts.erase(it);
-            changed = true;
-        } else ++it;
-    }
+    };
+    purgeMap(kvxConfig.mainscreenShortcuts);
+    purgeMap(kvxConfig.mainscreenShortcutHolds);
     return changed;
 }
 
@@ -898,22 +948,62 @@ bool appCatalogHandleMainscreenKeys() {
     if (UpPress || DownPress || PrevPress || NextPress || SelPress || EscPress) return false;
     if (appCatalogKeystrokeReserved(KeyStroke)) return false;
 
-    String appId;
+    static constexpr unsigned long kHoldMs = 450;
+
+    String tapId;
+    String holdId;
+    char keyChar = 0;
     bool hit = false;
     vTaskSuspend(xHandle);
     for (char c : KeyStroke.word) {
         if (appCatalogKeyReserved(c)) continue;
         String k;
         k += c;
-        auto it = kvxConfig.mainscreenShortcuts.find(k);
-        if (it == kvxConfig.mainscreenShortcuts.end()) continue;
-        appId = it->second;
+        auto itTap = kvxConfig.mainscreenShortcuts.find(k);
+        auto itHold = kvxConfig.mainscreenShortcutHolds.find(k);
+        const bool hasTap = itTap != kvxConfig.mainscreenShortcuts.end();
+        const bool hasHold = itHold != kvxConfig.mainscreenShortcutHolds.end();
+        if (!hasTap && !hasHold) continue;
+        keyChar = c;
+        if (hasTap) tapId = itTap->second;
+        if (hasHold) holdId = itHold->second;
         hit = true;
         KeyStroke.Clear();
         break;
     }
     vTaskResume(xHandle);
     if (!hit) return false;
+
+    String appId;
+    if (holdId.length() == 0) {
+        // Tap-only: launch immediately (legacy behavior).
+        appId = tapId;
+    } else {
+        // Wait for hold threshold or release.
+        const unsigned long t0 = millis();
+        bool launchedHold = false;
+        while (isCardputerKeyHeld(keyChar) && !returnToMenu && !forceHome) {
+            if (millis() - t0 >= kHoldMs) {
+                appId = holdId;
+                launchedHold = true;
+                break;
+            }
+            delay(10);
+        }
+        // Consume residual key events from the hold.
+        KeyStroke.Clear();
+        EscPress = false;
+        SelPress = false;
+        if (!launchedHold) {
+            if (tapId.length() == 0) return false; // hold-only, short press: ignore
+            appId = tapId;
+        }
+        // Wait for key release so we do not re-trigger.
+        while (isCardputerKeyHeld(keyChar) && !returnToMenu && !forceHome) delay(10);
+        KeyStroke.Clear();
+    }
+
+    if (appId.length() == 0) return false;
     ledSetStatus(LED_STATUS_BUSY);
     appCatalogLaunch(appId);
     ledSetStatus(LED_STATUS_IDLE);
@@ -923,8 +1013,10 @@ bool appCatalogHandleMainscreenKeys() {
 #endif
 }
 
+static bool gBindAsHold = false;
+
 static void bindMainscreenShortcut(const String &appId) {
-    drawMainBorderWithTitle("Press a key");
+    drawMainBorderWithTitle(gBindAsHold ? "Hold key" : "Press a key");
     tft.setTextSize(FP);
     tft.drawString("Arrows Enter Esc ` FN Tab", 8, 40);
     tft.drawString("Shift Ctrl Opt Alt Del no", 8, 54);
@@ -941,9 +1033,15 @@ static void bindMainscreenShortcut(const String &appId) {
         if (appCatalogKeyReserved(c)) continue;
         String k;
         k += c;
-        kvxConfig.mainscreenShortcuts[k] = appId;
-        kvxConfig.saveFile();
-        displayInfo(k + " -> " + appCatalogLabel(appId), true);
+        if (gBindAsHold) {
+            kvxConfig.mainscreenShortcutHolds[k] = appId;
+            kvxConfig.saveFile();
+            displayInfo(k + " hold -> " + appCatalogLabel(appId), true);
+        } else {
+            kvxConfig.mainscreenShortcuts[k] = appId;
+            kvxConfig.saveFile();
+            displayInfo(k + " tap -> " + appCatalogLabel(appId), true);
+        }
         return;
     }
 }
@@ -994,6 +1092,7 @@ static void pickShortcutApp() {
         "Files",
         "USB",
         "Others",
+        "Tools",
         "Clock",
         "Settings",
     };
@@ -1038,21 +1137,47 @@ static void pickShortcutApp() {
     loopOptions(opts, MENU_TYPE_SUBMENU, "Bind Target");
 }
 
+static void addShortcutBinding() {
+    std::vector<Option> opts = {
+        {"Tap",
+         []() {
+             gBindAsHold = false;
+             pickShortcutApp();
+         }},
+        {"Hold",
+         []() {
+             gBindAsHold = true;
+             pickShortcutApp();
+         }},
+        {"Back", []() {}},
+    };
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Binding type");
+}
+
 void setMainscreenShortcutsMenu() {
     if (purgeReservedShortcuts()) kvxConfig.saveFile();
     while (true) {
         std::vector<Option> opts;
         for (const auto &pair : kvxConfig.mainscreenShortcuts) {
             String key = pair.first;
-            String line = key + " -> " + appCatalogLabel(pair.second);
+            String line = key + " tap -> " + appCatalogLabel(pair.second);
             opts.push_back({line, [key]() {
                                 kvxConfig.mainscreenShortcuts.erase(key);
                                 kvxConfig.saveFile();
                             }});
         }
-        opts.push_back({"Add binding", pickShortcutApp});
+        for (const auto &pair : kvxConfig.mainscreenShortcutHolds) {
+            String key = pair.first;
+            String line = key + " hold -> " + appCatalogLabel(pair.second);
+            opts.push_back({line, [key]() {
+                                kvxConfig.mainscreenShortcutHolds.erase(key);
+                                kvxConfig.saveFile();
+                            }});
+        }
+        opts.push_back({"Add binding", addShortcutBinding});
         opts.push_back({"Clear all", []() {
                             kvxConfig.mainscreenShortcuts.clear();
+                            kvxConfig.mainscreenShortcutHolds.clear();
                             kvxConfig.saveFile();
                         }});
         opts.push_back({"Back", []() {}});

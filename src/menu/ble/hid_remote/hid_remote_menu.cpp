@@ -41,7 +41,7 @@ static void hidRemotePairWaitUi(int slot) {
     tft.fillScreen(0x0841);
     hidRemoteDrawHeader(HID_REMOTE_BLE, false, ("Pair slot " + String(slot)).c_str());
     hidRemoteDrawStatus("Pair new host only", kvxConfig.hidRemoteBleName.c_str());
-    hidRemoteDrawFooter("ESC cancel");
+    hidRemoteDrawFooter("Hold ESC to cancel");
 }
 
 static void hidRemoteSwitchWaitUi(int slot, const String &name) {
@@ -51,11 +51,42 @@ static void hidRemoteSwitchWaitUi(int slot, const String &name) {
     hidRemoteDrawFooter("ESC cancel");
 }
 
+static void hidRemoteLedIdle() {
+    if (gHidRemoteSession.isConnected()) hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
+    else hidRemoteLedSet(HID_REMOTE_LED_OFF);
+}
+
 static bool hidRemoteRunPairIntoSlot(int slot) {
     hidRemoteClearMenuKeys();
-    hidRemotePairWaitUi(slot);
-    hidRemoteLedSet(HID_REMOTE_LED_PAIRING);
-    return gHidRemoteSession.pairIntoSlot(slot, 0);
+    // Keep this screen up until a host connects or the user holds Esc.
+    while (!forceHome) {
+        hidRemotePairWaitUi(slot);
+        hidRemoteLedSet(HID_REMOTE_LED_PAIRING);
+        const bool ok = gHidRemoteSession.pairIntoSlot(slot, 0);
+        EscPress = false;
+        SelPress = false;
+        if (ok) return true;
+        if (forceHome || gHidRemoteSession.consumeUserCancel()) {
+            const unsigned long drainUntil = millis() + 600;
+            while (millis() < drainUntil) {
+                EscPress = false;
+#if defined(HAS_KEYBOARD)
+                if (!isCardputerKeyHeld('`')) break;
+#endif
+                delay(20);
+            }
+            EscPress = false;
+            SelPress = false;
+            hidRemoteLedIdle();
+            return false;
+        }
+        // Advertising failed — brief pause then retry without tearing BLE down.
+        delay(300);
+    }
+    EscPress = false;
+    SelPress = false;
+    hidRemoteLedIdle();
+    return false;
 }
 
 static void hidRemoteIdleAdvertiseStop() { gHidRemoteSession.advertiseStop(); }
@@ -200,6 +231,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
         const bool linkedNow = gHidRemoteSession.isConnected();
         hidRemoteDrawHostSlots(HID_REMOTE_BLE, linkedNow);
         hidRemoteDrawFooter(footer);
+        hidRemoteLedIdle();
         wasConnected = linkedNow;
         lastLiveAddr = "";
     };
@@ -225,8 +257,7 @@ static bool hidRemoteHostSlotScreen(bool fromSettings) {
             // liveAddr may include type suffix; slot matching uses hidRemoteAddrEqual elsewhere.
             hidRemoteDrawHostSlots(HID_REMOTE_BLE, linked);
             hidRemoteDrawFooter(footer);
-            if (linked) hidRemoteLedSet(HID_REMOTE_LED_CONNECTED);
-            else if (wasConnected) hidRemoteLedSet(HID_REMOTE_LED_DISCONNECTED);
+            hidRemoteLedIdle();
             wasConnected = linked;
             lastLiveAddr = liveAddr;
         }
@@ -590,6 +621,17 @@ static void hidRemoteSettingsMenu() {
              []() {
                  kvxConfig.setHidRemoteJigglerInterval(kvxConfig.hidRemoteJigglerInterval + 5);
              }},
+            {"Jiggler amount: " + String(kvxConfig.hidRemoteJigglerAmount) + "px",
+             []() {
+                 int n = kvxConfig.hidRemoteJigglerAmount + 1;
+                 if (n > 20) n = 1;
+                 kvxConfig.setHidRemoteJigglerAmount(n);
+             }},
+            {String("Jiggler dir: ") +
+                 (kvxConfig.hidRemoteJigglerDir == 1
+                      ? "Up-Down"
+                      : (kvxConfig.hidRemoteJigglerDir == 2 ? "Random" : "Left-Right")),
+             []() { kvxConfig.setHidRemoteJigglerDir((kvxConfig.hidRemoteJigglerDir + 1) % 3); }},
             {"Stealth min: " + String(kvxConfig.hidRemoteStealthMin) + "s",
              []() { kvxConfig.setHidRemoteStealthMin(kvxConfig.hidRemoteStealthMin + 5); }},
             {"Stealth max: " + String(kvxConfig.hidRemoteStealthMax) + "s",

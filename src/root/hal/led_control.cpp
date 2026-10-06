@@ -241,8 +241,14 @@ void ledShowApp(uint8_t r, uint8_t g, uint8_t b, uint8_t bright) {
     ledKeepBright = bright;
     if (ledExclusive) {
         ledEnsureKeepTask();
-        // Paint only on change. Periodic FastLED.show of the same color blinks WS2812.
-        if (!same) ledKeepDirty = true;
+        // Paint immediately on change. Queuing alone raced open: setBrightness
+        // called ledKeepRequest while keep was still 0/0/0/0 and blanked the LED.
+        if (!same) {
+            fill_solid(leds, LED_COUNT, CRGB(r, g, b));
+            FastLED.setBrightness(bright);
+            ledPushLocked();
+            ledKeepDirty = false;
+        }
         return;
     }
     fill_solid(leds, LED_COUNT, CRGB(r, g, b));

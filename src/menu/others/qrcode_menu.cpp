@@ -31,11 +31,30 @@ String calculate_crc(String input) {
 
 void qrcode_display(const String &qrcodeUrl) {
 #ifdef HAS_SCREEN
+    bool inverted = true; // default: black bg, white modules
     QRcode qrcode(&tft);
     qrcode.init();
-    qrcode.create(qrcodeUrl);
-    delay(300); // Due to M5 sel press, it could be confusing with next line
-    while (!check(EscPress) && !check(SelPress)) delay(100);
+    qrcode.create(qrcodeUrl, inverted);
+    delay(200);
+    SelPress = false;
+    EscPress = false;
+    KeyStroke.Clear();
+    while (!returnToMenu && !forceHome) {
+        if (check(EscPress)) break;
+        if (check(SelPress)) break;
+        keyStroke key = _getKeyPress();
+        if (key.pressed) {
+            for (char c : key.word) {
+                if (c == ' ') {
+                    inverted = !inverted;
+                    qrcode.create(qrcodeUrl, inverted);
+                    break;
+                }
+            }
+            KeyStroke.Clear();
+        }
+        delay(40);
+    }
     tft.fillScreen(kvxConfig.bgColor);
 #endif
 }

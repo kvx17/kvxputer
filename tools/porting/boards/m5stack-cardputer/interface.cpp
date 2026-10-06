@@ -292,18 +292,13 @@ void _setBrightness(uint8_t brightval) {
 #endif
         return;
     }
-    int bl;
-    if (chargeModeActive) {
-        // Nightstand: linear to near-off, then 0 blanks.
-        bl = 12 + (int)(243 * (int)brightval / 100);
-    } else {
-        // PWM below ~110 flickers off on this panel. Map 5–100% onto 115–255
-        // so FN 5% stays steadily on (Charge still uses the darker ramp above).
-        int pct = brightval < 5 ? 5 : (brightval > 100 ? 100 : brightval);
-        bl = 115 + (int)(140 * (pct - 5) / 95);
-        if (bl < 115) bl = 115;
-        if (bl > 255) bl = 255;
-    }
+    // Same visible PWM map as the main UI. Charge used to use a darker
+    // "nightstand" ramp that left the panel looking off on open (and after
+    // dimming). Floor PWM at ~115 so any non-zero % stays steadily lit.
+    int pct = brightval < 5 ? 5 : (brightval > 100 ? 100 : brightval);
+    int bl = 115 + (int)(140 * (pct - 5) / 95);
+    if (bl < 115) bl = 115;
+    if (bl > 255) bl = 255;
     analogWrite(TFT_BL, bl);
 #ifdef HAS_RGB_LED
     if (chargeModeActive) ledKeepRequest();

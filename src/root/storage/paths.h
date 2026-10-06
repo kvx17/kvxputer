@@ -111,6 +111,8 @@ constexpr const char *COMPANIONS           = "/support_files/companions";
 // Others / misc support
 constexpr const char *IBUTTON              = "/support_files/others/ibutton";
 constexpr const char *IBUTTON_LEGACY       = "/BruceIButton";
+constexpr const char *PASSGEN              = "/kvxputer/myPasswords";
+constexpr const char *PASSGEN_LEGACY       = "/kvxputer/passgen";
 
 // PDA (Pocket Device Assistant)
 constexpr const char *PDA                  = "/support_files/pda";

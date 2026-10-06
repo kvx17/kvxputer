@@ -33,6 +33,10 @@ bool tts(String text, PlaybackMode mode = PLAYBACK_BLOCKING);
 bool isAudioFile(const String &filePath);
 void playTone(unsigned int frequency, unsigned long duration = 0UL, short waveType = 0, bool stopOnKey = true);
 void _tone(unsigned int frequency, unsigned long duration = 0UL);
+// Dual-tone (DTMF): sum of two sines on speaker path; BUZZ_PIN plays sequentially.
+void playDualTone(unsigned int freq1, unsigned int freq2, unsigned long durationMs);
+// Stop speaker / tick I2S so mic capture can own the audio bus.
+void audioSilenceSpeaker();
 // Code-generated square beep (no file). Amplitude follows volume 0–100.
 void playVolumeTickBeep(uint8_t volumePercent);
 

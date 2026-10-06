@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#include "menu/others/audio.h"
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
@@ -29,17 +30,21 @@ static const uint16_t JD_DWELL = 100;
 // Counters for the current channel's dwell window.
 static volatile uint32_t jd_deauth = 0;
 static volatile uint32_t jd_total = 0;
+static volatile int8_t jd_last_rssi = -127;
 
 static void IRAM_ATTR jd_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     if (!pkt) return;
-    jd_total++;
+    jd_total = jd_total + 1;
     if (pkt->rx_ctrl.sig_len < 2) return;
     const uint8_t *f = pkt->payload;
     uint16_t fc = (uint16_t)f[0] | ((uint16_t)f[1] << 8);
     uint8_t ftype = (fc & 0x0C) >> 2; // 0 = management
     uint8_t fsub = (fc & 0xF0) >> 4;  // 0x0C deauth, 0x0A disassoc
-    if (ftype == 0x00 && (fsub == 0x0C || fsub == 0x0A)) jd_deauth++;
+    if (ftype == 0x00 && (fsub == 0x0C || fsub == 0x0A)) {
+        jd_deauth = jd_deauth + 1;
+        jd_last_rssi = pkt->rx_ctrl.rssi;
+    }
 }
 
 static void jd_start_wifi() {
@@ -72,34 +77,65 @@ static void jd_stop_wifi() {
     vTaskDelay(1 / portTICK_RATE_MS);
 }
 
-static void
-jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, int attackCh) {
-    drawMainBorderWithTitle("Jam Detect");
-    // 11 channel rows cannot fit FP body glyphs — keep dense HUD chrome.
+// Clear only the app body (below title rule). Chrome is drawn once at entry.
+static void jd_clear_body() {
+    const int top = 26;
+    const int bottomPad = 6;
+    tft.fillRect(6, top, tftWidth - 12, tftHeight - top - bottomPad, kvxConfig.bgColor);
+}
+
+static void jd_draw_rssi_bar(int x, int y, int w, int h, int8_t rssi, int floorDbm) {
+    tft.drawRect(x, y, w, h, kvxConfig.priColor);
+    tft.fillRect(x + 1, y + 1, w - 2, h - 2, kvxConfig.bgColor);
+    int span = 0 - floorDbm;
+    if (span < 1) span = 1;
+    int level = (int)rssi - floorDbm;
+    if (level < 0) level = 0;
+    if (level > span) level = span;
+    int fill = (w - 2) * level / span;
+    if (fill > 0) tft.fillRect(x + 1, y + 1, fill, h - 2, kvxConfig.priColor);
+}
+
+static void jd_draw(
+    const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, int attackCh, bool hopPaused,
+    int8_t lastRssi, int rssiFloor
+) {
+    jd_clear_body();
+
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
 
     const int x0 = 8;
     int y = 26;
 
-    // status banner
     bool attack = (attackCh >= 0);
     uint16_t sc = attack ? TFT_RED : TFT_GREEN;
     const int bannerH = uiLineH(dense) + 10;
     tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
     tft.setTextColor(TFT_BLACK, sc);
-    String banner = attack ? ("ATTACK ch" + String(attackCh) + "  " + String(dps[attackCh]) + "/s")
-                           : "scanning... no jamming";
+    String banner;
+    if (hopPaused) banner = "FROZEN ch" + String(curCh);
+    else if (attack) banner = "ATTACK ch" + String(attackCh) + "  " + String(dps[attackCh]) + "/s";
+    else banner = "scanning... no jamming";
     tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
-    y += bannerH + 6;
+    y += bannerH + 4;
 
-    // per-channel deauth bars
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    // Fixed-width RSSI so shorter values do not leave ghosts.
+    char rssiBuf[20];
+    snprintf(rssiBuf, sizeof(rssiBuf), "RSSI %4ddBm", (int)lastRssi);
+    tft.drawString(rssiBuf, x0, y, 1);
+    int barX = x0 + tft.textWidth("RSSI -000dBm") + 6;
+    int barW = tftWidth - barX - x0;
+    if (barW > 20) jd_draw_rssi_bar(barX, y, barW, uiLineH(dense), lastRssi, rssiFloor);
+    y += uiLineH(dense) + 4;
+
     const int labelW = 28;
-    const int valW = 26;
-    const int barX = x0 + labelW;
+    const int valW = 30;
+    const int chBarX = x0 + labelW;
     const int bottom = uiFooterY(dense);
     const int rowH = (bottom - y) / JD_NCH;
-    const int barW = tftWidth - barX - valW - 6;
+    const int barWch = tftWidth - chBarX - valW - 6;
     uint32_t scale = thr * 2;
     if (scale < 4) scale = 4;
 
@@ -117,66 +153,110 @@ jd_draw(const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, 
 
         int bh = rowH - 3;
         if (bh < 4) bh = 4;
-        tft.drawRect(barX, ry, barW, bh, kvxConfig.priColor);
-        tft.fillRect(barX + 1, ry + 1, barW - 2, bh - 2, kvxConfig.bgColor);
-        uint32_t fillW = (uint32_t)(barW - 2) * dps[ch] / scale;
-        if (fillW > (uint32_t)(barW - 2)) fillW = barW - 2;
-        if (fillW > 0) tft.fillRect(barX + 1, ry + 1, (int)fillW, bh - 2, over ? TFT_RED : kvxConfig.priColor);
-        // peak-hold marker
-        uint32_t pkX = (uint32_t)(barX + 1) + (uint32_t)(barW - 2) * peak[ch] / scale;
-        if (peak[ch] > 0 && pkX > (uint32_t)(barX + 1)) tft.drawFastVLine((int)pkX, ry + 1, bh - 2, TFT_YELLOW);
+        tft.drawRect(chBarX, ry, barWch, bh, kvxConfig.priColor);
+        tft.fillRect(chBarX + 1, ry + 1, barWch - 2, bh - 2, kvxConfig.bgColor);
+        uint32_t fillW = (uint32_t)(barWch - 2) * dps[ch] / scale;
+        if (fillW > (uint32_t)(barWch - 2)) fillW = barWch - 2;
+        if (fillW > 0)
+            tft.fillRect(chBarX + 1, ry + 1, (int)fillW, bh - 2, over ? TFT_RED : kvxConfig.priColor);
+        uint32_t pkX = (uint32_t)(chBarX + 1) + (uint32_t)(barWch - 2) * peak[ch] / scale;
+        if (peak[ch] > 0 && pkX > (uint32_t)(chBarX + 1))
+            tft.drawFastVLine((int)pkX, ry + 1, bh - 2, TFT_YELLOW);
 
         tft.setTextColor(over ? TFT_RED : kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawString(String(dps[ch]), barX + barW + 4, ry, 1);
+        char valBuf[8];
+        snprintf(valBuf, sizeof(valBuf), "%3u", (unsigned)dps[ch]);
+        tft.drawString(valBuf, chBarX + barWch + 4, ry, 1);
     }
 
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.drawString("scan ch" + String(curCh) + " thr" + String(thr) + "/s  UP/DN  ESC", x0, bottom, 1);
+    char foot[48];
+    snprintf(
+        foot,
+        sizeof(foot),
+        "ch%u thr%lu/s fl%d  UP/DN Prev/Nxt Sel ESC",
+        (unsigned)curCh,
+        (unsigned long)thr,
+        rssiFloor
+    );
+    tft.drawString(foot, x0, bottom, 1);
 }
 
 void jam_detect_setup() {
     returnToMenu = false;
 
-    uint16_t dps[12] = {0};  // last measured deauth/s per channel (latched)
-    uint16_t peak[12] = {0}; // peak-hold
-    uint32_t threshold = 10; // deauth/s to flag (adjustable)
+    uint16_t dps[12] = {0};
+    uint16_t peak[12] = {0};
+    uint32_t threshold = (uint32_t)kvxConfig.jamDetectAlertPerSec;
+    if (threshold < 5) threshold = 5;
+    if (threshold > 250) threshold = 250;
+    int rssiFloor = kvxConfig.jamDetectRssiFloor;
+    if (rssiFloor < -100) rssiFloor = -100;
+    if (rssiFloor > -10) rssiFloor = -10;
     int idx = 0;
+    bool hopPaused = false;
+    uint32_t lastBeepMs = 0;
+
+    // Snapshot of last painted state — skip full body redraw when frozen/idle.
+    uint8_t paintedCh = 0xFF;
+    int paintedAttack = -2;
+    uint32_t paintedThr = 0;
+    int paintedFloor = 0;
+    bool paintedPaused = false;
+    int8_t paintedRssi = 127;
+    uint16_t paintedDps[12] = {0};
 
     jd_start_wifi();
-    tft.fillScreen(kvxConfig.bgColor);
+    drawMainBorderWithTitle("Jam Detect", true);
 
     for (;;) {
         if (returnToMenu) break;
 
         uint8_t ch = JD_CHANNELS[idx];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
-        vTaskDelay(5 / portTICK_PERIOD_MS); // brief radio settle (kept short vs the dwell)
+        vTaskDelay(5 / portTICK_PERIOD_MS);
 
         jd_deauth = 0;
         jd_total = 0;
 
-        // Sample the current channel for one short dwell. The deauth/sec rate is
-        // extrapolated from however many frames we caught in this window:
-        //   rate = deauths * (1000 / dwell_ms)
-        // so even a single deauth in a ~100ms window registers strongly.
-        // IMMEDIATE ALERT: we poll the live counter inside the dwell and, the
-        // moment the extrapolated rate reaches the threshold, we latch the alert
-        // and redraw RIGHT AWAY instead of waiting for the dwell to finish.
         bool tripped = false;
+        bool controlsChanged = false;
         uint32_t t0 = millis();
         while (millis() - t0 < JD_DWELL) {
             if (check(EscPress)) {
                 returnToMenu = true;
                 break;
             }
-            if (check(UpPress) && threshold < 250) threshold += 5;
-            if (check(DownPress) && threshold > 5) threshold -= 5;
+            if (check(SelPress)) {
+                hopPaused = !hopPaused;
+                controlsChanged = true;
+                delay(200);
+            }
+            if (check(UpPress) && threshold < 250) {
+                threshold += 5;
+                kvxConfig.setJamDetectAlertPerSec((int)threshold);
+                controlsChanged = true;
+            }
+            if (check(DownPress) && threshold > 5) {
+                threshold -= 5;
+                kvxConfig.setJamDetectAlertPerSec((int)threshold);
+                controlsChanged = true;
+            }
+            if (check(PrevPress) && rssiFloor > -100) {
+                rssiFloor -= 5;
+                kvxConfig.setJamDetectRssiFloor(rssiFloor);
+                controlsChanged = true;
+            }
+            if (check(NextPress) && rssiFloor < -10) {
+                rssiFloor += 5;
+                kvxConfig.setJamDetectRssiFloor(rssiFloor);
+                controlsChanged = true;
+            }
 
-            // live extrapolated rate for the deauths seen so far this window
             uint32_t live = (uint32_t)jd_deauth * 1000UL / JD_DWELL;
             if (live >= threshold) {
                 tripped = true;
-                break; // detected — stop dwelling, draw immediately, then hop on
+                break;
             }
             vTaskDelay(5 / portTICK_PERIOD_MS);
         }
@@ -187,10 +267,6 @@ void jam_detect_setup() {
         dps[ch] = (uint16_t)d;
         if (dps[ch] > peak[ch]) peak[ch] = dps[ch];
 
-        // worst channel currently at/over threshold (latched values persist
-        // across the sweep so an attack stays flagged after we hop away).
-        // `tripped` guarantees the channel we just left is considered even if a
-        // later channel happens to read higher this redraw.
         int attackCh = -1;
         uint16_t worst = 0;
         for (int i = 0; i < JD_NCH; i++) {
@@ -200,10 +276,48 @@ void jam_detect_setup() {
                 attackCh = c;
             }
         }
-        if (tripped && attackCh < 0) attackCh = ch; // ensure the live trip is shown
+        if (tripped && attackCh < 0) attackCh = ch;
 
-        jd_draw(dps, peak, threshold, ch, attackCh);
-        idx = (idx + 1) % JD_NCH;
+        int8_t lastRssi = jd_last_rssi;
+        if ((attackCh >= 0 || tripped) && !hopPaused) {
+            uint32_t now = millis();
+            if (now - lastBeepMs > 400) {
+                _tone(4000, 50);
+                lastBeepMs = now;
+            }
+        }
+
+        bool dpsChanged = false;
+        for (int i = 0; i < JD_NCH; i++) {
+            uint8_t c = JD_CHANNELS[i];
+            if (dps[c] != paintedDps[c]) {
+                dpsChanged = true;
+                break;
+            }
+        }
+
+        bool needPaint = controlsChanged || dpsChanged || ch != paintedCh || attackCh != paintedAttack ||
+                         threshold != paintedThr || rssiFloor != paintedFloor || hopPaused != paintedPaused ||
+                         lastRssi != paintedRssi;
+
+        // When frozen with no new data, leave the frame alone.
+        if (hopPaused && !needPaint) {
+            vTaskDelay(20 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        if (needPaint) {
+            jd_draw(dps, peak, threshold, ch, attackCh, hopPaused, lastRssi, rssiFloor);
+            paintedCh = ch;
+            paintedAttack = attackCh;
+            paintedThr = threshold;
+            paintedFloor = rssiFloor;
+            paintedPaused = hopPaused;
+            paintedRssi = lastRssi;
+            for (int i = 0; i < JD_NCH; i++) paintedDps[JD_CHANNELS[i]] = dps[JD_CHANNELS[i]];
+        }
+
+        if (!hopPaused) idx = (idx + 1) % JD_NCH;
     }
 
     jd_stop_wifi();

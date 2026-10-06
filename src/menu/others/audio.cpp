@@ -24,7 +24,7 @@ void _setup_codec_speaker(bool enable) {}
 // takes I2S_NUM_0 or file playback is silent.
 static i2s_chan_handle_t g_tickI2s = nullptr;
 
-static void releaseTickBeepI2s() {
+void releaseTickBeepI2s() {
     if (!g_tickI2s) return;
     i2s_channel_disable(g_tickI2s);
     i2s_del_channel(g_tickI2s);
@@ -142,7 +142,13 @@ static AudioOutputI2S *createConfiguredAudioOutput() {
         return nullptr;
     }
 
+    // Cardputer ADV ES8311: no dedicated MCLK pin — codec clocks from BCLK.
+    // Driving MCLK==WCLK (both GPIO43) breaks LRCK / produces silence.
+#if defined(ES8311_CODEC)
+    audioout->SetPinout(BCLK, WCLK, DOUT);
+#else
     audioout->SetPinout(BCLK, WCLK, DOUT, MCLK);
+#endif
     audioout->SetGain(kvxConfig.soundVolume / AUDIO_VOLUME_MAX);
 
     return audioout;
@@ -734,6 +740,117 @@ void playTone(unsigned int frequency, unsigned long duration, short waveType, bo
     _setup_codec_speaker(false);
 }
 
+// Shared I2S_NUM_0 sine playback (same bus as volume tick — proven audible on Cardputer).
+// M5.Speaker uses I2S_NUM_1 and is often not started by our M5.begin() display path.
+static void playSineOnTickI2s(unsigned int freq1, unsigned int freq2, unsigned long durationMs) {
+    if (durationMs == 0) return;
+    releaseTickBeepI2s();
+    _setup_codec_speaker(true);
+
+#if __has_include(<M5Unified.h>)
+    // Free M5 speaker task if it holds DMA / amp state
+    if (M5.Speaker.isEnabled()) M5.Speaker.stop();
+#endif
+
+    auto teardown = [&]() {
+        releaseTickBeepI2s();
+        _setup_codec_speaker(false);
+    };
+
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+    chan_cfg.dma_desc_num = 8;
+    chan_cfg.dma_frame_num = 256;
+    if (i2s_new_channel(&chan_cfg, &g_tickI2s, NULL) != ESP_OK) {
+        g_tickI2s = nullptr;
+        teardown();
+        return;
+    }
+    i2s_std_slot_config_t slot_cfg =
+        I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+    const i2s_std_config_t std_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(16000),
+        .slot_cfg = slot_cfg,
+        .gpio_cfg =
+            {
+                        .mclk = I2S_GPIO_UNUSED,
+                        .bclk = (gpio_num_t)BCLK,
+                        .ws = (gpio_num_t)WCLK,
+                        .dout = (gpio_num_t)DOUT,
+                        .din = I2S_GPIO_UNUSED,
+                        .invert_flags = {.mclk_inv = false, .bclk_inv = false, .ws_inv = false},
+                        },
+    };
+    if (i2s_channel_init_std_mode(g_tickI2s, &std_cfg) != ESP_OK) {
+        teardown();
+        return;
+    }
+
+    const int sr = 16000;
+    int total = (int)((sr * (int)durationMs) / 1000);
+    if (total < 16) total = 16;
+    const float vol = kvxConfig.soundVolume / AUDIO_VOLUME_MAX;
+    const float amp = 18000.0f * (vol < 0.15f ? 0.15f : vol);
+    const float w1 = (freq1 > 0) ? (2.0f * PI * (float)freq1 / (float)sr) : 0.0f;
+    const float w2 = (freq2 > 0) ? (2.0f * PI * (float)freq2 / (float)sr) : 0.0f;
+    const bool dual = (freq1 > 0 && freq2 > 0);
+
+    int16_t buf[256];
+    auto fill = [&](int start, int count) {
+        for (int i = 0; i < count; i++) {
+            int n = start + i;
+            float s = 0.0f;
+            if (dual) s = 0.5f * (sinf(w1 * n) + sinf(w2 * n));
+            else if (freq1 > 0) s = sinf(w1 * n);
+            else s = sinf(w2 * n);
+            int16_t v = (int16_t)(s * amp);
+            buf[i * 2] = v;
+            buf[i * 2 + 1] = v;
+        }
+    };
+
+    fill(0, 128);
+    size_t loaded = 0;
+    i2s_channel_preload_data(g_tickI2s, buf, 128 * 4, &loaded);
+    esp_err_t en = i2s_channel_enable(g_tickI2s);
+    if (en != ESP_OK && en != ESP_ERR_INVALID_STATE) {
+        teardown();
+        return;
+    }
+    delay(20); // amp settle (same idea as volume tick)
+
+    int n = 0;
+    while (n < total) {
+        int chunk = 64;
+        if (n + chunk > total) chunk = total - n;
+        fill(n, chunk);
+        size_t written = 0;
+        if (i2s_channel_write(g_tickI2s, buf, (size_t)chunk * 4, &written, pdMS_TO_TICKS(100)) != ESP_OK)
+            break;
+        n += chunk;
+    }
+    memset(buf, 0, sizeof(buf));
+    size_t written = 0;
+    i2s_channel_write(g_tickI2s, buf, 128 * 4, &written, pdMS_TO_TICKS(50));
+    delay(20);
+    teardown();
+}
+
+void playDualTone(unsigned int freq1, unsigned int freq2, unsigned long durationMs) {
+    if (!kvxConfig.soundEnabled || durationMs == 0) return;
+
+#if defined(BUZZ_PIN) && !defined(HAS_NS4168_SPKR)
+    if (freq1 > 0) _tone(freq1, durationMs / 2);
+    if (freq2 > 0) _tone(freq2, durationMs - durationMs / 2);
+    return;
+#endif
+
+    if (freq1 == 0 && freq2 == 0) {
+        delay(durationMs);
+        return;
+    }
+    playSineOnTickI2s(freq1, freq2, durationMs);
+}
+
 void playVolumeTickBeep(uint8_t volumePercent) {
     if (!kvxConfig.soundEnabled || volumePercent == 0) return;
 
@@ -844,25 +961,44 @@ void playVolumeTickBeep(uint8_t volumePercent) {
 #endif
 }
 
+void playDualTone(unsigned int freq1, unsigned int freq2, unsigned long durationMs) {
+    if (!kvxConfig.soundEnabled || durationMs == 0) return;
+#if defined(BUZZ_PIN)
+    if (freq1 > 0) tone(BUZZ_PIN, freq1, durationMs / 2);
+    if (freq2 > 0) tone(BUZZ_PIN, freq2, durationMs - durationMs / 2);
+    else if (freq1 == 0 && freq2 == 0) delay(durationMs);
+#else
+    (void)freq1;
+    (void)freq2;
+    delay(durationMs);
 #endif
+}
+
+#endif
+
+void audioSilenceSpeaker() {
+#if defined(HAS_NS4168_SPKR)
+    releaseTickBeepI2s();
+#if __has_include(<M5Unified.h>)
+    if (M5.Speaker.isEnabled()) M5.Speaker.stop();
+#endif
+    _setup_codec_speaker(false);
+#endif
+}
 
 void _tone(unsigned int frequency, unsigned long duration) {
     if (!kvxConfig.soundEnabled) return;
-
-#if defined(BUZZ_PIN)
-    tone(BUZZ_PIN, frequency, duration);
-#elif defined(HAS_NS4168_SPKR)
-#if __has_include(<M5Unified.h>)
     if (frequency == 0) {
         if (duration > 0) delay(duration);
-    } else {
-        uint8_t m5vol = (kvxConfig.soundVolume * 255) / AUDIO_VOLUME_MAX;
-        M5.Speaker.setVolume(m5vol);
-        M5.Speaker.tone(frequency, duration);
-        if (duration > 0) delay(duration);
+        return;
     }
+#if defined(BUZZ_PIN) && !defined(HAS_NS4168_SPKR)
+    tone(BUZZ_PIN, frequency, duration ? duration : 50);
+#elif defined(HAS_NS4168_SPKR)
+    // Same I2S_NUM_0 path as volume tick / DTMF (audible on Cardputer).
+    playDualTone(frequency, 0, duration ? duration : 50);
 #else
-    playTone(frequency, duration, 0);
-#endif
+    (void)frequency;
+    (void)duration;
 #endif
 }

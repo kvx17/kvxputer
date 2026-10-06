@@ -3,24 +3,17 @@
 #include "root/input/mykeyboard.h"
 #include "root/ui/display.h"
 #include "root/ui/theme.h"
-#ifdef HAS_RGB_LED
-#include "root/hal/led_control.h"
-#endif
 #include <globals.h>
 #include <interface.h>
 
 void ChargeMenu::optionsMenu() {
+    // Flags only here — runChargeLoop owns backlight, LED exclusive, and paint.
     chargeModeActive = true;
     chargeUserSleep = false;
     isScreenOff = false;
     dimmer = false;
     previousMillis = millis();
     chargeInputGraceUntil = millis() + 2500;
-#ifdef HAS_RGB_LED
-    ledTakeExclusive();
-    ledSuppressStatus(true);
-    ledPauseEffects(true);
-#endif
 
     check(SelPress);
     check(UpPress);

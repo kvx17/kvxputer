@@ -43,6 +43,21 @@ public:
     void endFrame(bool present = true);
     void abortFrame();
     bool isFraming() const { return _buffering; }
+    // Absolute coordinates; clips drawing so icons cannot spill into the next tile.
+    void setClipRect(int32_t x, int32_t y, int32_t w, int32_t h) {
+        _clipOn = w > 0 && h > 0;
+        _cx0 = (int16_t)x;
+        _cy0 = (int16_t)y;
+        _cx1 = (int16_t)(x + w);
+        _cy1 = (int16_t)(y + h);
+        if (_buffering && _fb) _fb->setViewport(x, y, w, h, false);
+        else TFT_eSPI::setViewport(x, y, w, h, false);
+    }
+    void clearClipRect() {
+        _clipOn = false;
+        if (_buffering && _fb) _fb->resetViewport();
+        else TFT_eSPI::resetViewport();
+    }
     void releaseCanvas();
     void suppressCanvas(bool suppress);
     bool isCanvasSuppressed() const { return _canvasSuppressed; }
@@ -132,6 +147,11 @@ private:
     TFT_eSprite *_fb = nullptr;
     bool _buffering = false;
     bool _canvasSuppressed = false;
+    bool _clipOn = false;
+    int16_t _cx0 = 0;
+    int16_t _cy0 = 0;
+    int16_t _cx1 = 0;
+    int16_t _cy1 = 0;
     uint8_t _frameDepth = 0;
     int16_t _dx0 = 32767;
     int16_t _dy0 = 32767;

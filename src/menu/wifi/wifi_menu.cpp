@@ -21,6 +21,7 @@
 #include "menu/wifi/pwnagotchi/pwnagotchi.h"
 #include "menu/wifi/channel_analyzer.h"
 #include "menu/wifi/jam_detect.h"
+#include "menu/wifi/pineap_hunter/pineap_hunter.h"
 #include "menu/wifi/wifi_recover.h"
 #endif
 
@@ -37,6 +38,7 @@
 // 64bit: https://github.com/9dl/Bruce-C2/releases/download/v1.0/BruceC2_windows_amd64.exe
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
+#include "menu/wifi/roku/roku.h"
 
 #if defined(EVIL_EXTENSIONS)
 #include "menu/wifi/probe/probe.h"
@@ -83,6 +85,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"kvx wifi analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
+    options.push_back({"PineAP Hunter", pineapHunterMenu});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!WiFi.isConnected()) doScan = wifiConnectMenu();
@@ -103,6 +106,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif
 
+    options.push_back({"Roku Remote", rokuMenu});
     options.push_back({"Config", [this]() { configMenu(); }});
 
 #if defined(EVIL_EXTENSIONS)

