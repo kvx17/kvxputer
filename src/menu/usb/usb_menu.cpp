@@ -6,6 +6,9 @@
 #include "menu/others/clicker.h"
 #include "menu/others/u2f.h"
 #include "menu/ble/hid_remote/hid_remote.h"
+#if defined(SOC_USB_OTG_SUPPORTED) && !defined(LITE_VERSION)
+#include "menu/usb/badusb_hunter/badusb_hunter.h"
+#endif
 
 void UsbMenu::optionsMenu() {
     options = {
@@ -16,6 +19,9 @@ void UsbMenu::optionsMenu() {
 #ifdef USB_as_HID
         {"USB Clicker (legacy)",  clicker_setup                                 },
         {"USB U2F",               u2f_setup                                     },
+#endif
+#if defined(SOC_USB_OTG_SUPPORTED)
+        {"BadUSB Hunter",         badusbHunterMenu                              },
 #endif
 #endif
 #if defined(SOC_USB_OTG_SUPPORTED)

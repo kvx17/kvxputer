@@ -95,6 +95,7 @@ private:
 
     bool verifyCreds(String &Ssid, String &Password);
     void restartWiFi(bool reset = true);
+    void configureSoftAp(void);
     void resetCapturedCredentials(void);
     void printDeauthStatus(void);
     void printLastCapturedCredential(void);

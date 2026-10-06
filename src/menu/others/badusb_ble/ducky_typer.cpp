@@ -712,6 +712,152 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
 
 static constexpr int kBadusbMaxLen = 4096;
 
+static void badusbAppendLine(String &content, const String &line) {
+    if (content.length() > 0 && !content.endsWith("\n")) content += "\n";
+    content += line;
+    if (!content.endsWith("\n")) content += "\n";
+    if ((int)content.length() > kBadusbMaxLen) content = content.substring(0, kBadusbMaxLen);
+}
+
+static void badusbInsertCommand(String &content) {
+    // Group picker — commands drawn from duckyCmds[]
+    enum Group { G_TEXT, G_TIMING, G_MODS, G_KEYS };
+    auto typeInGroup = [](DuckyCommandType t, Group g) -> bool {
+        switch (g) {
+            case G_TEXT:
+                return t == DuckyCommandType_Print || t == DuckyCommandType_Comment ||
+                       t == DuckyCommandType_AltString || t == DuckyCommandType_AltChar;
+            case G_TIMING:
+                return t == DuckyCommandType_Delay || t == DuckyCommandType_Repeat ||
+                       t == DuckyCommandType_StringDelay || t == DuckyCommandType_DefaultStringDelay ||
+                       t == DuckyCommandType_WaitForButtonPress;
+            case G_MODS:
+                return t == DuckyCommandType_Combination ||
+                       (t == DuckyCommandType_Cmd &&
+                        (/* modifiers handled below via name filter */ false));
+            case G_KEYS: return t == DuckyCommandType_Cmd || t == DuckyCommandType_Combination;
+        }
+        return false;
+    };
+
+    auto isModifierName = [](const char *cmd) -> bool {
+        return strcmp(cmd, "ALT") == 0 || strcmp(cmd, "CTRL") == 0 || strcmp(cmd, "CONTROL") == 0 ||
+               strcmp(cmd, "GUI") == 0 || strcmp(cmd, "WINDOWS") == 0 || strcmp(cmd, "SHIFT") == 0 ||
+               strncmp(cmd, "CTRL-", 5) == 0 || strncmp(cmd, "ALT-", 4) == 0 ||
+               strncmp(cmd, "GUI-", 4) == 0 || strcmp(cmd, "SYSREQ") == 0;
+    };
+
+    Group group = G_TEXT;
+    {
+        int gsel = -1;
+        std::vector<Option> groups = {
+            {"Text", [&]() { gsel = G_TEXT; }},
+            {"Timing", [&]() { gsel = G_TIMING; }},
+            {"Modifiers", [&]() { gsel = G_MODS; }},
+            {"Keys", [&]() { gsel = G_KEYS; }},
+            {"Back", [&]() { gsel = -2; }},
+        };
+        int r = loopOptions(groups, MENU_TYPE_SUBMENU, "Insert");
+        if (r < 0 || gsel < 0) return;
+        group = (Group)gsel;
+    }
+
+    const size_t count = sizeof(duckyCmds) / sizeof(duckyCmds[0]);
+    std::vector<Option> opts;
+    // Collect matching commands (skip duplicates like CONTROL/WINDOWS aliases for cleaner list)
+    for (size_t i = 0; i < count; i++) {
+        DuckyCommandLookup entry;
+        memcpy_P(&entry, &duckyCmds[i], sizeof(DuckyCommandLookup));
+        bool match = false;
+        if (group == G_MODS) {
+            match = isModifierName(entry.command);
+        } else if (group == G_KEYS) {
+            match = (entry.type == DuckyCommandType_Cmd || entry.type == DuckyCommandType_Combination) &&
+                    !isModifierName(entry.command);
+        } else {
+            match = typeInGroup(entry.type, group);
+        }
+        if (!match) continue;
+        // Skip alias duplicates
+        if (strcmp(entry.command, "CONTROL") == 0 || strcmp(entry.command, "WINDOWS") == 0 ||
+            strcmp(entry.command, "DEFAULT_DELAY") == 0 || strcmp(entry.command, "STRINGDELAY") == 0 ||
+            strcmp(entry.command, "DEFAULTSTRINGDELAY") == 0 || strcmp(entry.command, "ALTCODE") == 0 ||
+            strcmp(entry.command, "//") == 0 || strcmp(entry.command, "DOWN") == 0 ||
+            strcmp(entry.command, "UP") == 0 || strcmp(entry.command, "LEFT") == 0 ||
+            strcmp(entry.command, "RIGHT") == 0 || strcmp(entry.command, "ESC") == 0 ||
+            strcmp(entry.command, "APP") == 0 || strcmp(entry.command, "PAUSE") == 0) {
+            continue;
+        }
+
+        String cmdName = entry.command;
+        DuckyCommandType cmdType = entry.type;
+        opts.push_back({cmdName, [&, cmdName, cmdType]() {
+                            String line;
+                            if (cmdType == DuckyCommandType_Print || cmdType == DuckyCommandType_AltString) {
+                                String text = keyboard("", 120, (cmdName + " text:").c_str());
+                                if (text == "\x1B") return;
+                                line = cmdName + " " + text;
+                            } else if (cmdType == DuckyCommandType_Comment) {
+                                String text = keyboard("", 80, "Comment:");
+                                if (text == "\x1B") return;
+                                line = "REM " + text;
+                            } else if (cmdType == DuckyCommandType_Delay ||
+                                       cmdType == DuckyCommandType_Repeat ||
+                                       cmdType == DuckyCommandType_StringDelay ||
+                                       cmdType == DuckyCommandType_DefaultStringDelay ||
+                                       cmdType == DuckyCommandType_AltChar) {
+                                String num = num_keyboard("100", 8, (cmdName + ":").c_str());
+                                if (num == "\x1B" || num.length() == 0) return;
+                                line = cmdName + " " + num;
+                            } else if (cmdType == DuckyCommandType_WaitForButtonPress) {
+                                line = cmdName;
+                            } else if (cmdType == DuckyCommandType_Combination) {
+                                // Optional trailing key
+                                String extra = keyboard("", 20, "Optional key (blank=none):");
+                                if (extra == "\x1B") return;
+                                extra.trim();
+                                line = cmdName;
+                                if (extra.length()) line += " " + extra;
+                            } else {
+                                // Cmd modifiers / keys — optional trailing character
+                                if (isModifierName(cmdName.c_str()) &&
+                                    strchr(cmdName.c_str(), '-') == nullptr) {
+                                    String extra = keyboard("", 20, "Optional key (blank=none):");
+                                    if (extra == "\x1B") return;
+                                    extra.trim();
+                                    line = cmdName;
+                                    if (extra.length()) line += " " + extra;
+                                } else {
+                                    line = cmdName;
+                                }
+                            }
+                            badusbAppendLine(content, line);
+                            displaySuccess("Inserted", true);
+                        }});
+    }
+    opts.push_back({"Back", []() {}});
+    if (opts.size() <= 1) {
+        displayError("No commands", true);
+        return;
+    }
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Command");
+}
+
+static void badusbCompose(String &content, const char *title) {
+    while (!returnToMenu && !forceHome) {
+        std::vector<Option> opts = {
+            {"Insert", [&]() { badusbInsertCommand(content); }},
+            {"Edit",
+             [&]() {
+                 pdaTextEditor(content, title, kBadusbMaxLen, true);
+             }},
+            {"Done", []() {}},
+        };
+        int r = loopOptions(opts, MENU_TYPE_SUBMENU, title);
+        if (r < 0 || r == 2 || forceHome) return;
+    }
+}
+
 static bool badusbGetSd(FS *&fs, bool showError) {
     if (!setupSdCard()) {
         if (showError) displayError("No SD card", true);
@@ -891,7 +1037,8 @@ static void badusbOpenExisting(
              [&]() {
                  String content = readSmallFile(*fs, path);
                  String label = badusbDisplayName(filename);
-                 if (pdaTextEditor(content, label.c_str(), kBadusbMaxLen, true) != PDA_EDIT_OK) return;
+                 badusbCompose(content, label.c_str());
+                 if (content.length() == 0) return;
                  if (badusbWritePath(fs, path, content)) displaySuccess("Script saved", true);
              }},
             {"Delete",
@@ -908,7 +1055,8 @@ static void badusbOpenExisting(
 
 static void badusbNewScript(HIDInterface *&hid, bool ble, bool &first_time) {
     String content = "";
-    if (pdaTextEditor(content, "New Script", kBadusbMaxLen, true) != PDA_EDIT_OK) return;
+    badusbCompose(content, "New Script");
+    if (returnToMenu || forceHome) return;
     if (content.length() == 0) {
         displayError("Empty script", true);
         return;

@@ -9,5 +9,7 @@ class QRcode
 	public:
 		QRcode(tft_display *display);
 		void init();
-		void create(String message);	
+		void create(String message);
+		// inverted=true: black background, white modules (default for scanners on dark UI)
+		void create(String message, bool inverted);
 };

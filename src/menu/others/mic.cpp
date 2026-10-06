@@ -1,6 +1,7 @@
 #include "root/storage/paths.h"
 #include "mic.h"
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
+#include "menu/others/audio.h"
 #include "root/input/mykeyboard.h"
 #include "root/app/powerSave.h"
 #include "root/ui/settings.h"
@@ -977,6 +978,10 @@ bool mic_capture_samples(
 
     *outSampleRate = sampleRate;
 
+    // Stop speaker / tick I2S so mic capture owns the audio path (avoids
+    // feedback squeal and empty captures on Cardputer / Adv ES8311).
+    audioSilenceSpeaker();
+
     // GPIO PROTECTION (fixed: IO_EXP_MIC not IOEXP_MIC)
     ioExpander.turnPinOnOff(IO_EXP_MIC, HIGH);
     bool gpioInput = false;
@@ -1084,19 +1089,26 @@ bool mic_capture_samples(
         }
         if (!buffer) break;
 
-        // Capture samples
-        uint32_t microsPerSample = 1000000 / sampleRate;
-        for (uint32_t i = 0; i < numSamples; i++) {
-            size_t bytesRead = 0;
-            err = i2s_channel_read(temp_i2s_chan, (char *)&buffer[i], sizeof(int16_t), &bytesRead, 1000);
-            if (err != ESP_OK || bytesRead == 0) {
-                free(buffer);
-                goto cleanup;
+        // Bulk capture — I2S DMA already paces samples; per-sample delay
+        // doubled capture time and broke envelope / Goertzel decoding.
+        {
+            uint32_t got = 0;
+            while (got < numSamples) {
+                size_t bytesRead = 0;
+                err = i2s_channel_read(
+                    temp_i2s_chan,
+                    (char *)&buffer[got],
+                    (numSamples - got) * sizeof(int16_t),
+                    &bytesRead,
+                    pdMS_TO_TICKS(500)
+                );
+                if (err != ESP_OK || bytesRead == 0) {
+                    free(buffer);
+                    goto cleanup;
+                }
+                got += (uint32_t)(bytesRead / sizeof(int16_t));
+                yield();
             }
-
-            // Timing for sample rate
-            delayMicroseconds(microsPerSample);
-            yield();
         }
 
         // Apply gain

@@ -21,6 +21,7 @@
 #include "menu/wifi/pwnagotchi/pwnagotchi.h"
 #include "menu/wifi/channel_analyzer.h"
 #include "menu/wifi/jam_detect.h"
+#include "menu/wifi/pineap_hunter/pineap_hunter.h"
 #include "menu/wifi/wifi_recover.h"
 #endif
 
@@ -84,6 +85,7 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"kvx wifi analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
+    options.push_back({"PineAP Hunter", pineapHunterMenu});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!WiFi.isConnected()) doScan = wifiConnectMenu();

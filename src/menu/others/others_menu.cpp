@@ -7,11 +7,21 @@
 #include "menu/others/ibutton.h"
 #include "menu/others/mic.h"
 #include "menu/others/qrcode_menu.h"
+#if defined(HAS_KEYBOARD)
+#include "menu/others/passgen/passgen.h"
+#include "menu/others/barcode/barcode.h"
+#include "menu/others/combo/combo.h"
+#if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
+#include "menu/others/dtmf/dtmf.h"
+#include "menu/others/morse/morse.h"
+#endif
+#endif
 #if defined(HAS_NS4168_SPKR)
 #include "menu/others/media_player.h"
 #endif
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_menu.h"
+#include "menu/others/drone/drone.h"
 #endif
 #if defined(EVIL_EXTENSIONS)
 #include "menu/others/llm_chat/llm_chat.h"
@@ -27,6 +37,18 @@ void OthersMenu::optionsMenu() {
         {"PDA",          pdaMenu                      },
 #endif
         {"QRCodes",      qrcode_menu                  },
+#if defined(HAS_KEYBOARD)
+        {"Barcode",      barcodeMenu                  },
+        {"Passgen",      passgenMenu                  },
+        {"Combo",        comboMenu                    },
+#if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
+        {"DTMF",         dtmfMenu                     },
+        {"Morse",        morseMenu                    },
+#endif
+#endif
+#ifndef LITE_VERSION
+        {"Drone ID",     droneIdMenu                  },
+#endif
 
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
         {"Microphone",   [this]() { micMenu(); }      },
