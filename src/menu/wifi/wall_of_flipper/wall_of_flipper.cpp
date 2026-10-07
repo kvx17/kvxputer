@@ -83,7 +83,36 @@ bool alreadyLogged(FS &fs, const String &path, const String &mac) {
     return false;
 }
 
-bool payloadHasUuid16(const uint8_t *p, size_t len, uint16_t uuid) {
+std::vector<String> flipperRowLabels(const std::vector<FlipperHit> &hits) {
+    std::vector<String> rows;
+    rows.reserve(hits.size());
+    for (const auto &h : hits) {
+        String label = h.name.length() ? h.name : shortMac(h.mac);
+        label += "  " + String(h.rssi) + "dBm";
+        rows.push_back(label);
+    }
+    return rows;
+}
+
+std::vector<ScannerDetailField> flipperDetail(const FlipperHit &h) {
+    std::vector<ScannerDetailField> f;
+    f.push_back({"MAC", h.mac});
+    f.push_back({"Name", h.name.length() ? h.name : "<none>"});
+    f.push_back({"RSSI", String(h.rssi) + " dBm"});
+    f.push_back({"Addr type", h.addrType.length() ? h.addrType : "?"});
+    if (h.services.length()) f.push_back({"Service", h.services});
+    if (h.txPower.length()) f.push_back({"TX power", h.txPower});
+    if (h.appearance.length()) f.push_back({"Appearance", h.appearance});
+    if (h.mfgHex.length()) f.push_back({"Mfg data", h.mfgHex});
+    if (h.payloadHex.length()) f.push_back({"Payload", h.payloadHex});
+    f.push_back({"First seen", String(h.firstSeen) + " ms"});
+    f.push_back({"Last seen", String(h.lastSeen) + " ms"});
+    return f;
+}
+
+} // namespace
+
+static bool payloadHasUuid16(const uint8_t *p, size_t len, uint16_t uuid) {
     size_t i = 0;
     while (i + 1 < len) {
         uint8_t dlen = p[i];
@@ -121,35 +150,6 @@ bool looksLikeFlipper(const ScannerAdvSnap &dev) {
     }
     return false;
 }
-
-std::vector<String> flipperRowLabels(const std::vector<FlipperHit> &hits) {
-    std::vector<String> rows;
-    rows.reserve(hits.size());
-    for (const auto &h : hits) {
-        String label = h.name.length() ? h.name : shortMac(h.mac);
-        label += "  " + String(h.rssi) + "dBm";
-        rows.push_back(label);
-    }
-    return rows;
-}
-
-std::vector<ScannerDetailField> flipperDetail(const FlipperHit &h) {
-    std::vector<ScannerDetailField> f;
-    f.push_back({"MAC", h.mac});
-    f.push_back({"Name", h.name.length() ? h.name : "<none>"});
-    f.push_back({"RSSI", String(h.rssi) + " dBm"});
-    f.push_back({"Addr type", h.addrType.length() ? h.addrType : "?"});
-    if (h.services.length()) f.push_back({"Service", h.services});
-    if (h.txPower.length()) f.push_back({"TX power", h.txPower});
-    if (h.appearance.length()) f.push_back({"Appearance", h.appearance});
-    if (h.mfgHex.length()) f.push_back({"Mfg data", h.mfgHex});
-    if (h.payloadHex.length()) f.push_back({"Payload", h.payloadHex});
-    f.push_back({"First seen", String(h.firstSeen) + " ms"});
-    f.push_back({"Last seen", String(h.lastSeen) + " ms"});
-    return f;
-}
-
-} // namespace
 
 void wallOfFlipperMenu() {
     FS *fs = nullptr;

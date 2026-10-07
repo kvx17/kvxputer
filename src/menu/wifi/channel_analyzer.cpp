@@ -568,4 +568,96 @@ void channel_analyzer_setup() {
     ca_stop_wifi();
 }
 
+// --- Headless session (PC Connect) ---
+static bool ca_session_active = false;
+static uint8_t ca_sess_load[12] = {0};
+static uint8_t ca_sess_peak[12] = {0};
+static int8_t ca_sess_rssi[12];
+static int ca_sess_sweep = 0;
+
+bool caSessionActive() { return ca_session_active; }
+
+bool caSessionStart() {
+    if (ca_session_active) caSessionStop();
+    ca_clear_aps();
+    memset(ca_sess_load, 0, sizeof(ca_sess_load));
+    memset(ca_sess_peak, 0, sizeof(ca_sess_peak));
+    for (int i = 0; i < 12; i++) ca_sess_rssi[i] = -128;
+    ca_sess_sweep = 0;
+    ca_start_wifi();
+    ca_session_active = true;
+    return true;
+}
+
+void caSessionStop() {
+    if (!ca_session_active) return;
+    ca_stop_wifi();
+    ca_session_active = false;
+}
+
+bool caSessionDwell(uint16_t dwellMs, CaChannelSample &out, const std::function<bool()> &abortFn) {
+    if (!ca_session_active) return false;
+    if (dwellMs < 150) dwellMs = 150;
+    if (dwellMs > 1000) dwellMs = 1000;
+
+    uint8_t sweepCh = CA_CHANNELS[ca_sess_sweep];
+    esp_wifi_set_channel(sweepCh, WIFI_SECOND_CHAN_NONE);
+
+    ca_bytes = 0;
+    ca_pkts = 0;
+    ca_rssi_peak = -128;
+
+    uint32_t t0 = millis();
+    while (millis() - t0 < dwellMs) {
+        if (!ca_session_active) return false;
+        if (abortFn && abortFn()) return false;
+        ca_ingest_ring();
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    if (!ca_session_active) return false;
+
+    uint32_t airtime_us = (ca_bytes * 8UL) / 6UL + ca_pkts * 60UL;
+    uint32_t elapsed = millis() - t0;
+    if (elapsed < 20) elapsed = 20;
+    uint32_t dwell_us = elapsed * 1000UL;
+    uint32_t l = dwell_us ? (airtime_us * 100UL / dwell_us) : 0;
+    if (l > 100) l = 100;
+
+    ca_sess_load[sweepCh] = (uint8_t)l;
+    if (ca_sess_load[sweepCh] > ca_sess_peak[sweepCh]) ca_sess_peak[sweepCh] = ca_sess_load[sweepCh];
+    ca_sess_rssi[sweepCh] = (ca_rssi_peak == -128) ? 0 : ca_rssi_peak;
+
+    ca_ingest_ring();
+
+    out.ch = sweepCh;
+    out.load = ca_sess_load[sweepCh];
+    out.peak = ca_sess_peak[sweepCh];
+    out.rssi = ca_sess_rssi[sweepCh];
+
+    ca_sess_sweep = (ca_sess_sweep + 1) % CA_NCH;
+    return true;
+}
+
+void caSessionForEachAp(const std::function<void(const CaApSample &)> &fn) {
+    if (!fn) return;
+    for (int i = 0; i < CA_AP_MAX; i++) {
+        if (!ca_aps[i].used) continue;
+        CaApSample s;
+        if (ca_aps[i].ssidLen == 0) {
+            s.ssid[0] = 0;
+        } else {
+            strncpy(s.ssid, ca_aps[i].ssid, sizeof(s.ssid) - 1);
+            s.ssid[sizeof(s.ssid) - 1] = 0;
+        }
+        memcpy(s.bssid, ca_aps[i].bssid, 6);
+        s.channel = ca_aps[i].channel;
+        s.rssi = ca_aps[i].rssi;
+        String auth = ca_auth_label(ca_aps[i]);
+        strncpy(s.auth, auth.c_str(), sizeof(s.auth) - 1);
+        s.auth[sizeof(s.auth) - 1] = 0;
+        s.hidden = ca_aps[i].hidden || ca_aps[i].ssidLen == 0;
+        fn(s);
+    }
+}
+
 #endif

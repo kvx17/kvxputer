@@ -14,9 +14,6 @@
 
 namespace {
 
-const char *kBadNames[] = {"HC-03", "HC-05", "HC-06", "HC-08", "BT04-A", "BT05"};
-const char *kBadMac[] = {"00:11:22", "00:18:e4", "20:16:04"};
-
 struct SkimmerHit {
     String name;
     String mac;
@@ -27,20 +24,6 @@ struct SkimmerHit {
     unsigned long firstSeen = 0;
     unsigned long lastSeen = 0;
 };
-
-const char *matchRule(const String &name, const String &addr) {
-    String n = name;
-    n.trim();
-    for (auto *bad : kBadNames) {
-        if (n.equalsIgnoreCase(bad)) return bad;
-    }
-    String a = addr;
-    a.toLowerCase();
-    for (auto *pfx : kBadMac) {
-        if (a.startsWith(pfx)) return pfx;
-    }
-    return nullptr;
-}
 
 String addrTypeName(uint8_t t) {
     switch (t) {
@@ -77,6 +60,22 @@ std::vector<ScannerDetailField> skimmerDetail(const SkimmerHit &h) {
 
 } // namespace
 
+const char *skimmerMatchRule(const String &name, const String &addr) {
+    static const char *kBadNames[] = {"HC-03", "HC-05", "HC-06", "HC-08", "BT04-A", "BT05"};
+    static const char *kBadMac[] = {"00:11:22", "00:18:e4", "20:16:04"};
+    String n = name;
+    n.trim();
+    for (auto *bad : kBadNames) {
+        if (n.equalsIgnoreCase(bad)) return bad;
+    }
+    String a = addr;
+    a.toLowerCase();
+    for (auto *pfx : kBadMac) {
+        if (a.startsWith(pfx)) return pfx;
+    }
+    return nullptr;
+}
+
 void skimmerMenu() {
     NimBLEScan *scan = scannerBleStart();
     if (!scan) {
@@ -98,7 +97,7 @@ void skimmerMenu() {
             const String &name = d.name;
             const String &addr = d.mac;
             int rssi = d.rssi;
-            const char *rule = matchRule(name, addr);
+            const char *rule = skimmerMatchRule(name, addr);
             if (seen.insert(addr).second) {
                 if ((int)hits.size() >= 100) {
                     seen.erase(addr);

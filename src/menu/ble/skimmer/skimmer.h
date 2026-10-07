@@ -1,9 +1,11 @@
-/*
- * Ported from Evil-Cardputer (Evil-M5Project) by 7h30th3r0n3.
- * Combined firmware: AGPL-3.0-or-later (Bruce).
- */
 #pragma once
 
 #if defined(EVIL_EXTENSIONS)
+#include <Arduino.h>
+
 void skimmerMenu();
+
+// Returns matching rule name/prefix, or nullptr if no match.
+const char *skimmerMatchRule(const String &name, const String &addr);
+
 #endif

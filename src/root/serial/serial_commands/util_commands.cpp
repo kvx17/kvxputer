@@ -412,7 +412,18 @@ uint32_t loaderCallback(cmd *c) {
     return false;
 }
 
+uint32_t helloCallback(cmd *c) {
+    // Answer PC Connect discovery when the link app is not open yet.
+    // Host expects a JSON line; ready=false means open USB → PC Connect.
+    String mac = WiFi.macAddress();
+    serialDevice->print("{\"evt\":\"hello\",\"name\":\"kvxputer\",\"mac\":\"");
+    serialDevice->print(mac);
+    serialDevice->println("\",\"ready\":false,\"hint\":\"open USB PC Connect\"}");
+    return true;
+}
+
 void createUtilCommands(SimpleCLI *cli) {
+    cli->addCommand("hello", helloCallback);
     cli->addCommand("uptime", uptimeCallback);
     cli->addCommand("date", dateCallback);
     cli->addCommand("i2c", i2cCallback);

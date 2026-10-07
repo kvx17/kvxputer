@@ -6,6 +6,7 @@
 #include "menu/others/clicker.h"
 #include "menu/others/u2f.h"
 #include "menu/ble/hid_remote/hid_remote.h"
+#include "menu/usb/pc_connect/pc_connect.h"
 #if defined(SOC_USB_OTG_SUPPORTED) && !defined(LITE_VERSION)
 #include "menu/usb/badusb_hunter/badusb_hunter.h"
 #endif
@@ -13,6 +14,7 @@
 void UsbMenu::optionsMenu() {
     options = {
 #if !defined(LITE_VERSION)
+        {"PC Connect",            pcConnectMenu                                 },
         {"kvxkeyboard HID",       [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_USB); }},
         {"BadUSB",                [=]() { ducky_setup(hid_usb, false); }        },
         {"USB Keyboard (legacy)", [=]() { ducky_keyboard(hid_usb, false); }     },

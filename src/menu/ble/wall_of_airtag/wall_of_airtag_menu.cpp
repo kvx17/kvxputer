@@ -30,16 +30,6 @@ struct AirTagHit {
     unsigned long lastSeen = 0;
 };
 
-const char *batteryLabel(uint8_t batt) {
-    switch (batt) {
-        case 0: return "FULL";
-        case 1: return "MED";
-        case 2: return "LOW";
-        case 3: return "CRIT";
-        default: return "?";
-    }
-}
-
 float approxMeters(int rssi) {
     float d = powf(10.0f, (-59.0f - (float)rssi) / 20.0f);
     if (d < 0.1f) d = 0.1f;
@@ -50,24 +40,6 @@ float approxMeters(int rssi) {
 String shortMac(const String &mac) {
     if (mac.length() < 14) return mac;
     return mac.substring(0, 5) + ".." + mac.substring(mac.length() - 5);
-}
-
-bool parseFindMy(const ScannerAdvSnap &dev, AirTagHit &out) {
-    if (!dev.haveMfg || dev.mfg.size() < 5) return false;
-    const std::string &md = dev.mfg;
-    uint16_t cid = (uint8_t)md[0] | ((uint16_t)(uint8_t)md[1] << 8);
-    if (cid != 0x004C) return false;
-    if ((uint8_t)md[2] != 0x12) return false;
-
-    uint8_t status = (uint8_t)md[4];
-    out.battery = (status >> 6) & 0x03;
-    out.separated = (status & 0x20) != 0;
-    if (md.size() >= 8) {
-        char buf[7];
-        snprintf(buf, sizeof(buf), "%02X%02X%02X", (uint8_t)md[5], (uint8_t)md[6], (uint8_t)md[7]);
-        out.keyPrefix = String(buf);
-    }
-    return true;
 }
 
 std::vector<String> airtagRowLabels(const std::vector<AirTagHit> &hits) {
@@ -85,7 +57,7 @@ std::vector<ScannerDetailField> airtagDetail(const AirTagHit &h) {
     f.push_back({"MAC", h.mac});
     f.push_back({"RSSI", String(h.rssi) + " dBm"});
     f.push_back({"Approx", String(approxMeters(h.rssi), 1) + " m"});
-    f.push_back({"Battery", batteryLabel(h.battery)});
+    f.push_back({"Battery", findMyBatteryLabel(h.battery)});
     f.push_back({"Status", h.separated ? "separated" : "near"});
     f.push_back({"Addr", h.randomAddr ? "random" : "public"});
     if (h.keyPrefix.length()) f.push_back({"Key prefix", h.keyPrefix});
@@ -96,6 +68,35 @@ std::vector<ScannerDetailField> airtagDetail(const AirTagHit &h) {
 }
 
 } // namespace
+
+const char *findMyBatteryLabel(uint8_t batt) {
+    switch (batt) {
+        case 0: return "FULL";
+        case 1: return "MED";
+        case 2: return "LOW";
+        case 3: return "CRIT";
+        default: return "?";
+    }
+}
+
+bool parseFindMy(const ScannerAdvSnap &dev, FindMyParse &out) {
+    if (!dev.haveMfg || dev.mfg.size() < 5) return false;
+    const std::string &md = dev.mfg;
+    uint16_t cid = (uint8_t)md[0] | ((uint16_t)(uint8_t)md[1] << 8);
+    if (cid != 0x004C) return false;
+    if ((uint8_t)md[2] != 0x12) return false;
+
+    uint8_t status = (uint8_t)md[4];
+    out.battery = (status >> 6) & 0x03;
+    out.separated = (status & 0x20) != 0;
+    out.keyPrefix = "";
+    if (md.size() >= 8) {
+        char buf[7];
+        snprintf(buf, sizeof(buf), "%02X%02X%02X", (uint8_t)md[5], (uint8_t)md[6], (uint8_t)md[7]);
+        out.keyPrefix = String(buf);
+    }
+    return true;
+}
 
 void wallOfAirtagMenu() {
     FS *fs = nullptr;
@@ -129,7 +130,7 @@ void wallOfAirtagMenu() {
                     audioSeen.insert(dev.mac);
                 }
             }
-            AirTagHit parsed;
+            FindMyParse parsed;
             if (!parseFindMy(dev, parsed)) continue;
             const String &mac = dev.mac;
             int rssi = dev.rssi;
@@ -147,13 +148,17 @@ void wallOfAirtagMenu() {
                 }
             }
             if (!found) {
-                parsed.mac = mac;
-                parsed.rssi = rssi;
-                parsed.randomAddr = (dev.addrType != BLE_ADDR_PUBLIC);
-                parsed.hits = 1;
-                parsed.firstSeen = millis();
-                parsed.lastSeen = parsed.firstSeen;
-                hits.push_back(parsed);
+                AirTagHit h;
+                h.mac = mac;
+                h.rssi = rssi;
+                h.battery = parsed.battery;
+                h.separated = parsed.separated;
+                h.keyPrefix = parsed.keyPrefix;
+                h.randomAddr = (dev.addrType != BLE_ADDR_PUBLIC);
+                h.hits = 1;
+                h.firstSeen = millis();
+                h.lastSeen = h.firstSeen;
+                hits.push_back(h);
                 newMacs.push_back(mac);
             }
         }
@@ -172,7 +177,7 @@ void wallOfAirtagMenu() {
                 if (!out) out = fs->open(logPath, FILE_WRITE);
                 if (out) {
                     out.println(
-                        hp->mac + " " + String(hp->rssi) + " batt=" + batteryLabel(hp->battery) +
+                        hp->mac + " " + String(hp->rssi) + " batt=" + findMyBatteryLabel(hp->battery) +
                         (hp->separated ? " sep" : " near")
                     );
                     out.close();

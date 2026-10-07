@@ -32,6 +32,7 @@
 #if defined(SOC_USB_OTG_SUPPORTED)
 #include "menu/usb/badusb_hunter/badusb_hunter.h"
 #endif
+#include "menu/usb/pc_connect/pc_connect.h"
 #endif
 #include "menu/gps/wardriving.h"
 #include "menu/nrf24/nrf_common.h"
@@ -360,6 +361,7 @@ static void launchFileSend() { FileSharing().sendFile(); }
 static void launchFileRecv() { FileSharing().receiveFile(); }
 static void launchHidUsb() { hidRemoteMenu(HID_REMOTE_LAUNCH_USB); }
 static void launchBadUsb() { ducky_setup(hid_usb, false); }
+static void launchPcConnect() { pcConnectMenu(); }
 static void launchIbutton() { setup_ibutton(); }
 #if defined(MIC_SPM1423) || defined(MIC_INMP441)
 static void launchMicTest() { mic_test(); }
@@ -601,6 +603,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 
         // USB
 #ifndef LITE_VERSION
+        {"pc_connect", "PC Connect", "USB", false, notLite, launchPcConnect},
         {"hid_usb", "kvxkeyboard HID", "USB", false, notLite, launchHidUsb},
         {"bad_usb", "BadUSB", "USB", false, notLite, launchBadUsb},
 #if defined(SOC_USB_OTG_SUPPORTED)

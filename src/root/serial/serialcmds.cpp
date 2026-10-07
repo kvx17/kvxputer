@@ -2,6 +2,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "menu/usb/pc_connect/pc_connect.h"
 #include "root/app/utils.h"
 #include <globals.h>
 
@@ -35,6 +36,9 @@ bool parseSerialCommand(const String &command, bool waitForResponse) {
 }
 
 void handleSerialCommands(SerialCli &serialCli) {
+    // PC Connect owns the CDC port; do not steal lines or force backToMenu.
+    if (pcConnectOwnsSerial) return;
+
     CmdPacket packet;
     if (cmdQueue && rspQueue) {
         if (xQueueReceive(cmdQueue, &packet, 0) == pdTRUE) {
@@ -56,7 +60,12 @@ void handleSerialCommands(SerialCli &serialCli) {
     // return to the menu after execution.
     String cmd_trimmed = cmd_str;
     cmd_trimmed.trim();
-    if (!cmd_trimmed.startsWith("nav") && !cmd_trimmed.startsWith("option")) { backToMenu(); }
+    cmd_trimmed.toLowerCase();
+    // hello is used by PCConnect discovery — must not kick the user out of an open app.
+    if (!cmd_trimmed.startsWith("nav") && !cmd_trimmed.startsWith("option") &&
+        !cmd_trimmed.startsWith("hello")) {
+        backToMenu();
+    }
 }
 
 void _serialCmdsTaskLoop(void *pvParameters) {
