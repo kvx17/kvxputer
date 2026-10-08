@@ -94,7 +94,7 @@ void GPSTracker::loop() {
             }
         } else {
             if (count > 5) {
-                displayError("GPS not Found!");
+                displayError("GPS not Found!\nGrove PORT.A G53/G54", true);
                 return end();
             }
             padprintln("No GPS data available");

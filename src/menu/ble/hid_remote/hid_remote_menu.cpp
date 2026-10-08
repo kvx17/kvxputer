@@ -8,11 +8,11 @@
 #include "root/input/mykeyboard.h"
 #include <globals.h>
 #include <interface.h>
-#if defined(HAS_KEYBOARD)
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
 #include <Keyboard.h>
 extern Keyboard_Class Keyboard;
 #endif
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
 #include <NimBLEDevice.h>
 #endif
 
@@ -70,7 +70,7 @@ static bool hidRemoteRunPairIntoSlot(int slot) {
             const unsigned long drainUntil = millis() + 600;
             while (millis() < drainUntil) {
                 EscPress = false;
-#if defined(HAS_KEYBOARD)
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
                 if (!isCardputerKeyHeld('`')) break;
 #endif
                 delay(20);

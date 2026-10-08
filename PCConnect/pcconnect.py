@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
+from typing import Optional
 
 _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
@@ -18,7 +20,18 @@ from protocol import (  # noqa: E402
     discover,
 )
 
-from apps import ble_scan, skimmer, wall_of_airtag, wall_of_flipper, wifi_analyzer  # noqa: E402
+from apps import (  # noqa: E402
+    ble_scan,
+    gpio_console,
+    ir,
+    jam_detect,
+    rfid_read,
+    rf_scan,
+    skimmer,
+    wall_of_airtag,
+    wall_of_flipper,
+    wifi_analyzer,
+)
 
 TOOL_RUNNERS = {
     "wifi.analyzer": wifi_analyzer.run,
@@ -26,20 +39,53 @@ TOOL_RUNNERS = {
     "ble.flipper": wall_of_flipper.run,
     "ble.airtag": wall_of_airtag.run,
     "ble.skimmer": skimmer.run,
+    "gpio": gpio_console.run,
+    "ir.rx": ir.run_rx,
+    "rf.rx": rf_scan.run_rx,
+    "rf.rssi": rf_scan.run_rssi,
+    "rfid.read": rfid_read.run,
+    "jam.detect": jam_detect.run,
 }
 
 
-def pick_device() -> dict:
+def _no_device_hint() -> None:
+    print("\nNo kvxputer device answered hello.")
+    print("Checklist:")
+    print("  1. Flash current firmware; lsusb shows Espressif 303a:1001")
+    print("  2. Cable is data-capable; you are in uucp/dialout")
+    print("  3. No other program holds /dev/ttyACM*")
+    print("  4. On the Cardputer: USB → PC Connect")
+
+
+def pick_device(port: Optional[str] = None) -> dict:
+    if port:
+        print(f"Using port {port}")
+        return {
+            "port": port,
+            "name": "kvxputer",
+            "mac": "?",
+            "apps": [],
+            "ready": False,
+            "hello": {},
+            "desc": "",
+        }
+
     print("Scanning serial ports for PC Connect…")
     print("(Espressif 303a:**** / ttyACM* preferred; DTR/RTS held low)\n")
     found = discover(verbose=True)
     if not found:
-        print("\nNo kvxputer device answered hello.")
-        print("Checklist:")
-        print("  1. Flash current firmware; lsusb shows Espressif 303a:1001")
-        print("  2. Cable is data-capable; you are in uucp/dialout")
-        print("  3. No other program holds /dev/ttyACM*")
+        _no_device_hint()
         sys.exit(1)
+
+    if len(found) == 1:
+        d = found[0]
+        ready = d.get("ready", True) is not False
+        flag = "ready" if ready else "need PC Connect app"
+        print(f"\nAuto-selected: {d['name']}  {d['mac']}  {d['port']}  [{flag}]")
+        apps = ", ".join(d.get("apps") or []) or "(open PC Connect for app list)"
+        print(f"  apps: {apps}")
+        return d
+
     for i, d in enumerate(found, 1):
         apps = ", ".join(d.get("apps") or []) or "(open PC Connect for app list)"
         ready = d.get("ready", True) is not False
@@ -95,19 +141,31 @@ def app_menu(session: PcConnectSession, apps: list) -> None:
         print("\nBack to menu.")
 
 
-def main() -> None:
-    chosen = pick_device()
+def parse_args(argv: Optional[list] = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="PC Connect host for kvxputer Cardputer")
+    p.add_argument(
+        "--port",
+        metavar="PATH",
+        help="Serial device path (skip discovery), e.g. /dev/ttyACM0",
+    )
+    return p.parse_args(argv)
+
+
+def main(argv: Optional[list] = None) -> None:
+    args = parse_args(argv)
+    chosen = pick_device(args.port)
     try:
-        # Keep one session; settle covers possible USB reopen glitch.
         session = PcConnectSession(chosen["port"], settle=0.2)
         try:
             hello = session.do_hello(timeout=3.0, require_ready=True)
         except NeedPcConnectApp:
             hello = session.wait_until_ready()
-            print(" connected.\n")
     except PcConnectError as e:
         print(f"\nConnect failed: {e}")
         sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        sys.exit(130)
     except Exception as e:
         print(f"\nSerial error: {e}")
         sys.exit(1)

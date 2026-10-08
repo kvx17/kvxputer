@@ -183,6 +183,8 @@ static void jd_draw(
 }
 
 void jam_detect_setup() {
+    if (!tab5RadioLater("Jam Detect gated\n(radio later)")) return;
+
     returnToMenu = false;
 
     uint16_t dps[12] = {0};
@@ -321,6 +323,70 @@ void jam_detect_setup() {
     }
 
     jd_stop_wifi();
+}
+
+// --- Headless session (PC Connect) ---
+static bool jam_session_active = false;
+static int jam_sess_idx = 0;
+
+bool jamSessionActive() { return jam_session_active; }
+
+bool jamSessionStart() {
+    if (jam_session_active) jamSessionStop();
+    jam_sess_idx = 0;
+    jd_start_wifi();
+    jam_session_active = true;
+    return true;
+}
+
+void jamSessionStop() {
+    if (!jam_session_active) return;
+    jd_stop_wifi();
+    jam_session_active = false;
+}
+
+bool jamSessionDwell(
+    uint16_t dwellMs, uint32_t thresholdPerSec, JamChannelSample &out, const std::function<bool()> &abortFn
+) {
+    if (!jam_session_active) return false;
+    if (dwellMs < 50) dwellMs = 50;
+    if (dwellMs > 500) dwellMs = 500;
+    if (thresholdPerSec < 5) thresholdPerSec = 5;
+    if (thresholdPerSec > 250) thresholdPerSec = 250;
+
+    uint8_t ch = JD_CHANNELS[jam_sess_idx];
+    esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
+
+    jd_deauth = 0;
+    jd_total = 0;
+    bool tripped = false;
+    uint32_t t0 = millis();
+    while (millis() - t0 < dwellMs) {
+        if (!jam_session_active) return false;
+        if (abortFn && abortFn()) return false;
+        uint32_t live = (uint32_t)jd_deauth * 1000UL / dwellMs;
+        if (live >= thresholdPerSec) {
+            tripped = true;
+            break;
+        }
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+    if (!jam_session_active) return false;
+
+    uint32_t elapsed = millis() - t0;
+    if (elapsed < 20) elapsed = 20;
+    uint32_t d = (uint32_t)jd_deauth * 1000UL / elapsed;
+    if (d > 65535) d = 65535;
+
+    out.ch = ch;
+    out.deauthPerSec = (uint16_t)d;
+    out.frames = (uint32_t)jd_total;
+    out.rssi = jd_last_rssi;
+    out.alert = tripped || d >= thresholdPerSec;
+
+    jam_sess_idx = (jam_sess_idx + 1) % JD_NCH;
+    return true;
 }
 
 #endif

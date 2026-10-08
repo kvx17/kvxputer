@@ -93,4 +93,7 @@ bool rfSaveSignal(float frequency, RfCodes codes, bool raw, char *key, bool auto
 String rf_scan(float start_freq, float stop_freq, int max_loops = -1);
 String rfReceiveSignal(float frequency = 0, int max_loops = -1, bool raw = false, bool headless = false);
 
+// Decode KeeLoq from pulse durations and fill manufacturer fields when known.
+bool rf_try_keeloq(const std::vector<int> &durations, RfCodes &received);
+
 #endif

@@ -13,10 +13,12 @@
 #define HID_SLOT_LOG(...)
 #endif
 #include <KeyboardLayout.h>
+#if !defined(KVX_NO_NIMBLE)
 #include <NimBLEDevice.h>
 #include <NimBLEAdvertisementData.h>
 #include <NimBLEServer.h>
 #include <host/ble_store.h>
+#endif
 #include <esp_mac.h>
 #if defined(USB_as_HID)
 #include <USB.h>
@@ -236,7 +238,10 @@ static void prepareBleRam() {
 }
 
 static bool ensureBle(HidRemoteTransportSession &s) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(KVX_NO_NIMBLE)
+    (void)s;
+    return false;
+#elif defined(CONFIG_BT_ENABLED)
     // Reuse a live stack. begin()/pair used to tear NimBLE down and re-init on
     // every call; that fragments DMA and surfaces "Low RAM: free WiFi/SD first"
     // even though BLE was already running.
@@ -309,7 +314,17 @@ static bool ensureBle(HidRemoteTransportSession &s) {
 }
 
 static void teardownBle(HidRemoteTransportSession &s) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(KVX_NO_NIMBLE)
+    if (s.bleHid != nullptr) {
+        s.bleHid->end();
+        delete s.bleHid;
+        s.bleHid = nullptr;
+    }
+    s.keyboardHid = nullptr;
+    s.keyboardActive = false;
+    s.mouseActive = false;
+    BLEConnected = false;
+#elif defined(CONFIG_BT_ENABLED)
     // Drop the link before BleKeyboard::end()/deinit — a stuck peer used to
     // spin forever in end()'s disconnect loop and freeze the UI on Esc.
     if (NimBLEDevice::isInitialized()) {
@@ -351,6 +366,7 @@ static void teardownBle(HidRemoteTransportSession &s) {
 bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability caps) {
     // Keep a live BLE session. Calling end() here used to deinit NimBLE on every
     // pair/reconnect attempt, fragment DMA, and trip the Low RAM gate.
+#if !defined(KVX_NO_NIMBLE)
     if (t == HID_REMOTE_BLE && transport == HID_REMOTE_BLE && bleHid != nullptr &&
         NimBLEDevice::isInitialized()) {
         keyboardHid = bleHid;
@@ -361,6 +377,7 @@ bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability 
         refreshHostLabel();
         return true;
     }
+#endif
 
     if (transport == HID_REMOTE_BLE || transport == HID_REMOTE_USB) end();
     transport = t;
@@ -379,9 +396,15 @@ bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability 
     }
 
     if (t == HID_REMOTE_BLE) {
+#if defined(KVX_NO_NIMBLE)
+        (void)caps;
+        displayError("BLE HID gated on Tab5\n(NimBLE/P4)", true);
+        return false;
+#else
         bool ok = ensureBle(*this);
         if (ok) refreshHostLabel();
         return ok;
+#endif
     }
 
     return false;
@@ -394,7 +417,7 @@ void HidRemoteTransportSession::end() {
     hostLabel = "";
 }
 
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
 static bool bleAddrEqual(const String &a, const String &b) { return hidRemoteAddrEqual(a, b); }
 
 static String bleAddrCore(const String &addr) { return hidRemoteAddrCore(addr); }
@@ -596,7 +619,7 @@ bool HidRemoteTransportSession::waitConnectedExpected(
         connected = keyboardActive || mouseActive;
         return connected;
     }
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     const bool acceptAny = expectedAddr == "__any__";
     const bool acceptNewOnly = expectedAddr.isEmpty();
     const bool exclusiveHost = !acceptAny && !acceptNewOnly && expectedAddr.length() > 0;
@@ -986,7 +1009,7 @@ bool HidRemoteTransportSession::isConnected() {
         return false;
 #endif
     }
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (bleHid == nullptr || !NimBLEDevice::isInitialized()) {
         connected = false;
         BLEConnected = false;
@@ -1024,7 +1047,7 @@ bool HidRemoteTransportSession::isConnected() {
 }
 
 int HidRemoteTransportSession::getBondCount() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (!NimBLEDevice::isInitialized()) return 0;
     return NimBLEDevice::getNumBonds();
 #else
@@ -1033,7 +1056,7 @@ int HidRemoteTransportSession::getBondCount() {
 }
 
 String HidRemoteTransportSession::getBondLabel(int index) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (!NimBLEDevice::isInitialized()) return "";
     const int n = NimBLEDevice::getNumBonds();
     if (index < 0 || index >= n) return "";
@@ -1045,7 +1068,7 @@ String HidRemoteTransportSession::getBondLabel(int index) {
 }
 
 String HidRemoteTransportSession::getConnectedAddress() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return "";
     if (!NimBLEDevice::isInitialized()) return "";
     NimBLEServer *server = NimBLEDevice::getServer();
@@ -1061,7 +1084,7 @@ String HidRemoteTransportSession::getConnectedAddress() {
 }
 
 bool HidRemoteTransportSession::isConnectedToAddr(const String &addr) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (!isConnected() || addr.isEmpty()) return false;
     return connectionMatchesAddr(addr);
 #else
@@ -1079,7 +1102,7 @@ String HidRemoteTransportSession::displayNameForAddr(const String &addr) const {
 }
 
 bool HidRemoteTransportSession::isKnownHostAddress(const String &addr) const {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (addr.isEmpty()) return false;
     if (kvxConfig.findHidRemoteHostSlotForAddr(addr) > 0) return true;
     if (!NimBLEDevice::isInitialized()) return false;
@@ -1097,7 +1120,7 @@ bool HidRemoteTransportSession::isKnownHostAddress(const String &addr) const {
 }
 
 void HidRemoteTransportSession::dedupeHostSlots() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return;
 
     // Collapse slots that point at the same bond / same address core.
@@ -1129,7 +1152,7 @@ void HidRemoteTransportSession::dedupeHostSlots() {
 }
 
 void HidRemoteTransportSession::rememberConnectedHost(int preferSlot, bool neverCreateSlot) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return;
     String addr = getConnectedAddress();
     if (addr.isEmpty()) return;
@@ -1209,7 +1232,7 @@ void HidRemoteTransportSession::rememberConnectedHost(int preferSlot, bool never
 }
 
 int HidRemoteTransportSession::bondIndexForSlot(int slot1to8) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (!NimBLEDevice::isInitialized()) return -1;
     String addr = kvxConfig.getHidRemoteHostSlot(slot1to8);
     if (addr.isEmpty()) return -1;
@@ -1221,7 +1244,7 @@ int HidRemoteTransportSession::bondIndexForSlot(int slot1to8) {
 }
 
 int HidRemoteTransportSession::bondIndexForLiveHost() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     return bondIndexForConnection();
 #else
     return -1;
@@ -1230,7 +1253,7 @@ int HidRemoteTransportSession::bondIndexForLiveHost() {
 
 std::vector<String> HidRemoteTransportSession::describeHostBinding() {
     std::vector<String> lines;
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (!NimBLEDevice::isInitialized()) {
         lines.push_back("BLE not started");
         return lines;
@@ -1269,7 +1292,7 @@ std::vector<String> HidRemoteTransportSession::describeHostBinding() {
 }
 
 void HidRemoteTransportSession::syncHostSlotsWithBonds() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return;
     if (!NimBLEDevice::isInitialized()) return;
 
@@ -1334,7 +1357,7 @@ void HidRemoteTransportSession::syncHostSlotsWithBonds() {
 #endif
 }
 
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
 static void clearBleWhitelist() {
     while (NimBLEDevice::getWhiteListCount() > 0) {
         NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0));
@@ -1343,7 +1366,7 @@ static void clearBleWhitelist() {
 #endif
 
 bool HidRemoteTransportSession::ensureAdvertising() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1356,7 +1379,7 @@ bool HidRemoteTransportSession::ensureAdvertising() {
 }
 
 bool HidRemoteTransportSession::advertiseStop() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1376,7 +1399,7 @@ bool HidRemoteTransportSession::advertiseStop() {
 }
 
 bool HidRemoteTransportSession::advertiseOpen() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1423,7 +1446,7 @@ bool HidRemoteTransportSession::advertiseOpen() {
 }
 
 bool HidRemoteTransportSession::advertiseReconnect() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1461,7 +1484,7 @@ bool HidRemoteTransportSession::advertiseReconnect() {
 }
 
 bool HidRemoteTransportSession::advertiseDirectedForHost(const String &addr) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized() || addr.isEmpty()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1508,7 +1531,7 @@ bool HidRemoteTransportSession::advertiseDirectedForHost(const String &addr) {
 }
 
 bool HidRemoteTransportSession::advertiseForHost(const String &addr, bool whitelistOnly) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1569,7 +1592,7 @@ bool HidRemoteTransportSession::advertiseForHost(const String &addr, bool whitel
 }
 
 bool HidRemoteTransportSession::advertiseForAnyBonded() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -1603,7 +1626,7 @@ void HidRemoteTransportSession::refreshHostLabel() {
     hostLabel = "";
     if (!isConnected()) return;
 
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport == HID_REMOTE_BLE) {
         String addr = getConnectedAddress();
         String alias = kvxConfig.getHidRemoteHostAlias(addr);
@@ -1631,7 +1654,7 @@ void HidRemoteTransportSession::refreshHostLabel() {
 }
 
 bool HidRemoteTransportSession::disconnectHost(bool readvertise) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (!NimBLEDevice::isInitialized()) return false;
 
@@ -1662,7 +1685,7 @@ bool HidRemoteTransportSession::disconnectHost(bool readvertise) {
 #endif
 }
 
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
 // Stop ADV + drop every link before editing the bond store. ble_gap_unpair()
 // returns BLE_HS_EBUSY while advertising when the peer has an IRK (iOS/Android).
 static void quiesceBleForBondEdit(HidRemoteTransportSession &s) {
@@ -1757,7 +1780,7 @@ static void clearSlotMappingForAddr(const String &addr) {
 #endif
 
 bool HidRemoteTransportSession::forgetBond(const String &addr) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (addr.isEmpty()) return false;
     if (!NimBLEDevice::isInitialized()) {
@@ -1784,7 +1807,7 @@ bool HidRemoteTransportSession::forgetBond(const String &addr) {
 }
 
 bool HidRemoteTransportSession::forgetBonds() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
 
     if (NimBLEDevice::isInitialized()) {
@@ -1827,7 +1850,7 @@ bool HidRemoteTransportSession::forgetBonds() {
 }
 
 bool HidRemoteTransportSession::switchToHost(const String &addr, unsigned long timeoutMs) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (transport != HID_REMOTE_BLE) return false;
     if (addr.isEmpty()) return false;
 
@@ -1917,7 +1940,7 @@ bool HidRemoteTransportSession::switchToHost(const String &addr, unsigned long t
 }
 
 bool HidRemoteTransportSession::switchToSlot(int slot1to8, unsigned long timeoutMs) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     String addr = kvxConfig.getHidRemoteHostSlot(slot1to8);
     if (addr.isEmpty()) return false;
     return switchToHost(addr, timeoutMs);
@@ -1929,7 +1952,7 @@ bool HidRemoteTransportSession::switchToSlot(int slot1to8, unsigned long timeout
 }
 
 bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeoutMs) {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     if (slot1to8 < 1 || slot1to8 > KvxputerConfig::HID_REMOTE_HOST_SLOT_COUNT) return false;
     gHidWaitUserCancel = false;
 
@@ -1989,7 +2012,7 @@ bool HidRemoteTransportSession::pairIntoSlot(int slot1to8, unsigned long timeout
 }
 
 bool HidRemoteTransportSession::reconnectNewHost() {
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
     // Pair into the first empty host slot (or slot 1 if all full — overwrite not done; fail)
     int slot = kvxConfig.findEmptyHidRemoteHostSlot();
     if (slot <= 0) return false;

@@ -13,12 +13,9 @@
 #include <globals.h>
 #include <math.h>
 #include <vector>
-#if defined(HAS_KEYBOARD)
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
 #include <Keyboard.h>
 extern Keyboard_Class Keyboard;
-#endif
-
-#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
 // Defined in tools/porting/boards/m5stack-cardputer/interface.cpp (file scope).
 extern bool UseTCA8418;
 extern bool fn_key_pressed;
@@ -800,9 +797,6 @@ static bool pollFnHeld(const keyStroke &key) {
     if (key.fn) return true;
 #if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
     if (UseTCA8418) return fn_key_pressed;
-    Keyboard.update();
-    return Keyboard.keysState().fn;
-#elif defined(HAS_KEYBOARD)
     Keyboard.update();
     return Keyboard.keysState().fn;
 #else

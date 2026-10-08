@@ -1,4 +1,5 @@
 #include "BleKeyboard.h"
+#if !defined(KVX_NO_NIMBLE)
 #include "KeyboardLayout.h"
 
 #include "HIDTypes.h"
@@ -596,3 +597,5 @@ void BleKeyboard::delay_ms(uint64_t ms) {
         while (esp_timer_get_time() < e) {}
     }
 }
+
+#endif // !KVX_NO_NIMBLE

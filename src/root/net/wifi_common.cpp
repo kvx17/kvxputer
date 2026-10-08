@@ -16,13 +16,62 @@
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
+#if defined(ARDUINO_M5STACK_TAB5)
+// ESP32-P4 talks to the on-board C6 over SDIO. Pins are set by M5.begin /
+// BOARD_HAS_SDIO_ESP_HOSTED defaults, but the slave needs a settle window after
+// WLAN_PWR_EN, and WiFi.mode must be checked — a failed hostedInit leaves the
+// stack half-dead and the next scan/UI blit can freeze the DSI panel cyan.
+static bool ensureTab5HostedWifi() {
+    static bool pinsAsserted = false;
+    if (!pinsAsserted) {
+        pinsAsserted = true;
+#if defined(CONFIG_ESP_WIFI_REMOTE_ENABLED)
+        WiFi.setPins(
+            BOARD_SDIO_ESP_HOSTED_CLK,
+            BOARD_SDIO_ESP_HOSTED_CMD,
+            BOARD_SDIO_ESP_HOSTED_D0,
+            BOARD_SDIO_ESP_HOSTED_D1,
+            BOARD_SDIO_ESP_HOSTED_D2,
+            BOARD_SDIO_ESP_HOSTED_D3,
+            BOARD_SDIO_ESP_HOSTED_RESET
+        );
+#endif
+        // C6 boot after PI4IO WLAN_PWR_EN (M5.Power.begin).
+        if (millis() < 800) delay(800 - millis());
+        else delay(120);
+    }
+    return true;
+}
+
+void wifiPrepareTab5Hosted() { (void)ensureTab5HostedWifi(); }
+
+static bool tab5WifiModeSta() {
+    ensureTab5HostedWifi();
+    for (int attempt = 0; attempt < 3; attempt++) {
+        if (WiFi.mode(WIFI_MODE_STA)) return true;
+        Serial.printf("[Tab5] WiFi.mode(STA) failed attempt %d\n", attempt + 1);
+        delay(250 + attempt * 250);
+        ensureTab5HostedWifi();
+    }
+    return false;
+}
+#endif
+
 esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
+#if defined(ARDUINO_M5STACK_TAB5)
+    (void)ifx;
+    (void)frame;
+    (void)len;
+    (void)retries;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
     esp_err_t err = esp_wifi_80211_tx(ifx, frame, len, false);
     for (uint8_t i = 0; err == ESP_ERR_NO_MEM && i < retries; i++) {
         vTaskDelay(1); // let the driver drain TX buffers and retry
         err = esp_wifi_80211_tx(ifx, frame, len, false);
     }
     return err;
+#endif
 }
 
 void ensureWifiPlatform() {
@@ -114,7 +163,14 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd) {
     tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
     padprint(ssid);
     tft.print(".");
+#if defined(ARDUINO_M5STACK_TAB5)
+    if (!tab5WifiModeSta()) {
+        displayError("WiFi radio failed\n(C6 hosted)", true);
+        return false;
+    }
+#else
     WiFi.mode(WIFI_MODE_STA);
+#endif
     RAM_LOG("wifi post-mode");
     vTaskDelay(10 / portTICK_PERIOD_MS);
     WiFi.begin(ssid, pwd);
@@ -242,7 +298,15 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 
     switch (mode) {
         case WIFI_AP: // access point
+#if defined(ARDUINO_M5STACK_TAB5)
+            ensureTab5HostedWifi();
+            if (!WiFi.mode(WIFI_AP)) {
+                displayError("WiFi radio failed\n(C6 hosted)", true);
+                return false;
+            }
+#else
             WiFi.mode(WIFI_AP);
+#endif
             return _setupAP();
             break;
 
@@ -253,7 +317,15 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 return false;
             }
             uiRamEnterHeavy();
+#if defined(ARDUINO_M5STACK_TAB5)
+            if (!tab5WifiModeSta()) {
+                displayError("WiFi radio failed\n(C6 hosted)", true);
+                uiRamLeaveHeavy();
+                return false;
+            }
+#else
             WiFi.mode(WIFI_MODE_STA);
+#endif
 
             // wifiMACMenu();
             applyConfiguredMAC();
@@ -262,6 +334,11 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             do {
                 displayTextLine("Scanning..");
                 nets = WiFi.scanNetworks();
+                if (nets < 0) {
+                    displayError("WiFi scan failed", true);
+                    wifiDisconnect();
+                    return false;
+                }
 
                 String selSsid = "";
                 int selEnc = 0;
@@ -361,8 +438,21 @@ void wifiConnectTask(void *pvParameters) {
     }
     uiRamEnterHeavy();
 
+#if defined(ARDUINO_M5STACK_TAB5)
+    if (!tab5WifiModeSta()) {
+        uiRamLeaveHeavy();
+        vTaskDelete(NULL);
+        return;
+    }
+#else
     WiFi.mode(WIFI_MODE_STA);
+#endif
     int nets = WiFi.scanNetworks();
+    if (nets < 0) {
+        uiRamLeaveHeavy();
+        vTaskDelete(NULL);
+        return;
+    }
     String ssid;
     String pwd;
 
@@ -420,11 +510,22 @@ bool wifiConnecttoKnownNet(void) {
 
     bool result = false;
     int nets;
-    // WiFi.mode(WIFI_MODE_STA);
+#if defined(ARDUINO_M5STACK_TAB5)
+    if (!tab5WifiModeSta()) {
+        displayError("WiFi radio failed\n(C6 hosted)", true);
+        uiRamLeaveHeavy();
+        return false;
+    }
+#endif
     displayTextLine("Scanning Networks..");
     WiFi.disconnect(true, true);
     vTaskDelay(10 / portTICK_PERIOD_MS);
     nets = WiFi.scanNetworks();
+    if (nets < 0) {
+        displayError("WiFi scan failed", true);
+        wifiDisconnect();
+        return false;
+    }
     for (int i = 0; i < nets; i++) {
         vTaskDelay(10 / portTICK_PERIOD_MS);
         String ssid = WiFi.SSID(i);

@@ -27,15 +27,17 @@ String bssidStr(const uint8_t *b) {
 
 bool pcConnectWifiAnalyzerActive() { return g_active; }
 
-bool pcConnectWifiAnalyzerStart(uint16_t dwellMs) {
+bool pcConnectWifiAnalyzerStart(uint16_t dwellMs, uint8_t lockCh) {
     pcConnectStopRadio();
     if (dwellMs < 150) dwellMs = 150;
     if (dwellMs > 1000) dwellMs = 1000;
+    if (lockCh > 11) lockCh = 0;
     g_dwell = dwellMs;
     g_apTrack.clear();
     if (!caSessionStart()) return false;
+    caSessionSetLock(lockCh);
     g_active = true;
-    pcConnectSetStatus(PcRadio::Wifi, "wifi.analyzer", 0);
+    pcConnectSetStatus(PcRadio::Wifi, "wifi.analyzer", lockCh);
     return true;
 }
 

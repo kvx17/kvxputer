@@ -128,6 +128,11 @@ void tft_display::syncCanvasState() {
 }
 
 bool tft_display::beginFrame() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Force direct-to-panel: 720p canvas blit over MIPI-DSI crashes when the
+    // C6 hosted SDIO radio is active (solid cyan / freeze).
+    _canvasSuppressed = true;
+#endif
     if (_canvasSuppressed) return false;
     if (_buffering) {
         if (_frameDepth < 255) _frameDepth++;
@@ -168,7 +173,14 @@ void tft_display::begin(uint32_t speed) { (void)speed; }
 
 void tft_display::init(uint8_t tc) {
     (void)tc;
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Tab5 board HAL already called M5.begin() with the MIPI-DSI config.
+    // A second begin() is a no-op once the board is set, but skip it so we
+    // never clear/re-init the ST712x panel during splash.
+    if (M5.getBoard() == m5::board_t::board_unknown) { M5.begin(); }
+#else
     M5.begin();
+#endif
 }
 
 void tft_display::setRotation(uint8_t r) {

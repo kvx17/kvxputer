@@ -8,7 +8,9 @@
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
 #include "root/scripting/bjs_interpreter/interpreter.h"
 #endif
+#if !defined(KVX_NO_NIMBLE)
 #include "menu/ble/ble_api/ble_api.hpp"
+#endif
 #include "menu/others/qrcode_menu.h"
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_alarms.h"
@@ -146,19 +148,26 @@ int gsetRotation(bool set) {
     }
     returnToMenu = true;
 
-    if (result & 0b01) { // if 1 or 3
-        tftWidth = TFT_HEIGHT;
-#if defined(HAS_TOUCH)
-        tftHeight = TFT_WIDTH - 20;
+    // Prefer live panel size after setRotation — TFT_WIDTH/HEIGHT are native (portrait)
+    // dims; Tab5 MIPI reports the rotated size correctly via M5.Display.
+    tftWidth = tft.width();
+#if defined(HAS_TOUCH) && !defined(ARDUINO_M5STACK_TAB5)
+    // Core2-style touch footer reserve. Tab5 uses keyboard + gesture chrome, not this strip.
+    tftHeight = tft.height() - 20;
 #else
-        tftHeight = TFT_WIDTH;
+    tftHeight = tft.height();
 #endif
-    } else { // if 2 or 0
-        tftWidth = TFT_WIDTH;
-#if defined(HAS_TOUCH)
-        tftHeight = TFT_HEIGHT - 20;
-#else
-        tftHeight = TFT_HEIGHT;
+    if (tftWidth <= 0 || tftHeight <= 0) {
+        // Fallback if the HAL has not published size yet
+        if (result & 0b01) {
+            tftWidth = TFT_HEIGHT;
+            tftHeight = TFT_WIDTH;
+        } else {
+            tftWidth = TFT_WIDTH;
+            tftHeight = TFT_HEIGHT;
+        }
+#if defined(HAS_TOUCH) && !defined(ARDUINO_M5STACK_TAB5)
+        tftHeight -= 20;
 #endif
     }
     return result;
@@ -1815,6 +1824,9 @@ void setTheme() {
     }
 }
 #if !defined(LITE_VERSION)
+#if defined(KVX_NO_NIMBLE)
+void enableBLEAPI() { displayInfo("BLE API gated\n(radio later)", true); }
+#else
 BLE_API bleApi;
 static bool ble_api_enabled = false;
 
@@ -1831,6 +1843,7 @@ void enableBLEAPI() {
 
     ble_api_enabled = !ble_api_enabled;
 }
+#endif // !KVX_NO_NIMBLE
 
 bool appStoreInstalled() {
     FS *fs;

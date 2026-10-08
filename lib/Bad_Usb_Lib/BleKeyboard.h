@@ -4,7 +4,7 @@
 #ifndef ESP32_BLE_KEYBOARD_H
 #define ESP32_BLE_KEYBOARD_H
 #include "sdkconfig.h"
-#if defined(CONFIG_BT_ENABLED)
+#if defined(CONFIG_BT_ENABLED) && !defined(KVX_NO_NIMBLE)
 #define USE_NIMBLE
 #include "NimBLECharacteristic.h"
 #include "NimBLEHIDDevice.h"
@@ -133,5 +133,52 @@ private:
     uint8_t m_subCount{0};
 };
 
-#endif // CONFIG_BT_ENABLED
+#endif // CONFIG_BT_ENABLED && !KVX_NO_NIMBLE
+
+#if defined(KVX_NO_NIMBLE)
+#include "Bad_Usb_Lib.h"
+#include "KeyboardLayout.h"
+#include "Print.h"
+#include "keys.h"
+// Stub when NimBLE is unavailable (e.g. ESP32-P4 Tab5 milestone 1).
+class BleKeyboard : public HIDInterface {
+public:
+    BleKeyboard(String = "Keyboard", String = "HID", uint8_t = 100) {}
+    void begin(const uint8_t *layout = KeyboardLayout_en_US) override { (void)layout; }
+    void begin(const uint8_t *layout, uint16_t) { (void)layout; }
+    void setLayout(const uint8_t *layout = KeyboardLayout_en_US) { (void)layout; }
+    void end(void) override {}
+    void sendReport(KeyReport *) {}
+    void sendReport(MediaKeyReport *) {}
+    void sendMouseReport(int8_t = 0, int8_t = 0, int8_t = 0) {}
+    void mouseMove(int8_t = 0, int8_t = 0, int8_t = 0) {}
+    void mouseClick(uint8_t) {}
+    void mouseRelease(uint8_t) {}
+    size_t press(uint8_t) override { return 0; }
+    size_t pressRaw(uint8_t) override { return 0; }
+    size_t press(const MediaKeyReport) { return 0; }
+    size_t release(uint8_t) override { return 0; }
+    size_t releaseRaw(uint8_t) override { return 0; }
+    size_t release(const MediaKeyReport) { return 0; }
+    size_t write(uint8_t) override { return 0; }
+    size_t write(const MediaKeyReport) { return 0; }
+    size_t write(const uint8_t *, size_t) override { return 0; }
+    void releaseAll(void) override {}
+    bool isConnected(void) { return false; }
+    void clearConnected(void) {}
+    void setBatteryLevel(uint8_t) {}
+    void setName(const String &) {}
+    void setDelay(uint32_t) {}
+    void setAppearence(uint16_t) {}
+    void setRandomUUID(void) {}
+    bool getRandomUUID() { return false; }
+    uint16_t getAppearence() { return 0; }
+    void set_vendor_id(uint16_t) {}
+    void set_product_id(uint16_t) {}
+    void set_version(uint16_t) {}
+    uint8_t getSubscribedCount() { return 0; }
+    void ensureNotifyReady() {}
+};
+#endif // KVX_NO_NIMBLE
+
 #endif // ESP32_BLE_KEYBOARD_H

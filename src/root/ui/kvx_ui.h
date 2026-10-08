@@ -4,7 +4,11 @@
 #include <globals.h>
 #include <vector>
 
+#if defined(ARDUINO_M5STACK_TAB5)
+#define KVX_TOPBAR_H 48
+#else
 #define KVX_TOPBAR_H 24
+#endif
 #define KVX_PURPLE_DARK 0x600C
 
 void drawKvxTopBar(const char *leftLabel);

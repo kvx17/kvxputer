@@ -3,6 +3,7 @@
 #include "root/ui/display.h"
 #include "root/ui/kvx_main_menu.h"
 #include "root/app/utils.h"
+#include <cstring>
 #include <globals.h>
 
 MainMenu::MainMenu() {

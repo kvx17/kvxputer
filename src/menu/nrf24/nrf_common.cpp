@@ -43,6 +43,10 @@ bool nrf_start(NRF24_MODE mode) {
 
     if (!CHECK_NRF_SPI(mode)) return result;
 
+    if (kvxConfigPins.NRF24_bus.cs == GPIO_NUM_NC || kvxConfigPins.NRF24_bus.io0 == GPIO_NUM_NC) {
+        return false;
+    }
+
     // Always re-assert CE LOW and CS HIGH before begin() — these pins
     // may have been left in an indeterminate state by the previous session,
     // especially after stopConstCarrier() which can leave CE HIGH internally.
@@ -76,6 +80,13 @@ NRF24_MODE nrf_setMode() {
     NRF24_MODE mode = NRF_MODE_DISABLED;
     bool nrfSPI = true;
     bool nrfUART = true;
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Tab5 CS/CE default -1: refuse SPI and do not fall back to UART on G37/G38.
+    if (kvxConfigPins.NRF24_bus.cs == GPIO_NUM_NC || kvxConfigPins.NRF24_bus.io0 == GPIO_NUM_NC) {
+        displayError("NRF24: set CS/CE\nin Pins (M5-Bus)", true);
+        return NRF_MODE_DISABLED;
+    }
+#endif
     if (kvxConfigPins.NRF24_bus.checkConflict(GPIO_NUM_NC)) {
         displayError("NRF24 pins not configured", true);
         nrfSPI = false;

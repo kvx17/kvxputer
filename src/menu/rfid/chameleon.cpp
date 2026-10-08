@@ -6,6 +6,7 @@
  * @date 2024-10-09
  */
 
+#if !defined(KVX_NO_NIMBLE)
 #include "root/storage/paths.h"
 #include "chameleon.h"
 #include "root/ui/display.h"
@@ -996,3 +997,5 @@ void Chameleon::delayWithReturn(uint32_t ms) {
     auto tm = millis();
     while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
 }
+
+#endif // !KVX_NO_NIMBLE

@@ -27,11 +27,15 @@ void EMVReader::setup() {
         case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
         default: {
             Serial.println("EMVReader: Unsupported RFID module for EMV reading.");
+            displayError("EMV needs PN532\non Grove PORT.A", true);
             return;
         }
     }
 
-    _rfid->begin();
+    if (!_rfid->begin()) {
+        displayError("PN532 not found\nGrove PORT.A G53/G54", true);
+        return;
+    }
     nfc = &(_rfid->nfc);
 
     displayInfo("Waiting for EMV card...");

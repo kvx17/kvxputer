@@ -197,16 +197,24 @@ void fm_spectrum() {
             radio.readTuneStatus();
             noise_level = radio.currNoiseLevel;
             if (noise_level != 0) {
-                // Clear the display area
-                tft.fillRect(0, 40, tftWidth, tftHeight, kvxConfig.bgColor);
+#if defined(ARDUINO_M5STACK_TAB5)
+                const int topY = uiStatusY(0);
+                const int bodyH = uiFooterY(FP) - topY;
+                tft.fillRect(0, topY, tftWidth, bodyH, kvxConfig.bgColor);
+                const int midY = topY + bodyH / 2;
+#else
+                const int topY = 40;
+                const int bodyH = tftHeight - topY;
+                tft.fillRect(0, topY, tftWidth, bodyH, kvxConfig.bgColor);
+                const int midY = 20 + tftHeight / 2;
+#endif
                 // Draw waveform based on signal strength
                 for (size_t i = 0; i < noise_level; i++) {
-                    int lineHeight = map(noise_level, 0, SIGNAL_STRENGTH_THRESHOLD, 0, tftHeight / 2);
+                    int lineHeight = map(noise_level, 0, SIGNAL_STRENGTH_THRESHOLD, 0, bodyH / 2);
                     int lineX =
                         map(i, 0, noise_level - 1, 0, tftWidth - 1); // Map i to within the display width
-                    // Ensure drawing coordinates stay within the box bounds
-                    int startY = constrain(20 + tftHeight / 2 - lineHeight / 2, 20, 20 + tftHeight);
-                    int endY = constrain(20 + tftHeight / 2 + lineHeight / 2, 20, 20 + tftHeight);
+                    int startY = constrain(midY - lineHeight / 2, topY, topY + bodyH);
+                    int endY = constrain(midY + lineHeight / 2, topY, topY + bodyH);
                     tft.drawLine(lineX, startY, lineX, endY, kvxConfig.priColor);
                 }
             }
@@ -221,7 +229,7 @@ bool fm_begin() {
     if (!radio.begin()) { // begin with address 0x63 (CS high default)
         tft.fillScreen(kvxConfig.bgColor);
         Serial.println("Cannot find radio");
-        displayTextLine("Cannot find radio", true);
+        displayError("Si4713 not found\nGrove PORT.A G53/G54", true);
         return false;
     }
 

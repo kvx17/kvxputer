@@ -1,4 +1,5 @@
 #ifndef LITE_VERSION
+#if !defined(KVX_NO_NIMBLE)
 #include "root/storage/paths.h"
 #include "pn532ble.h"
 #include "apdu.h"
@@ -1482,4 +1483,5 @@ String Pn532ble::saveHfDumpBinFile(std::vector<uint8_t> data, String uid, String
     file.close();
     return fileName;
 }
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION

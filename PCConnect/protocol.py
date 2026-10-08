@@ -265,20 +265,17 @@ class PcConnectSession:
         if prompt:
             print("Device found, but PC Connect is not open yet.")
             print("On the Cardputer: USB → PC Connect")
-            print("Waiting", end="", flush=True)
+            print(f"Waiting for PC Connect on {self.port} (Ctrl-C to cancel)…", flush=True)
         while time.time() < deadline:
             try:
-                return self.do_hello(timeout=2.0, require_ready=True)
+                hello = self.do_hello(timeout=2.0, require_ready=True)
+                if prompt:
+                    print("PC Connect ready.")
+                return hello
             except NeedPcConnectApp:
-                if prompt:
-                    print(".", end="", flush=True)
-                time.sleep(0.4)
+                time.sleep(0.5)
             except PcConnectError:
-                if prompt:
-                    print(".", end="", flush=True)
-                time.sleep(0.4)
-        if prompt:
-            print()
+                time.sleep(0.5)
         raise PcConnectError("timed out waiting for PC Connect app")
 
     def stop(self, timeout: float = 2.0) -> bool:
@@ -387,6 +384,12 @@ APP_LABELS = {
     "ble.flipper": "Wall of Flipper",
     "ble.airtag": "Wall of Airtag",
     "ble.skimmer": "Skimmer Detector",
+    "gpio": "GPIO",
+    "ir.rx": "IR Receive",
+    "rf.rx": "Sub-GHz RX",
+    "rf.rssi": "Sub-GHz RSSI",
+    "rfid.read": "RFID Read",
+    "jam.detect": "Jam Detect",
 }
 
 APP_COMMANDS = {
@@ -395,4 +398,10 @@ APP_COMMANDS = {
     "ble.flipper": "ble.flipper start",
     "ble.airtag": "ble.airtag start",
     "ble.skimmer": "ble.skimmer start",
+    "gpio": "gpio",
+    "ir.rx": "ir.rx start",
+    "rf.rx": "rf.rx start",
+    "rf.rssi": "rf.rssi start",
+    "rfid.read": "rfid.read start",
+    "jam.detect": "jam.detect start",
 }

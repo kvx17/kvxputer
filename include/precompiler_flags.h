@@ -172,6 +172,12 @@
   {"GPIO 0",   0}, {"GPIO 1",   1}, {"GPIO 2",   2}, {"GPIO 3",   3}, {"GPIO 4",   4}, {"GPIO 5",   5}, {"GPIO 6",   6}, {"GPIO 7",   7}, {"GPIO 8",   8}, {"GPIO 9",   9}, \
   {"GPIO 10", 10}, {"GPIO 11", 11}, {"GPIO 12", 12}, {"GPIO 13", 13}, {"GPIO 14", 14}, {"GPIO 23", 23}, {"GPIO 24", 24}, {"GPIO 25", 25}, {"GPIO 26", 26}, {"GPIO 27", 27}, {"GPIO 28", 28} \
 }
+#elif CONFIG_IDF_TARGET_ESP32P4
+#define GPIO_PIN_LIST { \
+  {"GPIO 0",   0}, {"GPIO 1",   1}, {"GPIO 2",   2}, {"GPIO 3",   3}, {"GPIO 4",   4}, {"GPIO 5",   5}, {"GPIO 6",   6}, {"GPIO 7",   7}, {"GPIO 16", 16}, {"GPIO 17", 17}, \
+  {"GPIO 18", 18}, {"GPIO 19", 19}, {"GPIO 20", 20}, {"GPIO 21", 21}, {"GPIO 35", 35}, {"GPIO 37", 37}, {"GPIO 38", 38}, {"GPIO 45", 45}, {"GPIO 47", 47}, {"GPIO 48", 48}, \
+  {"GPIO 50", 50}, {"GPIO 51", 51}, {"GPIO 52", 52}, {"GPIO 53", 53}, {"GPIO 54", 54} \
+}
 #else
 #define GPIO_PIN_LIST { \
   {"GPIO 1",   1}, {"GPIO 2",   2}, {"GPIO 3",   3}, {"GPIO 4",   4}, {"GPIO 5",   5}, {"GPIO 6",   6}, {"GPIO 7",   7}, {"GPIO 8",   8}, {"GPIO 9",   9}, {"GPIO 10", 10}, \

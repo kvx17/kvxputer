@@ -240,6 +240,10 @@ bool initRfModule(String mode, float frequency) {
     if (!frequency) frequency = kvxConfigPins.rfFreq;
 
     if (kvxConfigPins.rfModule == CC1101_SPI_MODULE) { // CC1101 in use
+        if (kvxConfigPins.CC1101_bus.cs == GPIO_NUM_NC || kvxConfigPins.CC1101_bus.io0 == GPIO_NUM_NC) {
+            displayError("CC1101: set CS/GDO0\nin Pins (M5-Bus)", true);
+            return false;
+        }
         SPIClass *ccSpi = acquireSPIBus(
             kvxConfigPins.CC1101_bus.sck, kvxConfigPins.CC1101_bus.miso, kvxConfigPins.CC1101_bus.mosi
         );
@@ -353,8 +357,12 @@ void deinitRfModule() {
             ELECHOUSE_cc1101.setSidle();
             cc1101_spi_ready = false;
         }
-        digitalWrite(kvxConfigPins.CC1101_bus.io0, LOW);
-        digitalWrite(kvxConfigPins.CC1101_bus.cs, HIGH);
+        if (kvxConfigPins.CC1101_bus.io0 != GPIO_NUM_NC) {
+            digitalWrite(kvxConfigPins.CC1101_bus.io0, LOW);
+        }
+        if (kvxConfigPins.CC1101_bus.cs != GPIO_NUM_NC) {
+            digitalWrite(kvxConfigPins.CC1101_bus.cs, HIGH);
+        }
         ioExpander.turnPinOnOff(IO_EXP_CC_RX, LOW);
         ioExpander.turnPinOnOff(IO_EXP_CC_TX, LOW);
     } else {

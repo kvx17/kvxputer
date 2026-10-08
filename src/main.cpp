@@ -159,7 +159,7 @@ tft_logger tft = tft_logger(); // Invoke custom library
 tft_sprite sprite = tft_sprite(&tft);
 tft_sprite draw = tft_sprite(&tft);
 volatile int tftWidth = TFT_HEIGHT;
-#ifdef HAS_TOUCH
+#if defined(HAS_TOUCH) && !defined(ARDUINO_M5STACK_TAB5)
 volatile int tftHeight =
     TFT_WIDTH - 20; // 20px to draw the TouchFooter(), were the btns are being read in touch devices.
 #else
@@ -259,7 +259,7 @@ void begin_tft() {
     tft.invertDisplay(kvxConfig.colorInverted);
     tft.setRotation(kvxConfigPins.rotation);
     tftWidth = tft.width();
-#ifdef HAS_TOUCH
+#if defined(HAS_TOUCH) && !defined(ARDUINO_M5STACK_TAB5)
     tftHeight = tft.height() - 20;
 #else
     tftHeight = tft.height();
@@ -472,7 +472,9 @@ void setup() {
 
     RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
+#if !defined(ARDUINO_M5STACK_TAB5)
     // Set WiFi country to avoid warnings and ensure max power
+    // Tab5: hosted C6 STA is gated in M1 — do not touch esp_wifi_* before a proven scan spike.
     const wifi_country_t country = {
         .cc = "US",
         .schan = 1,
@@ -485,6 +487,7 @@ void setup() {
 
     esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
     esp_wifi_set_country(&country);
+#endif
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
     _post_setup_gpio();

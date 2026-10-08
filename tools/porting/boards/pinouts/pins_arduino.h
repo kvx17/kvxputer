@@ -28,6 +28,8 @@
 #include "../m5stack-cplus2/pins_arduino.h"
 #elif defined(ARDUINO_M5STICK_S3)
 #include "../m5stack-sticks3/pins_arduino.h"
+#elif defined(ARDUINO_M5STACK_TAB5)
+#include "../m5stack-tab5/pins_arduino.h"
 #elif ESP32S3DEVKITC1
 #include "../ESP-General/pins_arduino.h"
 #elif SMOOCHIEE_BOARD

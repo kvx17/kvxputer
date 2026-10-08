@@ -344,12 +344,48 @@ static void selectMenuOption() {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+#if defined(ARDUINO_M5STACK_TAB5)
+// Default iButton pin 0 is Tab5 keyboard SDA — refuse reserved buses.
+static bool tab5IbuttonPinOk(int pin) {
+    if (pin < 0) return false;
+    switch (pin) {
+        case 0:
+        case 1:
+        case 50: // Tab5 Keyboard
+        case 31:
+        case 32: // sys I2C
+        case 8:
+        case 9:
+        case 10:
+        case 11:
+        case 12:
+        case 13:
+        case 14:
+        case 15: // C6 SDIO
+        case 22: // backlight
+        case 39:
+        case 42:
+        case 43:
+        case 44: // microSD SPI
+            return false;
+        default: return true;
+    }
+}
+#endif
+
 void setup_ibutton() {
     returnFromMenu = false;
     restartNeeded = false;
     keyLoaded = false;
 
 Restart:
+#if defined(ARDUINO_M5STACK_TAB5)
+    if (!tab5IbuttonPinOk(kvxConfigPins.iButton)) {
+        displayError("iButton: pick free pin\nin Pins (not G0/kb)", true);
+        setiButtonPinMenu();
+        if (!tab5IbuttonPinOk(kvxConfigPins.iButton)) return;
+    }
+#endif
     if (oneWire) delete oneWire;
     oneWire = new OneWire(kvxConfigPins.iButton);
 

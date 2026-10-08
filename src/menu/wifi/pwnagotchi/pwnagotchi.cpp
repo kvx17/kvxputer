@@ -319,6 +319,8 @@ static void advertisePhase(BruceState &s) {
 // kvxgotchi_start — main entry point
 // ---------------------------------------------------------------------------
 void kvxgotchi_start() {
+    if (!tab5RadioLater("Kvxgotchi gated\n(radio later)")) return;
+
     set_pwnagotchi_exit(false);
 
     tft.fillScreen(kvxConfig.bgColor);

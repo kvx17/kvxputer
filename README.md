@@ -2,7 +2,7 @@
 
 <img src="docs/boot.gif" alt="kvxputer boot animation" width="360" />
 
-**kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. A secondary PlatformIO environment also builds for **M5StickS3**, with a reduced, button-only feature set.
+**kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. Secondary PlatformIO environments also build for **M5StickS3** (button-only) and **M5Stack Tab5** (keyboard + touch; radios gated in milestone 1).
 
 The project began by borrowing ideas from [Bruce](https://github.com/BruceDevices/Firmware) and [Evil-Cardputer](https://github.com/7h30th3r0n3/Evil-M5project), but its architecture, UI, module layout, and feature set have since diverged into their own thing.
 
@@ -20,7 +20,7 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - **HID & BadUSB** — USB/Bluetooth HID via [kvxkeyboard](docs/HID_REMOTE.md)
 - **Universal remote** — learn/replay Flipper-style `.ir` profiles with [kremote](docs/KREMOTE.md)
 - **Grove ecosystem** — Scroll, Joystick, PaHub, RFID, RF, IR, GPS, and more on PORT.A
-- **Lite / StickS3 builds** — smaller flash or button-only navigation when needed
+- **Lite / StickS3 / Tab5 builds** — smaller flash, button-only, or Tab5 keyboard+touch when needed
 
 
 <img src="docs/menu.gif" alt="kvxputer channel menu" width="360" />
@@ -32,7 +32,7 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 ### Requirements
 
 - [PlatformIO](https://platformio.org/) (`pio` on PATH)
-- M5Stack Cardputer or Cardputer ADV (primary), or M5StickS3 (secondary)
+- M5Stack Cardputer or Cardputer ADV (primary); M5StickS3 or M5Stack Tab5 (+ Tab5 Keyboard) secondary
 - USB data cable
 - Linux: membership in `uucp` / `dialout` for serial upload
 
@@ -55,11 +55,18 @@ M5StickS3:
 pio run -e m5stack-sticks3
 ```
 
+M5Stack Tab5:
+
+```bash
+pio run -e m5stack-tab5
+```
+
 Merged flash images land at the project root:
 
 ```text
 kvxputer-m5stack-cardputer.bin
 kvxputer-m5stack-sticks3.bin
+kvxputer-m5stack-tab5.bin
 ```
 
 Prefer those at offset `0x0`. Raw app image: `.pio/build/<env>/firmware.bin` at `0x10000`.
@@ -83,6 +90,12 @@ StickS3:
 
 ```bash
 pio run -e m5stack-sticks3 -t upload
+```
+
+Tab5 (enter download mode: hold reset ~2s until the green LED flashes):
+
+```bash
+pio run -e m5stack-tab5 -t upload
 ```
 
 esptool:
@@ -599,6 +612,21 @@ Same `src/` tree; board HAL under `tools/porting/boards/m5stack-sticks3/`.
 | Artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-sticks3.bin` |
 
 Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on StickS3.
+
+## M5Stack Tab5
+
+Same `src/` tree; board HAL under `tools/porting/boards/m5stack-tab5/`. Milestone 1 targets boot, M5GFX 1280×720, Tab5 Keyboard, touch gestures, Grove modules, and SD. Hosted C6 WiFi attack / NimBLE BLE stay gated (`radio later`).
+
+| | Cardputer | Tab5 |
+|---|-----------|------|
+| Input | Onboard keyboard (+ optional Unit Scroll) | Tab5 Keyboard (Character mode) + touch (tap tile / swipe L/R / 3s hold Esc) |
+| Channel grid | 2×3 (6 per page) | 3×6 (18 per page) |
+| Display | 240×135 ST7789 | 1280×720 MIPI (ST7123 / ST7121 / ILI9881C via M5GFX) |
+| IR / RF / RFID | Onboard + Grove | Grove PORT.A (G53/G54); EXT 5V in Infrared menu |
+| WiFi / BLE attack | Full | Menu tiles visible; attack/NimBLE still gated (`radio later`) |
+| Artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-tab5.bin` |
+
+Pin matrix: [`tools/porting/boards/m5stack-tab5/connections.md`](tools/porting/boards/m5stack-tab5/connections.md).
 
 ---
 

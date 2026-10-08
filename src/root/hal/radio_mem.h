@@ -67,7 +67,13 @@ static inline void uiRamEnterHeavy() {
 static inline void uiRamLeaveHeavy() {
     if (uiRamHeavyDepth() <= 0) return;
     if (--uiRamHeavyDepth() > 0) return;
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Tab5 keeps the UI canvas suppressed permanently — a 1280×720 RGB565
+    // sprite (~1.8MB) + DSI blit races hosted SDIO and paints a solid cyan
+    // crash screen. Direct-to-panel draws are the only safe path.
+#else
     tftSuppressCanvas(false);
+#endif
 #ifdef HAS_RGB_LED
     if (!ledIsStatusSuppressed()) ledSetup();
 #endif

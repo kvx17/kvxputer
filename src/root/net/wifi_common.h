@@ -39,6 +39,20 @@ bool wifiConnecttoKnownNet(void);
 String checkMAC();
 
 /**
+ * @brief Tab5 gate for raw TX / promiscuous / Evil Portal / NimBLE apps.
+ * On Tab5 shows msg and returns false. On every other board returns true.
+ */
+inline bool tab5RadioLater(const char *msg = "WiFi attack gated\n(radio later)") {
+#if defined(ARDUINO_M5STACK_TAB5)
+    displayInfo(msg, true);
+    return false;
+#else
+    (void)msg;
+    return true;
+#endif
+}
+
+/**
  * @brief Transmits a raw 802.11 frame while respecting TX-buffer backpressure.
  *
  * esp_wifi_80211_tx() returns ESP_ERR_NO_MEM when the static TX buffers are
@@ -63,6 +77,11 @@ void wifiConnectTask(void *pvParameters);
  * @brief Ensures esp_netif and the default event loop are initialized (idempotent)
  */
 void ensureWifiPlatform();
+
+#if defined(ARDUINO_M5STACK_TAB5)
+/** Assert C6 SDIO pins / settle before STA or scan on Tab5. */
+void wifiPrepareTab5Hosted();
+#endif
 
 // private
 /**

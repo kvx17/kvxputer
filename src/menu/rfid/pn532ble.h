@@ -1,6 +1,13 @@
 #ifndef __PN532BLE_H__
 #define __PN532BLE_H__
 #ifndef LITE_VERSION
+#if defined(KVX_NO_NIMBLE)
+#include "root/ui/display.h"
+class Pn532ble {
+public:
+    Pn532ble() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+};
+#else
 #include "root/ui/scrollableTextArea.h"
 #include "pn532_ble.h"
 #include <set>
@@ -92,5 +99,6 @@ private:
                                                0x13, 0x14, 0x15, 0x16, 0x42, 0x00, 0x18, 0x00};
 };
 
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION
 #endif

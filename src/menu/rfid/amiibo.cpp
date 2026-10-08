@@ -6,6 +6,7 @@
  * @date 2024-10-11
  */
 #ifndef LITE_VERSION
+#if !defined(KVX_NO_NIMBLE)
 #include "root/storage/paths.h"
 #include "amiibo.h"
 #include "root/ui/display.h"
@@ -201,4 +202,5 @@ void Amiibo::delayWithReturn(uint32_t ms) {
     while (millis() - tm < ms && !returnToMenu) { vTaskDelay(pdMS_TO_TICKS(50)); }
 }
 
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION

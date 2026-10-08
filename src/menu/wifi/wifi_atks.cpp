@@ -242,6 +242,8 @@ bool wifi_atk_unsetWifi() {
 }
 
 void wifi_atk_menu() {
+    if (!tab5RadioLater()) return;
+
     resetGlobalState();
 
     if (WiFi.getMode() == WIFI_MODE_NULL) wifi_complete_cleanup(false);

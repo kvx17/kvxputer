@@ -39,7 +39,13 @@ void tftReleaseFrameCanvas() {
 
 void tftSuppressCanvas(bool suppress) {
 #if defined(HAS_SCREEN)
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Never re-enable the full-frame canvas on Tab5 (see uiRamLeaveHeavy).
+    (void)suppress;
+    tft.suppressCanvas(true);
+#else
     tft.suppressCanvas(suppress);
+#endif
 #else
     (void)suppress;
 #endif
@@ -782,6 +788,27 @@ int loopOptions(
             }
             vTaskDelay(10 / portTICK_PERIOD_MS);
         }
+
+#if defined(ARDUINO_M5STACK_TAB5)
+        // Submenu row tap: InputHandler stores touchPoint; map Y to a visible row.
+        if (menuType == MENU_TYPE_SUBMENU && touchPoint.pressed) {
+            const int lineH = FM * LH + 4;
+            const int startY = KVX_TOPBAR_H + 4;
+            const int visible = max(1, (tftHeight - startY - 6) / lineH);
+            int scroll = 0;
+            if (index >= visible) scroll = index - visible + 1;
+            int row = ((int)touchPoint.y - startY) / lineH;
+            if (row >= 0 && row < visible) {
+                int tapped = scroll + row;
+                if (tapped >= 0 && tapped < (int)options.size() && options[tapped].enabled) {
+                    index = tapped;
+                    SelPress = true;
+                    redraw = true;
+                }
+            }
+            touchPoint.Clear();
+        }
+#endif
 
         /* Select and run function
         forceMenuOption is set by a SerialCommand to force a selection within the menu

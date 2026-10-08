@@ -42,6 +42,11 @@ static bool parseMacToU64(const String &mac, uint64_t &out) {
 Wardriving::Wardriving(bool scanWiFi, bool scanBLE) {
     this->scanWiFi = scanWiFi;
     this->scanBLE = scanBLE;
+    // Tab5: BLE half needs NimBLE; keep WiFi-only wardriving when both requested.
+    if (this->scanBLE && !tab5RadioLater("BLE gated on Tab5\n(radio later)")) {
+        this->scanBLE = false;
+        if (!this->scanWiFi) return;
+    }
     setup();
 }
 
@@ -140,7 +145,7 @@ void Wardriving::loop() {
             }
         } else {
             if (count > 5) {
-                displayError("GPS not Found!");
+                displayError("GPS not Found!\nGrove PORT.A G53/G54", true);
                 return end();
             }
             count++;

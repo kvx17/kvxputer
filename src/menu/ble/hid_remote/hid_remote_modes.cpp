@@ -6,7 +6,7 @@
 #include <pins_arduino.h>
 #include <globals.h>
 #include <keys.h>
-#if defined(HAS_KEYBOARD)
+#if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
 #include <Keyboard.h>
 extern Keyboard_Class Keyboard;
 #endif
@@ -177,6 +177,10 @@ static void presenterResetInputState() {
 
 // Rising-edge only — level polling was spamming "," when a matrix/key state stuck.
 static int presenterPollDirectKey(bool vertical) {
+#if !defined(ARDUINO_M5STACK_CARDPUTER)
+    (void)vertical;
+    return -1;
+#else
     Keyboard.update();
     Keyboard_Class::KeysState status = Keyboard.keysState();
 
@@ -237,8 +241,9 @@ static int presenterPollDirectKey(bool vertical) {
         return action;
     }
     return -1;
+#endif // ARDUINO_M5STACK_CARDPUTER
 }
-#endif
+#endif // HAS_KEYBOARD
 
 static void presenterClearNavFlags() {
     // Drop leftovers from menu navigation / Unit Scroll / Joystick drift
@@ -505,9 +510,6 @@ static bool pollFnHeld(const keyStroke &key) {
     if (key.fn) return true;
 #if defined(HAS_KEYBOARD) && defined(ARDUINO_M5STACK_CARDPUTER)
     if (UseTCA8418) return fn_key_pressed;
-    Keyboard.update();
-    return Keyboard.keysState().fn;
-#elif defined(HAS_KEYBOARD)
     Keyboard.update();
     return Keyboard.keysState().fn;
 #else

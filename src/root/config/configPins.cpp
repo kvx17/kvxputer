@@ -3,8 +3,18 @@
 #include "root/storage/sd_functions.h"
 #include <globals.h>
 String getMacAddress() {
-    uint8_t mac[6];
+    uint8_t mac[6] = {0};
+    // WiFi STA MAC can be all-zero on Tab5 (hosted C6) before radio init — that
+    // made pins.conf keys unstable so Orientation was never restored after reboot.
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    bool allZero = true;
+    for (int i = 0; i < 6; i++) {
+        if (mac[i] != 0) {
+            allZero = false;
+            break;
+        }
+    }
+    if (allZero) esp_read_mac(mac, ESP_MAC_EFUSE_FACTORY);
 
     char macStr[18];
     snprintf(

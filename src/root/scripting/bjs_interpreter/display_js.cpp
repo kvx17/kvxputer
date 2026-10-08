@@ -854,6 +854,17 @@ JSValue native_createSprite(JSContext *ctx, JSValue *this_val, int argc, JSValue
         free(d);
         return JS_ThrowOutOfMemory(ctx);
     }
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Full-frame 1280×720 RGB565 (~1.8MB) races DSI/SDIO; keep scripts to small sprites.
+    constexpr size_t kTab5SpriteMaxBytes = 64 * 1024;
+    const size_t bpp = (colorDepth <= 8) ? 1 : ((colorDepth <= 16) ? 2 : 4);
+    const size_t need = (size_t)width * (size_t)height * bpp * (size_t)frames;
+    if (width <= 0 || height <= 0 || need > kTab5SpriteMaxBytes) {
+        delete d->sprite;
+        free(d);
+        return JS_ThrowRangeError(ctx, "sprite too large for Tab5 (max 64KB)");
+    }
+#endif
     d->sprite->setColorDepth(colorDepth);
     d->sprite->createSprite(width, height, frames);
 #else

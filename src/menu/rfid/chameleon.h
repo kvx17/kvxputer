@@ -8,6 +8,13 @@
 
 #ifndef __CHAMELEON_H__
 #define __CHAMELEON_H__
+#if defined(KVX_NO_NIMBLE)
+#include "root/ui/display.h"
+class Chameleon {
+public:
+    Chameleon() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+};
+#else
 #include <chameleonUltra.h>
 #include <set>
 
@@ -150,4 +157,5 @@ private:
     void delayWithReturn(uint32_t ms);
 };
 
+#endif // !KVX_NO_NIMBLE
 #endif

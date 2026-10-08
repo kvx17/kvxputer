@@ -2,46 +2,27 @@
 
 from __future__ import annotations
 
-import sys
-from typing import Dict
-
 from protocol import APP_COMMANDS, PcConnectSession
 
-from apps._common import run_until_quit
-
-
-def _clear() -> None:
-    sys.stdout.write("\033[H\033[J")
-    sys.stdout.flush()
+from apps._common import LiveTable, run_live_table
 
 
 def run(session: PcConnectSession) -> str:
-    hits: Dict[str, dict] = {}
+    def render_row(d: dict) -> str:
+        name = (d.get("name") or "Flipper")[:24]
+        return (
+            f"{d.get('rssi', 0):5d}dBm  {d.get('mac', ''):<17}  {name:<24}  "
+            f"{d.get('services') or ''}"
+        )
 
-    def redraw() -> None:
-        _clear()
-        print("Wall of Flipper")
-        print("-" * 64)
-        rows = sorted(hits.values(), key=lambda d: d.get("rssi", -999), reverse=True)
-        if not rows:
-            print("(scanning…)")
-        else:
-            for d in rows:
-                name = (d.get("name") or "Flipper")[:24]
-                print(
-                    f"{d.get('rssi', 0):5d}dBm  {d.get('mac', ''):<17}  {name:<24}  "
-                    f"{d.get('services') or ''}"
-                )
-        print(f"\n{len(hits)} hit(s) — q / Esc = back to menu")
-        sys.stdout.flush()
-
-    def on_event(ev: dict) -> None:
-        if ev.get("evt") != "flipper":
-            return
-        mac = ev.get("mac") or ""
-        if mac:
-            hits[mac] = ev
-            redraw()
-
-    redraw()
-    return run_until_quit(session, APP_COMMANDS["ble.flipper"], on_event)
+    table = LiveTable(
+        title="Wall of Flipper",
+        app_id="ble.flipper",
+        columns=["rssi", "mac", "name", "services"],
+        key_field="mac",
+        sort_keys=["rssi", "name", "mac"],
+        bell_on_new=True,
+        render_row=render_row,
+        text_fields=["name", "mac", "services", "mfg_hex"],
+    )
+    return run_live_table(session, APP_COMMANDS["ble.flipper"], table, "flipper")

@@ -12,15 +12,34 @@
 #endif
 #include <globals.h>
 
+#if defined(ARDUINO_M5STACK_TAB5)
+// 1280×720 landscape: denser channel grid (3 rows × 6 cols = 18 per page).
+static constexpr int KVX_COLS = 6;
+static constexpr int KVX_ROWS = 3;
+static constexpr int KVX_FOOTER_H = 56;
+static constexpr int KVX_GAP = 6;
+static constexpr int KVX_RADIUS = 10;
+#else
 static constexpr int KVX_COLS = 3;
 static constexpr int KVX_ROWS = 2;
-static constexpr int KVX_SLOTS = KVX_COLS * KVX_ROWS;
 static constexpr int KVX_FOOTER_H = 26;
+static constexpr int KVX_GAP = 4;
+static constexpr int KVX_RADIUS = 6;
+#endif
+static constexpr int KVX_SLOTS = KVX_COLS * KVX_ROWS;
 
 // Page changes and returns from a submenu must repaint the whole grid.
 // A selection change only repaints the two tiles and the footer.
 static int s_lastIndex = -1;
 static int s_lastPage = -1;
+
+#if defined(HAS_TOUCH)
+static bool s_kvxMenuActive = false;
+static int s_kvxMenuIndex = 0;
+static int s_kvxMenuCount = 0;
+static bool s_touchSelectPending = false;
+static std::vector<MenuItemInterface *> *s_kvxMenuItems = nullptr;
+#endif
 
 // Column-major layout:
 //   0  2  4
@@ -60,9 +79,10 @@ static void drawChannelTile(int x, int y, int w, int h, bool selected, MenuItemI
     const uint16_t dark = getColorVariation(pri, 10, -1);
     uint16_t fill = selected ? pri : dark;
     uint16_t border = selected ? sec : pri;
-    tft.fillRoundRect(x, y, w, h, 6, fill);
-    tft.drawRoundRect(x, y, w, h, 6, border);
-    if (selected) tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, 5, sec);
+    const int r = KVX_RADIUS;
+    tft.fillRoundRect(x, y, w, h, r, fill);
+    tft.drawRoundRect(x, y, w, h, r, border);
+    if (selected) tft.drawRoundRect(x + 1, y + 1, w - 2, h - 2, r > 1 ? r - 1 : 1, sec);
 
     if (!item) return;
     item->drawIconAt(scale, x + w / 2, y + h / 2, w - 6, h - 6, fill);
@@ -98,10 +118,16 @@ static GridGeom computeGridGeom(int globalIndex, int count) {
     if (g.hasPrev) usableW -= g.arrowW;
     if (g.hasNext) usableW -= g.arrowW;
     g.originX = g.marginX + (g.hasPrev ? g.arrowW : 0);
-    g.cellW = (usableW - (KVX_COLS - 1) * 4) / KVX_COLS;
-    g.cellH = (g.gridH - (KVX_ROWS - 1) * 4) / KVX_ROWS;
+    g.cellW = (usableW - (KVX_COLS - 1) * KVX_GAP) / KVX_COLS;
+    g.cellH = (g.gridH - (KVX_ROWS - 1) * KVX_GAP) / KVX_ROWS;
+#if defined(ARDUINO_M5STACK_TAB5)
+    // Fit icons to the denser 6×3 cells (Cardputer scale is huge on 720p).
+    const float cellScale = (float)(g.cellW < g.cellH ? g.cellW : g.cellH) / 80.0f;
+    g.scale = cellScale > 0.4f ? cellScale : 0.4f;
+#else
     g.scale = (float)tftWidth / 240.0f;
     if (kvxConfigPins.rotation & 0b01) g.scale = (float)tftHeight / 135.0f;
+#endif
     return g;
 }
 
@@ -109,8 +135,8 @@ static void tileXY(const GridGeom &g, int itemIdx, int &x, int &y) {
     int slot = itemIdx - g.pageStart;
     int row = slot % KVX_ROWS;
     int col = slot / KVX_ROWS;
-    x = g.originX + col * (g.cellW + 4);
-    y = g.top + row * (g.cellH + 4);
+    x = g.originX + col * (g.cellW + KVX_GAP);
+    y = g.top + row * (g.cellH + KVX_GAP);
 }
 
 static void drawFooter(int globalIndex, std::vector<MenuItemInterface *> &items) {
@@ -131,10 +157,17 @@ static void drawOneTile(
     tft.setClipRect(x, y, g.cellW, g.cellH);
     bool selected = (itemIdx == selectedIdx);
     MenuItemInterface *item = (itemIdx < count) ? items[itemIdx] : nullptr;
-    if (item) drawChannelTile(x, y, g.cellW, g.cellH, selected, item, g.scale * 0.5f);
+#if defined(ARDUINO_M5STACK_TAB5)
+    const float iconScale = g.scale;
+#else
+    const float iconScale = g.scale * 0.5f;
+#endif
+    if (item) drawChannelTile(x, y, g.cellW, g.cellH, selected, item, iconScale);
     else {
-        tft.fillRoundRect(x, y, g.cellW, g.cellH, 6, kvxConfig.bgColor);
-        tft.drawRoundRect(x, y, g.cellW, g.cellH, 6, getColorVariation(kvxConfig.priColor, 10, -1));
+        tft.fillRoundRect(x, y, g.cellW, g.cellH, KVX_RADIUS, kvxConfig.bgColor);
+        tft.drawRoundRect(
+            x, y, g.cellW, g.cellH, KVX_RADIUS, getColorVariation(kvxConfig.priColor, 10, -1)
+        );
     }
     tft.clearClipRect();
 }
@@ -187,6 +220,27 @@ static void drawKvxGrid(int globalIndex, std::vector<MenuItemInterface *> &items
     s_lastPage = page;
 }
 
+#if defined(HAS_TOUCH)
+bool kvxMainMenuActive(void) { return s_kvxMenuActive; }
+
+int kvxMainMenuIndexAt(int x, int y) {
+    if (!s_kvxMenuActive || s_kvxMenuCount <= 0) return -1;
+    GridGeom g = computeGridGeom(s_kvxMenuIndex, s_kvxMenuCount);
+    for (int i = g.pageStart; i < s_kvxMenuCount && i < g.pageStart + KVX_SLOTS; i++) {
+        int tx, ty;
+        tileXY(g, i, tx, ty);
+        if (x >= tx && x < tx + g.cellW && y >= ty && y < ty + g.cellH) return i;
+    }
+    return -1;
+}
+
+void kvxMainMenuSelectIndex(int index) {
+    if (!s_kvxMenuActive || index < 0 || index >= s_kvxMenuCount) return;
+    s_kvxMenuIndex = index;
+    s_touchSelectPending = true;
+}
+#endif
+
 int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
     if (items.empty()) return -1;
 
@@ -200,7 +254,19 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
     int devModeCounter = 0;
     invalidateKvxGridCache();
 
+#if defined(HAS_TOUCH)
+    s_kvxMenuActive = true;
+    s_kvxMenuItems = &items;
+    s_kvxMenuCount = count;
+    s_kvxMenuIndex = index;
+    s_touchSelectPending = false;
+    menuOptionType = MENU_TYPE_MAIN;
+#endif
+
     while (true) {
+#if defined(HAS_TOUCH)
+        menuOptionType = MENU_TYPE_MAIN;
+#endif
         checkReboot();
 
 #ifndef LITE_VERSION
@@ -317,10 +383,29 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             redraw = true;
         }
 
+#if defined(HAS_TOUCH)
+        // Apply tap after arrow/check() may have run InputHandler this frame.
+        // Only pending taps override index — keyboard moves must not be undone.
+        if (s_touchSelectPending && s_kvxMenuIndex >= 0 && s_kvxMenuIndex < count) {
+            index = s_kvxMenuIndex;
+            s_touchSelectPending = false;
+            redraw = true;
+        } else {
+            s_kvxMenuIndex = index;
+        }
+#endif
+
         static const unsigned long MENU_SELECT_IGNORE_MS = 600;
         if (millis() - menuOpenTs > MENU_SELECT_IGNORE_MS && check(SelPress)) {
             ledSetStatus(LED_STATUS_BUSY);
+#if defined(HAS_TOUCH)
+            s_kvxMenuActive = false;
+#endif
             items[index]->optionsMenu();
+#if defined(HAS_TOUCH)
+            s_kvxMenuActive = true;
+            menuOptionType = MENU_TYPE_MAIN;
+#endif
             ledSetStatus(LED_STATUS_IDLE);
             invalidateKvxGridCache();
             redraw = true;
@@ -330,10 +415,18 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
                 EscPress = false;
             } else if (returnToMenu) {
                 returnToMenu = false;
+#if defined(HAS_TOUCH)
+                s_kvxMenuActive = false;
+                s_kvxMenuItems = nullptr;
+#endif
                 return index;
             }
         }
 
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
+#if defined(HAS_TOUCH)
+    s_kvxMenuActive = false;
+    s_kvxMenuItems = nullptr;
+#endif
 }

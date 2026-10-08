@@ -1,4 +1,5 @@
 #ifndef LITE_VERSION
+#if !defined(KVX_NO_NIMBLE)
 #include "PN532KillerTools.h"
 #include "PN532Killer.h"
 #include "apdu.h"
@@ -927,4 +928,5 @@ void PN532KillerTools::udpWifiSelectMenu() {
     selOptions.push_back({"Return", [&]() { return; }});
     loopOptions(selOptions);
 }
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION

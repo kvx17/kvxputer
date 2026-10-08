@@ -380,6 +380,8 @@ void beepNew() {
 }
 
 void runWifiScanLoop() {
+    if (!tab5RadioLater("Drone ID WiFi gated\n(radio later)")) return;
+
     ScannerListState list;
     scannerListBegin(list, "Drone ID WiFi", "scanning…");
 
@@ -428,6 +430,8 @@ void runWifiScanLoop() {
 }
 
 void runBleScanLoop() {
+    if (!tab5RadioLater("BLE gated on Tab5\n(radio later)")) return;
+
     ScannerListState list;
     scannerListBegin(list, "Drone ID BLE", "scanning…");
 

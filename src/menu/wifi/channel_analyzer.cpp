@@ -278,8 +278,27 @@ static std::vector<ScannerDetailField> ca_detail_fields(const CaAp &ap) {
     return f;
 }
 
+#if defined(ARDUINO_M5STACK_TAB5)
+// Hosted C6 STA path: ESP-Hosted often lacks promiscuous RX. Use WiFi.scanNetworks.
+static bool ca_tab5_scan_mode = true;
+#endif
+
+static void
+ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t navCh, uint16_t dwell);
+
 static void ca_start_wifi() {
     ensureWifiPlatform();
+#if defined(ARDUINO_M5STACK_TAB5)
+    ca_tab5_scan_mode = true;
+    wifiPrepareTab5Hosted();
+    nvs_flash_init();
+    if (!WiFi.mode(WIFI_MODE_STA)) {
+        Serial.println("[ChAnalyzer] Tab5 WiFi.mode(STA) failed");
+        return;
+    }
+    WiFi.disconnect(false);
+    delay(50);
+#else
     nvs_flash_init();
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_err_t e = esp_wifi_init(&cfg);
@@ -295,15 +314,108 @@ static void ca_start_wifi() {
     filt.filter_mask = WIFI_PROMIS_FILTER_MASK_ALL;
     esp_wifi_set_promiscuous_filter(&filt);
     esp_wifi_set_promiscuous_rx_cb(ca_rx_cb);
+#endif
 }
 
 static void ca_stop_wifi() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    WiFi.scanDelete();
+    wifiDisconnect();
+#else
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
     esp_wifi_stop();
     wifiDisconnect();
+#endif
     vTaskDelay(1 / portTICK_RATE_MS);
 }
+
+#if defined(ARDUINO_M5STACK_TAB5)
+// One STA scan → channel load bars + AP table (no promiscuous).
+static bool ca_scan_tick(
+    uint8_t *load, uint8_t *peak, int8_t *rssi, uint16_t dwell, int &sweepIdx, uint8_t navCh, bool drawBars,
+    int *action
+) {
+    auto pollAction = [&]() -> int {
+        if (check(EscPress)) return -1;
+        if (check(SelPress)) return 1;
+#ifdef HAS_KEYBOARD
+        char c = checkLetterShortcutPress();
+        if (c == 'l' || c == 'L') return 2;
+#endif
+        if (PrevPress && !UpPress) {
+            check(PrevPress);
+            return 3;
+        }
+        if (NextPress && !DownPress) {
+            check(NextPress);
+            return 4;
+        }
+        return 0;
+    };
+
+    int act = pollAction();
+    if (act < 0) return false;
+    if (act && action) {
+        *action = act;
+        if (drawBars) ca_draw(load, peak, rssi, navCh, dwell);
+        return true;
+    }
+
+    displayTextLine("Scanning...");
+    int n = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+    uint16_t chCount[12] = {0};
+    int8_t chRssi[12];
+    for (int i = 0; i < 12; i++) chRssi[i] = -128;
+
+    ca_clear_aps();
+    if (n < 0) n = 0;
+    for (int i = 0; i < n && ca_ap_count < CA_AP_MAX; i++) {
+        int ch = WiFi.channel(i);
+        if (ch < 1 || ch > 11) continue;
+        int8_t r = (int8_t)WiFi.RSSI(i);
+        chCount[ch]++;
+        if (r > chRssi[ch]) chRssi[ch] = r;
+
+        CaAp &ap = ca_aps[ca_ap_count];
+        memset(&ap, 0, sizeof(ap));
+        ap.used = true;
+        ap.channel = (uint8_t)ch;
+        ap.rssi = r;
+        String ssid = WiFi.SSID(i);
+        ap.ssidLen = (uint8_t)min((size_t)32, (size_t)ssid.length());
+        memcpy(ap.ssid, ssid.c_str(), ap.ssidLen);
+        ap.hidden = (ap.ssidLen == 0);
+        uint8_t *bssid = WiFi.BSSID(i);
+        if (bssid) memcpy(ap.bssid, bssid, 6);
+        wifi_auth_mode_t auth = WiFi.encryptionType(i);
+        ap.hasRsn = (auth == WIFI_AUTH_WPA2_PSK || auth == WIFI_AUTH_WPA_WPA2_PSK ||
+                     auth == WIFI_AUTH_WPA2_WPA3_PSK || auth == WIFI_AUTH_WPA3_PSK);
+        ap.hasWpa = (auth == WIFI_AUTH_WPA_PSK || auth == WIFI_AUTH_WPA_WPA2_PSK);
+        ap.hasSae = (auth == WIFI_AUTH_WPA3_PSK || auth == WIFI_AUTH_WPA2_WPA3_PSK);
+        ap.capab = (auth != WIFI_AUTH_OPEN) ? 0x10 : 0;
+        ca_ap_count++;
+    }
+    WiFi.scanDelete();
+
+    for (int i = 0; i < CA_NCH; i++) {
+        uint8_t ch = CA_CHANNELS[i];
+        uint32_t l = chCount[ch] * 12;
+        if (l > 100) l = 100;
+        load[ch] = (uint8_t)l;
+        if (load[ch] > peak[ch]) peak[ch] = load[ch];
+        rssi[ch] = (chRssi[ch] == -128) ? 0 : chRssi[ch];
+    }
+
+    act = pollAction();
+    if (act < 0) return false;
+    if (act && action) *action = act;
+    if (drawBars) ca_draw(load, peak, rssi, navCh, dwell);
+    if (!act) sweepIdx = (sweepIdx + 1) % CA_NCH;
+    (void)dwell;
+    return true;
+}
+#endif
 
 // Green border follows navCh (user selection). Sweep continues independently.
 static void
@@ -454,6 +566,18 @@ static void ca_ssid_list_view(
         }
 
         unsigned long now = millis();
+#if defined(ARDUINO_M5STACK_TAB5)
+        // List uses last STA scan results; refresh labels only (no promiscuous hop).
+        (void)hopping;
+        (void)hopStart;
+        (void)hopIdx;
+        (void)lastHop;
+        (void)dwell;
+        (void)load;
+        (void)peak;
+        (void)rssi;
+        (void)sweepIdx;
+#else
         // Keep sweeping so the list stays fresh (all channels if filter=0, else stay on filter)
         if (!hopping && now - lastHop >= dwell) {
             uint8_t hopCh = filterCh ? filterCh : CA_CHANNELS[hopIdx];
@@ -479,6 +603,7 @@ static void ca_ssid_list_view(
         }
 
         ca_ingest_ring();
+#endif
 
         if (now - lastRefresh > 400) {
             scannerListSetRows(ui, ca_row_labels(filterCh));
@@ -533,7 +658,11 @@ void channel_analyzer_setup() {
     tft.setTextSize(FP);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
     padprintln("");
+#if defined(ARDUINO_M5STACK_TAB5)
+    padprintln(" STA scan (hosted C6)");
+#else
     padprintln(" sweeping 1-11 ...");
+#endif
     padprintln(" Lt/Rt=ch OK=SSIDs");
     padprintln(" L=all list  Esc=exit");
     delay(800);
@@ -544,7 +673,14 @@ void channel_analyzer_setup() {
         if (returnToMenu || forceHome) break;
 
         int action = 0;
-        if (!ca_sweep_tick(load, peak, rssi, dwell, sweepIdx, CA_CHANNELS[navIdx], true, &action)) {
+#if defined(ARDUINO_M5STACK_TAB5)
+        bool ok = ca_tab5_scan_mode
+                      ? ca_scan_tick(load, peak, rssi, dwell, sweepIdx, CA_CHANNELS[navIdx], true, &action)
+                      : ca_sweep_tick(load, peak, rssi, dwell, sweepIdx, CA_CHANNELS[navIdx], true, &action);
+#else
+        bool ok = ca_sweep_tick(load, peak, rssi, dwell, sweepIdx, CA_CHANNELS[navIdx], true, &action);
+#endif
+        if (!ok) {
             returnToMenu = true;
             break;
         }
@@ -574,8 +710,16 @@ static uint8_t ca_sess_load[12] = {0};
 static uint8_t ca_sess_peak[12] = {0};
 static int8_t ca_sess_rssi[12];
 static int ca_sess_sweep = 0;
+static uint8_t ca_sess_lock = 0; // 0 = hop
 
 bool caSessionActive() { return ca_session_active; }
+
+void caSessionSetLock(uint8_t ch) {
+    if (ch > 11) ch = 0;
+    ca_sess_lock = ch;
+}
+
+uint8_t caSessionLock() { return ca_sess_lock; }
 
 bool caSessionStart() {
     if (ca_session_active) caSessionStop();
@@ -584,6 +728,7 @@ bool caSessionStart() {
     memset(ca_sess_peak, 0, sizeof(ca_sess_peak));
     for (int i = 0; i < 12; i++) ca_sess_rssi[i] = -128;
     ca_sess_sweep = 0;
+    ca_sess_lock = 0;
     ca_start_wifi();
     ca_session_active = true;
     return true;
@@ -593,6 +738,7 @@ void caSessionStop() {
     if (!ca_session_active) return;
     ca_stop_wifi();
     ca_session_active = false;
+    ca_sess_lock = 0;
 }
 
 bool caSessionDwell(uint16_t dwellMs, CaChannelSample &out, const std::function<bool()> &abortFn) {
@@ -600,7 +746,7 @@ bool caSessionDwell(uint16_t dwellMs, CaChannelSample &out, const std::function<
     if (dwellMs < 150) dwellMs = 150;
     if (dwellMs > 1000) dwellMs = 1000;
 
-    uint8_t sweepCh = CA_CHANNELS[ca_sess_sweep];
+    uint8_t sweepCh = ca_sess_lock ? ca_sess_lock : CA_CHANNELS[ca_sess_sweep];
     esp_wifi_set_channel(sweepCh, WIFI_SECOND_CHAN_NONE);
 
     ca_bytes = 0;
@@ -634,7 +780,7 @@ bool caSessionDwell(uint16_t dwellMs, CaChannelSample &out, const std::function<
     out.peak = ca_sess_peak[sweepCh];
     out.rssi = ca_sess_rssi[sweepCh];
 
-    ca_sess_sweep = (ca_sess_sweep + 1) % CA_NCH;
+    if (!ca_sess_lock) ca_sess_sweep = (ca_sess_sweep + 1) % CA_NCH;
     return true;
 }
 

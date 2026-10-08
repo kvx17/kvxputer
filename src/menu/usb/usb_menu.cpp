@@ -18,7 +18,7 @@ void UsbMenu::optionsMenu() {
         {"kvxkeyboard HID",       [=]() { hidRemoteMenu(HID_REMOTE_LAUNCH_USB); }},
         {"BadUSB",                [=]() { ducky_setup(hid_usb, false); }        },
         {"USB Keyboard (legacy)", [=]() { ducky_keyboard(hid_usb, false); }     },
-#ifdef USB_as_HID
+#if defined(USB_as_HID)
         {"USB Clicker (legacy)",  clicker_setup                                 },
         {"USB U2F",               u2f_setup                                     },
 #endif

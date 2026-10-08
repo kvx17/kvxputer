@@ -66,6 +66,12 @@ void nrf_spectrum() {
     tft.drawCentreString("2.44Ghz", tftWidth / 2, footY, 1);
     tft.drawRightString("2.48Ghz", tftWidth, footY, 1);
 
+    if (kvxConfigPins.NRF24_bus.cs == GPIO_NUM_NC || kvxConfigPins.NRF24_bus.io0 == GPIO_NUM_NC) {
+        displayError("NRF24: set CS/CE\nin Pins (M5-Bus)", true);
+        delay(500);
+        return;
+    }
+
     if (nrf_start(NRF_MODE_SPI)) { // This function only works on SPI
         NRFradio.setAutoAck(false);
         NRFradio.disableCRC();       // accept any signal we find

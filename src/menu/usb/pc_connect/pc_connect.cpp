@@ -2,6 +2,7 @@
 
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
+#include "root/serial/serial_commands/gpio_commands.h"
 #include "root/serial/serialcmds.h"
 #include "root/ui/display.h"
 #include "root/ui/kvx_ui.h"
@@ -28,6 +29,20 @@ bool g_paintedLinked = false;
 PcRadio g_paintedRadio = PcRadio::Idle;
 String g_paintedMode;
 String g_lineBuf;
+bool g_lineOverflow = false;
+
+static const size_t kMaxLine = 2048;
+
+const char *radioName(PcRadio r) {
+    switch (r) {
+        case PcRadio::Wifi: return "wifi";
+        case PcRadio::Ble: return "ble";
+        case PcRadio::Ir: return "ir";
+        case PcRadio::Rf: return "rf";
+        case PcRadio::Rfid: return "rfid";
+        default: return "idle";
+    }
+}
 
 String deviceMac() {
     String m = WiFi.macAddress();
@@ -51,7 +66,6 @@ String deviceMac() {
 int16_t statusBodyY() { return BORDER_PAD_Y + FM * LH + 4; }
 
 int16_t lineY(int indexAfterBlank) {
-    // index 0 = blank line under title; 1 = Link; 2 = Radio; 3 = Mode; 4 = Ch or Evt
     return statusBodyY() + indexAfterBlank * uiLineH(FP);
 }
 
@@ -81,10 +95,7 @@ void paintStatus(bool force = false) {
         tft.setCursor(BORDER_PAD_X, statusBodyY());
         padprintln("");
         padprintln(String("Link: ") + (g_linked ? "yes" : "waiting"));
-        padprintln(
-            String("Radio: ") +
-            (g_radio == PcRadio::Wifi ? "wifi" : g_radio == PcRadio::Ble ? "ble" : "idle")
-        );
+        padprintln(String("Radio: ") + radioName(g_radio));
         padprintln(String("Mode: ") + g_mode);
         if (layoutNeedsCh) padprintln(String("Ch: ") + String(g_channel));
         padprintln(String("Evt/s: ") + String(g_evtPerSec, 1));
@@ -98,7 +109,6 @@ void paintStatus(bool force = false) {
         return;
     }
 
-    // In-place updates only (no full clear → no jitter).
     if (layoutNeedsCh && g_channel != g_paintedCh) {
         paintFieldLine(4, String("Ch: ") + String(g_channel));
         g_paintedCh = g_channel;
@@ -112,21 +122,19 @@ void paintStatus(bool force = false) {
 
 void emitRaw(const String &line) {
     if (!serialDevice) return;
-    // Do not gate on Serial's bool operator — USB-Serial-JTAG can report
-    // "not connected" spuriously and would swallow hello/ack replies.
     serialDevice->println(line);
 }
 
 void handleHello() {
     g_linked = true;
     g_uiDirty = true;
-    // Avoid large JsonDocument during USB reopen; keep this on the stack and small.
     String mac = deviceMac();
     String out = "{\"evt\":\"hello\",\"name\":\"kvxputer\",\"mac\":\"";
     out += mac;
     out += "\",\"ready\":true,\"apps\":[";
 #if !defined(LITE_VERSION)
-    out += "\"wifi.analyzer\",\"ble.scan\"";
+    out += "\"wifi.analyzer\",\"ble.scan\",\"gpio\",\"ir.rx\",\"rf.rx\",\"rf.rssi\",\"rfid.read\",\"jam."
+           "detect\"";
 #if defined(EVIL_EXTENSIONS)
     out += ",";
 #endif
@@ -159,6 +167,63 @@ void handleStop() {
     paintStatus(true);
 }
 
+#if !defined(LITE_VERSION)
+void handleGpio(const String &rest) {
+    // gpio read|mode|set …
+    if (pcConnectRadio() != PcRadio::Idle) {
+        emitErr("gpio", "radio busy");
+        return;
+    }
+    int sp = rest.indexOf(' ');
+    String op = sp < 0 ? rest : rest.substring(0, sp);
+    String args = sp < 0 ? String() : rest.substring(sp + 1);
+    op.toLowerCase();
+    args.trim();
+
+    if (op == "read") {
+        int pin = args.toInt();
+        if (!is_free_gpio_pin(pin)) {
+            emitErr("gpio.read", "pin not allowed");
+            return;
+        }
+        int val = digitalRead(pin);
+        JsonDocument doc;
+        doc["evt"] = "ack";
+        doc["cmd"] = "gpio.read";
+        doc["ok"] = true;
+        doc["pin"] = pin;
+        doc["value"] = val;
+        String out;
+        serializeJson(doc, out);
+        emitRaw(out);
+        return;
+    }
+    if (op == "mode") {
+        int pin = -1, mode = -1;
+        if (sscanf(args.c_str(), "%d %d", &pin, &mode) != 2 || mode < 0 || mode > 9 ||
+            !is_free_gpio_pin(pin)) {
+            emitErr("gpio.mode", "invalid args");
+            return;
+        }
+        pinMode(pin, mode);
+        emitAck("gpio.mode", true);
+        return;
+    }
+    if (op == "set") {
+        int pin = -1, value = -1;
+        if (sscanf(args.c_str(), "%d %d", &pin, &value) != 2 || value < 0 || value > 1 ||
+            !is_free_gpio_pin(pin)) {
+            emitErr("gpio.set", "invalid args");
+            return;
+        }
+        digitalWrite(pin, value);
+        emitAck("gpio.set", true);
+        return;
+    }
+    emitErr("gpio", "use read|mode|set");
+}
+#endif
+
 void handleLine(String line) {
     line.trim();
     if (!line.length()) return;
@@ -172,26 +237,48 @@ void handleLine(String line) {
         return;
     }
 
-    // token + optional args
     int sp = line.indexOf(' ');
     String cmd = sp < 0 ? line : line.substring(0, sp);
     String rest = sp < 0 ? String() : line.substring(sp + 1);
     rest.trim();
-
     cmd.toLowerCase();
 
 #if !defined(LITE_VERSION)
+    if (cmd == "gpio") {
+        handleGpio(rest);
+        return;
+    }
+
     if (cmd == "wifi.analyzer") {
         if (rest.startsWith("start")) {
             uint16_t dwell = 350;
-            int sp2 = rest.indexOf(' ');
-            if (sp2 >= 0) {
-                String arg = rest.substring(sp2 + 1);
-                arg.trim();
-                if (arg.length()) dwell = (uint16_t)arg.toInt();
+            uint8_t lockCh = 0;
+            String args = rest.substring(5);
+            args.trim();
+            if (args.length()) {
+                int sp2 = args.indexOf(' ');
+                if (sp2 < 0) {
+                    dwell = (uint16_t)args.toInt();
+                } else {
+                    dwell = (uint16_t)args.substring(0, sp2).toInt();
+                    String chArg = args.substring(sp2 + 1);
+                    chArg.trim();
+                    if (chArg.length()) lockCh = (uint8_t)chArg.toInt();
+                }
             }
-            if (pcConnectWifiAnalyzerStart(dwell)) {
-                emitAck("wifi.analyzer", true);
+            if (dwell < 150) dwell = 150;
+            if (dwell > 1000) dwell = 1000;
+            if (lockCh > 11) lockCh = 0;
+            if (pcConnectWifiAnalyzerStart(dwell, lockCh)) {
+                JsonDocument doc;
+                doc["evt"] = "ack";
+                doc["cmd"] = "wifi.analyzer";
+                doc["ok"] = true;
+                doc["dwell"] = dwell;
+                doc["ch"] = lockCh;
+                String out;
+                serializeJson(doc, out);
+                emitRaw(out);
                 paintStatus(true);
             } else {
                 emitErr("wifi.analyzer", "start failed");
@@ -206,6 +293,140 @@ void handleLine(String line) {
                 paintStatus(true);
             } else {
                 emitErr("ble.scan", "start failed");
+            }
+            return;
+        }
+    }
+    if (cmd == "ir.rx") {
+        if (rest.startsWith("start")) {
+            bool raw = rest.indexOf("raw") >= 0;
+            if (pcConnectIrRxStart(raw)) {
+                emitAck("ir.rx", true);
+                paintStatus(true);
+            } else {
+                emitErr("ir.rx", "start failed");
+            }
+            return;
+        }
+    }
+    if (cmd == "ir.tx") {
+        // ir.tx <protocol> <address> <command>
+        int sp1 = rest.indexOf(' ');
+        if (sp1 < 0) {
+            emitErr("ir.tx", "need protocol address command");
+            return;
+        }
+        String protocol = rest.substring(0, sp1);
+        String rem = rest.substring(sp1 + 1);
+        rem.trim();
+        int sp2 = rem.indexOf(' ');
+        if (sp2 < 0) {
+            emitErr("ir.tx", "need protocol address command");
+            return;
+        }
+        String address = rem.substring(0, sp2);
+        String command = rem.substring(sp2 + 1);
+        command.trim();
+        if (pcConnectIrTx(protocol, address, command)) emitAck("ir.tx", true);
+        else emitErr("ir.tx", "tx failed");
+        return;
+    }
+    if (cmd == "ir.tx_raw") {
+        // ir.tx_raw <freq> <samples…>
+        int sp1 = rest.indexOf(' ');
+        if (sp1 < 0) {
+            emitErr("ir.tx_raw", "need freq samples");
+            return;
+        }
+        uint32_t freq = (uint32_t)rest.substring(0, sp1).toInt();
+        String samples = rest.substring(sp1 + 1);
+        samples.trim();
+        if (!freq || !samples.length()) {
+            emitErr("ir.tx_raw", "invalid args");
+            return;
+        }
+        if (pcConnectIrTxRaw(freq, samples)) emitAck("ir.tx_raw", true);
+        else emitErr("ir.tx_raw", "tx failed");
+        return;
+    }
+    if (cmd == "rf.rx") {
+        if (rest.startsWith("start")) {
+            String args = rest.substring(5);
+            args.trim();
+            bool raw = false;
+            float mhz = 0;
+            if (args.length()) {
+                int sp2 = args.indexOf(' ');
+                if (sp2 < 0) {
+                    if (args.equalsIgnoreCase("raw")) raw = true;
+                    else mhz = args.toFloat();
+                } else {
+                    String a0 = args.substring(0, sp2);
+                    String a1 = args.substring(sp2 + 1);
+                    a1.trim();
+                    if (a0.equalsIgnoreCase("raw")) {
+                        raw = true;
+                        mhz = a1.toFloat();
+                    } else {
+                        mhz = a0.toFloat();
+                        if (a1.equalsIgnoreCase("raw")) raw = true;
+                    }
+                }
+            }
+            if (pcConnectRfRxStart(mhz, raw)) {
+                emitAck("rf.rx", true);
+                paintStatus(true);
+            } else {
+                emitErr("rf.rx", "start failed");
+            }
+            return;
+        }
+    }
+    if (cmd == "rf.rssi") {
+        if (rest.startsWith("start")) {
+            if (pcConnectRfRssiStart()) {
+                emitAck("rf.rssi", true);
+                paintStatus(true);
+            } else {
+                emitErr("rf.rssi", "CC1101 required");
+            }
+            return;
+        }
+    }
+    if (cmd == "rf.tx") {
+        if (pcConnectRfTxLast()) emitAck("rf.tx", true);
+        else emitErr("rf.tx", "no capture");
+        return;
+    }
+    if (cmd == "rfid.read") {
+        if (rest.startsWith("start")) {
+            if (pcConnectRfidStart()) {
+                emitAck("rfid.read", true);
+                paintStatus(true);
+            } else {
+                emitErr("rfid.read", "module not found");
+            }
+            return;
+        }
+    }
+    if (cmd == "jam.detect") {
+        if (rest.startsWith("start")) {
+            uint32_t thr = (uint32_t)kvxConfig.jamDetectAlertPerSec;
+            String args = rest.substring(5);
+            args.trim();
+            if (args.length()) thr = (uint32_t)args.toInt();
+            if (pcConnectJamStart(thr)) {
+                JsonDocument doc;
+                doc["evt"] = "ack";
+                doc["cmd"] = "jam.detect";
+                doc["ok"] = true;
+                doc["threshold"] = thr < 5 ? 5 : (thr > 250 ? 250 : thr);
+                String out;
+                serializeJson(doc, out);
+                emitRaw(out);
+                paintStatus(true);
+            } else {
+                emitErr("jam.detect", "start failed");
             }
             return;
         }
@@ -257,11 +478,21 @@ void pollSerial() {
         char c = (char)serialDevice->read();
         if (c == '\r') continue;
         if (c == '\n') {
+            if (g_lineOverflow) {
+                g_lineBuf = "";
+                g_lineOverflow = false;
+                emitErr("line", "too long");
+                continue;
+            }
             String line = g_lineBuf;
             g_lineBuf = "";
             handleLine(line);
         } else {
-            if (g_lineBuf.length() < 256) g_lineBuf += c;
+            if (g_lineBuf.length() < kMaxLine) {
+                g_lineBuf += c;
+            } else {
+                g_lineOverflow = true;
+            }
         }
     }
 }
@@ -270,9 +501,13 @@ void tickRadio() {
 #if !defined(LITE_VERSION)
     if (pcConnectWifiAnalyzerActive()) pcConnectWifiAnalyzerTick();
     if (pcConnectBleScanActive()) pcConnectBleScanTick();
+    if (pcConnectIrRxActive()) pcConnectIrRxTick();
+    if (pcConnectRfRxActive()) pcConnectRfRxTick();
+    if (pcConnectRfRssiActive()) pcConnectRfRssiTick();
+    if (pcConnectRfidActive()) pcConnectRfidTick();
+    if (pcConnectJamActive()) pcConnectJamTick();
 #endif
 #if defined(EVIL_EXTENSIONS)
-    // Flipper/airtag/skimmer share the BLE scan tick path via mode name
     if (g_radio == PcRadio::Ble) {
         if (g_mode == "ble.flipper") pcConnectBleFlipperTick();
         else if (g_mode == "ble.airtag") pcConnectBleAirtagTick();
@@ -310,7 +545,6 @@ uint8_t pcConnectChannel() { return g_channel; }
 bool pcConnectLinked() { return g_linked; }
 
 void pcConnectSetStatus(PcRadio radio, const char *mode, uint8_t channel) {
-    // Radio/mode changes need a full layout pass; channel-only updates are in-place.
     if (g_radio != radio || g_mode != (mode ? mode : "idle")) g_uiDirty = true;
     g_radio = radio;
     g_mode = mode ? mode : "idle";
@@ -321,6 +555,11 @@ void pcConnectStopRadio() {
 #if !defined(LITE_VERSION)
     pcConnectWifiAnalyzerStop();
     pcConnectBleScanStop();
+    pcConnectIrRxStop();
+    pcConnectRfRxStop();
+    pcConnectRfRssiStop();
+    pcConnectRfidStop();
+    pcConnectJamStop();
 #endif
     if (g_radio != PcRadio::Idle || g_mode != "idle" || g_channel != 0) g_uiDirty = true;
     g_radio = PcRadio::Idle;
@@ -346,11 +585,10 @@ void pcConnectMenu() {
     g_chromeDrawn = false;
     g_uiDirty = true;
     g_lineBuf = "";
+    g_lineOverflow = false;
 
-    // Claim the port before suspending CLI so a racing hello cannot call backToMenu().
     pcConnectOwnsSerial = true;
     if (serialcmdsTaskHandle) vTaskSuspend(serialcmdsTaskHandle);
-    // Drain any bytes the CLI may have been mid-reading.
     while (Serial && Serial.available()) { Serial.read(); }
     g_lineBuf = "";
 
@@ -358,7 +596,6 @@ void pcConnectMenu() {
 
     while (!forceHome) {
         if (check(EscPress)) break;
-        // Ignore returnToMenu from other tasks while we own the session.
         returnToMenu = false;
         pollSerial();
         tickRadio();

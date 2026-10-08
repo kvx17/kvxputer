@@ -453,7 +453,15 @@ String generalKeyboard(
     max_FM_size = tftWidth / (LW * FM) - 1;
     max_FP_size = tftWidth / (LW * FP) - 2;
     resetTftDisplay();
+
+    // Drop leftover Select / Enter / touch from the menu that opened this prompt
+    // (e.g. WiFi network pick → password keyboard). Without this, the first loop
+    // treats the stale submit as OK and returns an empty string.
+    resetHeldNavKeys();
+    KeyStroke.Clear();
     touchPoint.Clear();
+    const unsigned long keyboardOpenTs = millis();
+    static const unsigned long KEYBOARD_OPEN_IGNORE_MS = 600;
 
     /* SUPPORT VARIABLES */
     bool caps = false;
@@ -834,6 +842,7 @@ String generalKeyboard(
 
         if (millis() - last_input_time > 250) { // INPUT DEBOUCING
             // waits at least 250ms before accepting another input, to prevent rapid involuntary repeats
+            const bool acceptSubmit = (millis() - keyboardOpenTs > KEYBOARD_OPEN_IGNORE_MS);
 
 #if defined(HAS_TOUCH) // CYD, Core2, CoreS3
 #if defined(USE_TFT_eSPI_TOUCH)
@@ -854,6 +863,10 @@ String generalKeyboard(
                 bool touchHandled = false;
 
                 if (box_list[buttons_start_index].contain(touchPoint.x, touchPoint.y)) { // OK btn
+                    if (!acceptSubmit) {
+                        touchPoint.Clear();
+                        continue;
+                    }
                     break;
                 }
                 if (box_list[buttons_start_index + 1].contain(touchPoint.x, touchPoint.y)) { // CAPS btn
@@ -876,6 +889,10 @@ String generalKeyboard(
                     }
                 }
                 if (box_list[buttons_start_index + 4].contain(touchPoint.x, touchPoint.y)) { // BACK btn
+                    if (!acceptSubmit) {
+                        touchPoint.Clear();
+                        continue;
+                    }
                     current_text = "\x1B"; // ASCII ESC CHARACTER
                     break;
                 }
@@ -1144,52 +1161,58 @@ String generalKeyboard(
                     redraw = true;
                 }
             }
-#elif defined(HAS_KEYBOARD)  // Cardputer, T-Deck and T-LoRa-Pager
+#elif defined(HAS_KEYBOARD)  // Cardputer, T-Deck, T-LoRa-Pager, Tab5
             if (KeyStroke.pressed) {
-                wakeUpScreen();
-                tft.setCursor(cursor_x, cursor_y);
-                String keyStr = "";
-                for (auto i : KeyStroke.word) {
-                    if (keyStr != "") {
-                        keyStr = keyStr + "+" + i;
-                    } else {
-                        keyStr += i;
+                // Stale Enter from the parent menu must not submit an empty field.
+                if (!acceptSubmit && KeyStroke.enter) {
+                    KeyStroke.Clear();
+                } else {
+                    wakeUpScreen();
+                    tft.setCursor(cursor_x, cursor_y);
+                    String keyStr = "";
+                    for (auto i : KeyStroke.word) {
+                        if (keyStr != "") {
+                            keyStr = keyStr + "+" + i;
+                        } else {
+                            keyStr += i;
+                        }
                     }
-                }
 
-                if (current_text.length() < max_size && !KeyStroke.enter && !KeyStroke.del) {
-                    current_text += keyStr;
-                    if (current_text.length() != (max_FM_size + 1) &&
-                        current_text.length() != (max_FM_size + 1))
-                        tft.print(keyStr.c_str());
-                    cursor_x = tft.getCursorX();
-                    cursor_y = tft.getCursorY();
-                    if (current_text.length() == (max_FM_size + 1)) redraw = true;
-                    if (current_text.length() == (max_FP_size + 1)) redraw = true;
+                    if (current_text.length() < max_size && !KeyStroke.enter && !KeyStroke.del) {
+                        current_text += keyStr;
+                        if (current_text.length() != (max_FM_size + 1) &&
+                            current_text.length() != (max_FM_size + 1))
+                            tft.print(keyStr.c_str());
+                        cursor_x = tft.getCursorX();
+                        cursor_y = tft.getCursorY();
+                        if (current_text.length() == (max_FM_size + 1)) redraw = true;
+                        if (current_text.length() == (max_FP_size + 1)) redraw = true;
+                    }
+                    if (KeyStroke.del && current_text.length() > 0) { // delete 0x08
+                        // Handle backspace key
+                        current_text.remove(current_text.length() - 1);
+                        int fontSize = FM;
+                        if (current_text.length() > max_FP_size) {
+                            tft.setTextSize(FP);
+                            fontSize = FP;
+                        } else tft.setTextSize(FM);
+                        tft.setCursor((cursor_x - fontSize * LW), cursor_y);
+                        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+                        tft.print(" ");
+                        tft.setTextColor(getComplementaryColor2(kvxConfig.bgColor), 0x5AAB);
+                        tft.setCursor(cursor_x - fontSize * LW, cursor_y);
+                        cursor_x = tft.getCursorX();
+                        cursor_y = tft.getCursorY();
+                        if (current_text.length() == max_FM_size) redraw = true;
+                        if (current_text.length() == max_FP_size) redraw = true;
+                    }
+                    if (KeyStroke.enter) { break; }
+                    KeyStroke.Clear();
                 }
-                if (KeyStroke.del && current_text.length() > 0) { // delete 0x08
-                    // Handle backspace key
-                    current_text.remove(current_text.length() - 1);
-                    int fontSize = FM;
-                    if (current_text.length() > max_FP_size) {
-                        tft.setTextSize(FP);
-                        fontSize = FP;
-                    } else tft.setTextSize(FM);
-                    tft.setCursor((cursor_x - fontSize * LW), cursor_y);
-                    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-                    tft.print(" ");
-                    tft.setTextColor(getComplementaryColor2(kvxConfig.bgColor), 0x5AAB);
-                    tft.setCursor(cursor_x - fontSize * LW, cursor_y);
-                    cursor_x = tft.getCursorX();
-                    cursor_y = tft.getCursorY();
-                    if (current_text.length() == max_FM_size) redraw = true;
-                    if (current_text.length() == max_FP_size) redraw = true;
-                }
-                if (KeyStroke.enter) { break; }
-                KeyStroke.Clear();
             }
 #if !defined(T_LORA_PAGER)   // T-LoRa-Pager does not have a select button
-            if (check(SelPress)) break;
+            if (acceptSubmit && check(SelPress)) break;
+            else if (!acceptSubmit) SelPress = false;
 #endif
 #endif
 

@@ -1,6 +1,13 @@
 #ifndef __PN532KILLERTOOLS_H__
 #define __PN532KILLERTOOLS_H__
 #ifndef LITE_VERSION
+#if defined(KVX_NO_NIMBLE)
+#include "root/ui/display.h"
+class PN532KillerTools {
+public:
+    PN532KillerTools() { displayError("PN532Killer unavailable (Tab5 M1)", true); }
+};
+#else
 #include "PN532Killer.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
@@ -75,5 +82,6 @@ private:
     uint32_t _tcpLastPacketMs = 0;
 };
 
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION
 #endif

@@ -64,6 +64,56 @@ Same branch as Cardputer; feature limits are board HAL + flags (no keyboard, 2 b
 | Hat SPI (SD / CC1101 / NRF24) | Per `tools/porting/boards/m5stack-sticks3/connections.md` |
 | Cardputer regression | `pio run -e m5stack-cardputer` still succeeds after StickS3 shared-src changes |
 
+## M5Stack Tab5 (`m5stack-tab5`)
+
+Same branch as Cardputer; feature limits are board HAL + flags (keyboard + touch; WiFi/BLE gated). Merged artifact: `kvxputer-m5stack-tab5.bin`. Pin matrix: `tools/porting/boards/m5stack-tab5/connections.md`.
+
+| Scenario | Expect |
+|----------|--------|
+| Boot | 3×6 channel grid on 1280×720; brightness and battery via M5Unified |
+| Tab5 Keyboard | Esc / arrows / Enter / letters drive menus; `keyboard()` prompts accept text; `'1'`–`'6'` land in `KeyStroke.word` |
+| Keyboard absent | Touch-only navigation still works |
+| Touch tap tile | Opens selected channel (Sel) |
+| Touch swipe left/right | Main grid and submenus: left → Next, right → Prev |
+| Touch hold ≥ 3000 ms | EscPress (Back); Core2 `touchHeatMap` unchanged |
+| WiFi / BLE / Discover / NetOps tiles | Visible on main grid; attack/NimBLE features still gated inside (`radio later`) |
+| WiFi Connect (STA) | Scan lists APs; connect with password; no solid-cyan crash on enter/exit |
+| Cyan / freeze after WiFi | Should not occur — Tab5 keeps UI canvas suppressed (direct DSI draws only) |
+| Infrared enter/exit | EXT 5V on while in IR menu; restored on exit |
+| Grove Scroll / RFID2 | Probe-at-runtime on PORT.A (G53/G54) |
+| SD | Mounts on SPI (CS 42 / SCK 43 / MISO 39 / MOSI 44) |
+| WiFi attack / CSI / Evil Portal / NimBLE HID | **Not in milestone 1** (`radio later`) |
+| Cardputer regression | `pio run -e m5stack-cardputer` still succeeds after Tab5 shared-src changes |
+
+### App enter/exit (every `kMenus` channel)
+
+Rule: missing SPI pin or forbidden radio → message and return to submenu; Grove module on PORT.A → existing feature; no cyan screen; Cardputer and StickS3 menus unchanged.
+
+| Channel | Expect on Tab5 |
+|---------|----------------|
+| WiFi | Connect / AP / TCP / SSH / Scan Hosts / WireGuard / Roku / Pass Recovery / PineAP / **kvx wifi analyzer** (STA scan on hosted C6). Wifi Atks, Evil Portal, Sniffer, Jam Detect, Karma, Kvxgotchi → `radio later` |
+| Discovery | STA tools (analyzer, pineap, roku, …) listed; attack/NimBLE rows stay off. RF/NRF spectrum refuse CS/CE=-1 |
+| NetOps | SSH / Scan Hosts / TCP / Responder / Reverse Shell (STA). Evil entries compiled out |
+| BLE | USB `kvxkeyboard HID` works; NimBLE BLE scan/apps still gated (P4). Message names NimBLE/P4 |
+| Main grid touch | Tap opens the **touched** tile (not the keyboard highlight) |
+| USB | `USB_as_HID=1`: kvxkeyboard HID / BadUSB / Clicker / U2F over Type-C OTG |
+| RF | Grove single-pin TX/RX on G53/G54. CC1101 with CS/GDO0=-1 → `CC1101: set CS/GDO0 in Pins (M5-Bus)` before any GPIO |
+| NRF24 | CS/CE=-1 → `NRF24: set CS/CE in Pins (M5-Bus)`; no UART fallback on Tab5 |
+| LoRa | `LoRa pins not configured` when CS/IRQ=-1 (existing) |
+| FM | Si4713 absent → `Si4713 not found Grove PORT.A G53/G54` |
+| Infrared | EXT 5V while open; TX/RX Grove; exit restores EXT |
+| Ethernet | W5500 CS=-1 → `W5500 Pins not set` (existing) |
+| USB | HID gadget / kvxkeyboard → gated message. BadUSB CH9329 uses Grove UART. PC Connect / Mass Storage stay; fail with message if SD/USB init fails |
+| GPS | UART on PORT.A; absent → `GPS not Found! Grove PORT.A G53/G54` |
+| RFID | TagOMatic probe. EMV needs PN532; begin fail names Grove PORT.A. BLE RFID stubs stay gated |
+| Files / Scripts | SD/LittleFS; BJS sprites capped at 64KB on Tab5 |
+| Clock / Charge | System time (no `HAS_RTC` / no `_rtc`); Esc exits |
+| Tools | Calculator / QR / keyboard tools. Drone ID WiFi/BLE → `radio later`. iButton refuses G0/keyboard/sys/SDIO/SD pins |
+| Modules | PaHub probe on PORT.A |
+| Config | Pins can set CC1101/NRF24 CS; Advanced BLE API gated |
+
+| StickS3 / Cardputer regression | `pio run -e m5stack-sticks3` and `pio run -e m5stack-cardputer` succeed; attack menus still run on those boards |
+
 ## Lite env
 
 `tools/porting/boards/m5stack-cardputer/m5stack-cardputer.ini` sibling env `m5stack-cardputer-lite` disables `EVIL_EXTENSIONS` and enables `LITE_VERSION` when flash is tight.

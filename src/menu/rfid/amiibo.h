@@ -9,6 +9,13 @@
 #ifndef __AMIIBO_H__
 #define __AMIIBO_H__
 #ifndef LITE_VERSION
+#if defined(KVX_NO_NIMBLE)
+#include "root/ui/display.h"
+class Amiibo {
+public:
+    Amiibo() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+};
+#else
 #include <amiibolink.h>
 
 class Amiibo {
@@ -56,5 +63,6 @@ private:
     void delayWithReturn(uint32_t ms);
 };
 
-#endif
+#endif // !KVX_NO_NIMBLE
+#endif // !LITE_VERSION
 #endif

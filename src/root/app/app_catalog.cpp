@@ -154,6 +154,22 @@ static bool evilOn() { return true; }
 #else
 static bool evilOn() { return false; }
 #endif
+#if defined(ARDUINO_M5STACK_TAB5)
+// Tab5: STA / scan tools OK; attack + NimBLE BLE still gated.
+static bool tab5WifiStaOn() { return true; }
+static bool tab5WifiAtkOn() { return false; }
+static bool tab5BleOn() { return false; }
+#else
+static bool tab5WifiStaOn() { return true; }
+static bool tab5WifiAtkOn() { return true; }
+static bool tab5BleOn() { return true; }
+#endif
+static bool wifiCatalogOn() { return tab5WifiStaOn() && alwaysOn(); }
+static bool wifiCatalogNotLite() { return tab5WifiStaOn() && notLite(); }
+static bool wifiCatalogAtk() { return tab5WifiAtkOn() && alwaysOn(); }
+static bool wifiCatalogAtkNotLite() { return tab5WifiAtkOn() && notLite(); }
+static bool bleCatalogOn() { return tab5BleOn() && alwaysOn(); }
+static bool bleCatalogNotLite() { return tab5BleOn() && notLite(); }
 static bool devModeOn() { return kvxConfig.devMode; }
 
 // --- WiFi ---
@@ -424,34 +440,34 @@ static bool launchMenuById(const String &id) {
 const std::vector<AppCatalogItem> &appCatalogItems() {
     static const std::vector<AppCatalogItem> items = {
         // WiFi
-        {"wifi_sta", "Connect STA", "WiFi", false, alwaysOn, launchWifiSta},
-        {"wifi_ap", "Start AP", "WiFi", false, alwaysOn, launchWifiAp},
-        {"wifi_off", "Turn Off WiFi", "WiFi", false, alwaysOn, launchWifiOff},
-        {"wifi_ap_info", "AP info", "WiFi", false, alwaysOn, launchApInfo},
-        {"wifi_atks", "Wifi Atks", "WiFi", false, alwaysOn, launchWifiAtk},
-        {"evil_portal", "Evil Portal", "WiFi", false, alwaysOn, launchEvilPortal},
-        {"netcut", "NetCut", "WiFi", false, alwaysOn, launchNetcut},
-        {"wifi_config", "WiFi Config", "WiFi", false, alwaysOn, launchWifiConfig},
-        {"roku", "Roku Remote", "WiFi", true, alwaysOn, launchRoku},
-        {"beacon_spam", "Beacon SPAM", "WiFi", false, alwaysOn, launchBeacon},
-        {"deauth_flood", "Deauth Flood", "WiFi", false, alwaysOn, launchDeauthFlood},
-        {"enhanced_deauth", "Enhanced Deauth", "WiFi", false, alwaysOn, launchEnhancedDeauth},
+        {"wifi_sta", "Connect STA", "WiFi", false, wifiCatalogOn, launchWifiSta},
+        {"wifi_ap", "Start AP", "WiFi", false, wifiCatalogOn, launchWifiAp},
+        {"wifi_off", "Turn Off WiFi", "WiFi", false, wifiCatalogOn, launchWifiOff},
+        {"wifi_ap_info", "AP info", "WiFi", false, wifiCatalogOn, launchApInfo},
+        {"wifi_atks", "Wifi Atks", "WiFi", false, wifiCatalogAtk, launchWifiAtk},
+        {"evil_portal", "Evil Portal", "WiFi", false, wifiCatalogAtk, launchEvilPortal},
+        {"netcut", "NetCut", "WiFi", false, wifiCatalogOn, launchNetcut},
+        {"wifi_config", "WiFi Config", "WiFi", false, wifiCatalogOn, launchWifiConfig},
+        {"roku", "Roku Remote", "WiFi", true, wifiCatalogOn, launchRoku},
+        {"beacon_spam", "Beacon SPAM", "WiFi", false, wifiCatalogAtk, launchBeacon},
+        {"deauth_flood", "Deauth Flood", "WiFi", false, wifiCatalogAtk, launchDeauthFlood},
+        {"enhanced_deauth", "Enhanced Deauth", "WiFi", false, wifiCatalogAtk, launchEnhancedDeauth},
 #ifndef LITE_VERSION
-        {"listen_tcp", "Listen TCP", "WiFi", false, notLite, launchListenTcp},
-        {"client_tcp", "Client TCP", "WiFi", false, notLite, launchClientTcp},
-        {"socks4", "SOCKS4 Proxy", "WiFi", false, notLite, launchSocks4},
-        {"telnet", "TelNET", "WiFi", false, notLite, launchTelnet},
-        {"ssh", "SSH", "WiFi", false, notLite, launchSsh},
-        {"sniffer", "Sniffer", "WiFi", true, notLite, launchSniffer},
-        {"channel_analyzer", "kvx wifi analyzer", "WiFi", true, notLite, launchChannelAnalyzer},
-        {"jam_detect", "Jam Detect", "WiFi", true, notLite, launchJamDetect},
-        {"pineap_hunter", "PineAP Hunter", "WiFi", true, notLite, launchPineapHunter},
-        {"scan_hosts", "Scan Hosts", "WiFi", true, notLite, launchScanHosts},
-        {"wireguard", "Wireguard", "WiFi", false, notLite, launchWireguard},
-        {"responder", "Responder", "WiFi", false, notLite, launchResponder},
-        {"kvxgotchi", "Kvxgotchi", "WiFi", false, notLite, launchKvxgotchi},
-        {"wifi_recover", "WiFi Pass Recovery", "WiFi", false, notLite, launchWifiRecover},
-        {"karma", "Karma Attack", "WiFi", false, notLite, launchKarma},
+        {"listen_tcp", "Listen TCP", "WiFi", false, wifiCatalogNotLite, launchListenTcp},
+        {"client_tcp", "Client TCP", "WiFi", false, wifiCatalogNotLite, launchClientTcp},
+        {"socks4", "SOCKS4 Proxy", "WiFi", false, wifiCatalogNotLite, launchSocks4},
+        {"telnet", "TelNET", "WiFi", false, wifiCatalogNotLite, launchTelnet},
+        {"ssh", "SSH", "WiFi", false, wifiCatalogNotLite, launchSsh},
+        {"sniffer", "Sniffer", "WiFi", true, wifiCatalogAtkNotLite, launchSniffer},
+        {"channel_analyzer", "kvx wifi analyzer", "WiFi", true, wifiCatalogNotLite, launchChannelAnalyzer},
+        {"jam_detect", "Jam Detect", "WiFi", true, wifiCatalogAtkNotLite, launchJamDetect},
+        {"pineap_hunter", "PineAP Hunter", "WiFi", true, wifiCatalogNotLite, launchPineapHunter},
+        {"scan_hosts", "Scan Hosts", "WiFi", true, wifiCatalogNotLite, launchScanHosts},
+        {"wireguard", "Wireguard", "WiFi", false, wifiCatalogNotLite, launchWireguard},
+        {"responder", "Responder", "WiFi", false, wifiCatalogNotLite, launchResponder},
+        {"kvxgotchi", "Kvxgotchi", "WiFi", false, wifiCatalogAtkNotLite, launchKvxgotchi},
+        {"wifi_recover", "WiFi Pass Recovery", "WiFi", false, wifiCatalogNotLite, launchWifiRecover},
+        {"karma", "Karma Attack", "WiFi", false, wifiCatalogAtkNotLite, launchKarma},
 #endif
 #if defined(EVIL_EXTENSIONS)
         {"probes", "Probes", "WiFi", false, evilOn, launchProbe},
@@ -466,20 +482,20 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 
         // BLE
 #ifndef LITE_VERSION
-        {"hid_ble", "kvxkeyboard HID", "BLE", false, notLite, launchHidBle},
-        {"media_cmds", "Media Cmds", "BLE", false, notLite, launchMediaCmds},
-        {"ble_scan", "BLE Scan", "BLE", true, alwaysOn, launchBleScan},
-        {"ble_hunter", "BLE Hunter", "BLE", true, notLite, launchBleHunter},
-        {"ibeacon", "iBeacon", "BLE", false, notLite, launchIbeacon},
-        {"bad_ble", "Bad BLE", "BLE", false, notLite, launchBadBle},
-        {"ble_keyboard", "BLE Keyboard", "BLE", false, notLite, launchBleKeyboard},
-        {"ble_suite", "BLE Suite", "BLE", false, notLite, launchBleSuite},
-        {"ninebot", "Ninebot", "BLE", false, notLite, launchNinebot},
-        {"presenter", "Presenter", "BLE", false, notLite, launchPresenter},
+        {"hid_ble", "kvxkeyboard HID", "BLE", false, bleCatalogNotLite, launchHidBle},
+        {"media_cmds", "Media Cmds", "BLE", false, bleCatalogNotLite, launchMediaCmds},
+        {"ble_scan", "BLE Scan", "BLE", true, bleCatalogOn, launchBleScan},
+        {"ble_hunter", "BLE Hunter", "BLE", true, bleCatalogNotLite, launchBleHunter},
+        {"ibeacon", "iBeacon", "BLE", false, bleCatalogNotLite, launchIbeacon},
+        {"bad_ble", "Bad BLE", "BLE", false, bleCatalogNotLite, launchBadBle},
+        {"ble_keyboard", "BLE Keyboard", "BLE", false, bleCatalogNotLite, launchBleKeyboard},
+        {"ble_suite", "BLE Suite", "BLE", false, bleCatalogNotLite, launchBleSuite},
+        {"ninebot", "Ninebot", "BLE", false, bleCatalogNotLite, launchNinebot},
+        {"presenter", "Presenter", "BLE", false, bleCatalogNotLite, launchPresenter},
 #else
-        {"ble_sniffer", "BLE Sniffer", "BLE", false, alwaysOn, launchBleSniffer},
+        {"ble_sniffer", "BLE Sniffer", "BLE", false, bleCatalogOn, launchBleSniffer},
 #endif
-        {"ble_spam", "BLE Spam", "BLE", false, alwaysOn, launchBleSpam},
+        {"ble_spam", "BLE Spam", "BLE", false, bleCatalogOn, launchBleSpam},
 #if defined(EVIL_EXTENSIONS)
         {"name_flood", "BLE Name Flood", "BLE", false, evilOn, launchNameFlood},
         {"wall_of_airtag", "Wall Of Airtag", "BLE", true, evilOn, launchWallAirtag},
@@ -978,22 +994,25 @@ bool appCatalogHandleMainscreenKeys() {
     if (!hit) return false;
 
     String appId;
+    bool wasHoldLaunch = false;
     if (holdId.length() == 0) {
         // Tap-only: launch immediately (legacy behavior).
         appId = tapId;
     } else {
-        // Wait for hold threshold or release.
+        // Wait for hold threshold or release. Launch as soon as hold is met
+        // (do not require the user to release first).
         const unsigned long t0 = millis();
         bool launchedHold = false;
         while (isCardputerKeyHeld(keyChar) && !returnToMenu && !forceHome) {
             if (millis() - t0 >= kHoldMs) {
                 appId = holdId;
                 launchedHold = true;
+                wasHoldLaunch = true;
                 break;
             }
             delay(10);
         }
-        // Consume residual key events from the hold.
+        // Consume residual key events from the hold/tap.
         KeyStroke.Clear();
         EscPress = false;
         SelPress = false;
@@ -1001,15 +1020,18 @@ bool appCatalogHandleMainscreenKeys() {
             if (tapId.length() == 0) return false; // hold-only, short press: ignore
             appId = tapId;
         }
-        // Wait for key release so we do not re-trigger.
-        while (isCardputerKeyHeld(keyChar) && !returnToMenu && !forceHome) delay(10);
-        KeyStroke.Clear();
     }
 
     if (appId.length() == 0) return false;
     ledSetStatus(LED_STATUS_BUSY);
     appCatalogLaunch(appId);
     ledSetStatus(LED_STATUS_IDLE);
+    // After a hold launch the key may still be down — wait for release so
+    // returning to the home grid does not immediately re-fire the shortcut.
+    if (wasHoldLaunch) {
+        while (isCardputerKeyHeld(keyChar) && !returnToMenu && !forceHome) delay(10);
+        KeyStroke.Clear();
+    }
     return true;
 #else
     return false;

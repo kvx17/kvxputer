@@ -14,12 +14,17 @@
 #include <M5Unified.h>
 void _setup_codec_speaker(bool enable);
 #endif
+#if defined(ARDUINO_M5STACK_TAB5)
+#include <M5Unified.h>
+#endif
 
 void IRMenu::optionsMenu() {
-#if defined(ARDUINO_M5STICK_S3)
+#if defined(ARDUINO_M5STICK_S3) || defined(ARDUINO_M5STACK_TAB5)
     bool prevPower = M5.Power.getExtOutput();
-    M5.Power.setExtOutput(true); // ENABLE 5V OUTPUT (Grove/Hat/IR)
+    M5.Power.setExtOutput(true); // EXT 5V for Grove/Hat IR modules
+#if defined(ARDUINO_M5STICK_S3)
     _setup_codec_speaker(false); // mute amp during IR (avoids RX noise)
+#endif
 #endif
     options = {
         {"kvxputer universal remote", kremoteMenu},
@@ -40,7 +45,7 @@ void IRMenu::optionsMenu() {
     txt += " Tx: " + String(kvxConfigPins.irTx) + " Rx: " + String(kvxConfigPins.irRx) +
            " Rpts: " + String(kvxConfigPins.irTxRepeats);
     loopOptions(options, MENU_TYPE_SUBMENU, txt.c_str());
-#if defined(ARDUINO_M5STICK_S3)
+#if defined(ARDUINO_M5STICK_S3) || defined(ARDUINO_M5STACK_TAB5)
     M5.Power.setExtOutput(prevPower);
 #endif
 }
