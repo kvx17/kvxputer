@@ -5,12 +5,26 @@
 #endif
 
 #include <Arduino.h>
+#include <esp_err.h>
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
 
 // esp_gap_ble_api power levels / addr types are not present on P4; stubs for compile.
+typedef int esp_power_level_t;
+
+#ifndef NIMBLE_PROPERTY
+enum {
+    NIMBLE_PROPERTY_READ = 1,
+    NIMBLE_PROPERTY_WRITE = 2,
+    NIMBLE_PROPERTY_NOTIFY = 4,
+    NIMBLE_PROPERTY_INDICATE = 8,
+    NIMBLE_PROPERTY_WRITE_NR = 16,
+};
+#define NIMBLE_PROPERTY
+#endif
+
 #ifndef ESP_PWR_LVL_N12
 enum {
     ESP_PWR_LVL_N12 = -12,
@@ -97,14 +111,18 @@ public:
     void setValue(const std::string &) {}
     void setValue(uint8_t) {}
     std::string getValue() { return ""; }
+    void addDescriptor(void *) {}
     bool notify(bool = true) { return false; }
+    bool notify(const uint8_t *, size_t, bool = true) { return false; }
     bool indicate(bool = true) { return false; }
+    bool indicate(const uint8_t *, size_t, bool = true) { return false; }
     void setCallbacks(NimBLECharacteristicCallbacks *) {}
     uint16_t getHandle() const { return 0; }
 };
 
 class NimBLEService {
 public:
+    NimBLEUUID getUUID() const { return {}; }
     NimBLECharacteristic *createCharacteristic(const char *, uint32_t) { return &_chr; }
     NimBLECharacteristic *createCharacteristic(uint16_t, uint32_t) { return &_chr; }
     void start() {}
@@ -119,8 +137,13 @@ public:
     void setFlags(uint8_t) {}
     void setManufacturerData(const std::string &) {}
     void setManufacturerData(const std::vector<uint8_t> &) {}
+    void setManufacturerData(const uint8_t *, size_t) {}
     void setServiceData(const NimBLEUUID &, const std::string &) {}
     void addData(const std::string &) {}
+    void addData(const uint8_t *, size_t) {}
+    void addData(uint8_t *, int) {}
+    void addData(const uint8_t *, int) {}
+    void addData(uint8_t *, uint8_t) {}
     void setAppearance(uint16_t) {}
     std::string getPayload() const { return ""; }
 };
@@ -135,8 +158,12 @@ public:
     void setAppearance(uint16_t) {}
     void setMinPreferred(uint16_t) {}
     void setScanResponse(bool) {}
-    void setAdvertisementData(NimBLEAdvertisementData &) {}
-    void setScanResponseData(NimBLEAdvertisementData &) {}
+    void setAdvertisementData(const NimBLEAdvertisementData &) {}
+    void setScanResponseData(const NimBLEAdvertisementData &) {}
+    void setMinInterval(uint16_t) {}
+    void setMaxInterval(uint16_t) {}
+    void setManufacturerData(const uint8_t *, size_t) {}
+    void setManufacturerData(const std::string &) {}
     bool isAdvertising() const { return false; }
 };
 
@@ -190,6 +217,13 @@ public:
     bool haveName() const { return false; }
     bool haveManufacturerData() const { return false; }
     std::string getManufacturerData() const { return ""; }
+    bool haveServiceUUID() const { return false; }
+    NimBLEUUID getServiceUUID() const { return {}; }
+    bool haveTXPower() const { return false; }
+    int getTXPower() const { return 0; }
+    bool haveAppearance() const { return false; }
+    uint16_t getAppearance() const { return 0; }
+    uint8_t getAdvFlags() const { return 0; }
     bool isAdvertisingService(const NimBLEUUID &) const { return false; }
     std::string toString() const { return ""; }
     uint8_t getPayloadLength() const { return 0; }
@@ -254,12 +288,17 @@ public:
     uint16_t getHandle() const { return 0; }
     NimBLEUUID getUUID() const { return {}; }
     bool canWrite() const { return false; }
+    bool canWriteNoResponse() const { return false; }
     bool canNotify() const { return false; }
     bool canIndicate() const { return false; }
+    bool canRead() const { return false; }
+    std::string readValue() { return ""; }
+    bool writeValue(const std::string &, bool = false) { return false; }
 };
 
 class NimBLERemoteService {
 public:
+    NimBLEUUID getUUID() const { return {}; }
     NimBLERemoteCharacteristic *getCharacteristic(const NimBLEUUID &) { return &_chr; }
     NimBLERemoteCharacteristic *getCharacteristic(const char *) { return &_chr; }
     std::vector<NimBLERemoteCharacteristic *> getCharacteristics(bool = false) { return {}; }
@@ -279,8 +318,15 @@ class NimBLEClient {
 public:
     bool connect(const NimBLEAdvertisedDevice *) { return false; }
     bool connect(const NimBLEAddress &) { return false; }
+    bool connect(const NimBLEAddress &, bool) { return false; }
     void disconnect() {}
     bool isConnected() const { return false; }
+    void setClientCallbacks(NimBLEClientCallbacks *, bool = false) {}
+    void setConnectTimeout(uint32_t) {}
+    void setConnectionParams(uint16_t, uint16_t, uint16_t, uint16_t) {}
+    bool discoverAttributes() { return false; }
+    bool secureConnection() { return false; }
+    std::vector<NimBLERemoteService *> getServices(bool = false) { return {}; }
     NimBLERemoteService *getService(const NimBLEUUID &) { return &_svc; }
     NimBLERemoteService *getService(const char *) { return &_svc; }
     void setClientCallbacks(NimBLEClientCallbacks *) {}
@@ -309,6 +355,7 @@ public:
     static bool init(const std::string & = "") { return false; }
     static void deinit(bool = true) {}
     static bool isInitialized() { return false; }
+    static NimBLEServer *getServer() { return nullptr; }
     static NimBLEServer *createServer() {
         static NimBLEServer s;
         return &s;
@@ -356,3 +403,19 @@ using BLEHIDDevice = NimBLEHIDDevice;
 using BLEServerCallbacks = NimBLEServerCallbacks;
 using BLECharacteristicCallbacks = NimBLECharacteristicCallbacks;
 using BLEUUID = NimBLEUUID;
+using BLEService = NimBLEService;
+using BLEClient = NimBLEClient;
+using BLEAddress = NimBLEAddress;
+using BLEBeacon = NimBLEBeacon;
+using BLERemoteService = NimBLERemoteService;
+using BLERemoteCharacteristic = NimBLERemoteCharacteristic;
+using BLEAdvertisementData = NimBLEAdvertisementData;
+using BLEScanCallbacks = NimBLEScanCallbacks;
+using BLEAdvertisedDeviceCallbacks = NimBLEAdvertisedDeviceCallbacks;
+
+// Bluedroid helpers used by BLE spam; not present in the P4 hosted headers.
+#ifndef ESP_BLE_PWR_TYPE_ADV
+#define ESP_BLE_PWR_TYPE_ADV 5
+#endif
+inline esp_err_t esp_ble_tx_power_set(int, int) { return ESP_ERR_NOT_SUPPORTED; }
+inline esp_err_t esp_ble_gap_set_rand_addr(const uint8_t *) { return ESP_ERR_NOT_SUPPORTED; }

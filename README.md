@@ -2,7 +2,7 @@
 
 <img src="docs/boot.gif" alt="kvxputer boot animation" width="360" />
 
-**kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. Secondary PlatformIO environments also build for **M5StickS3** (button-only) and **M5Stack Tab5** (keyboard + touch; radios gated in milestone 1).
+**kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. Secondary PlatformIO environments also build for **M5StickS3** (button-only) and **M5Stack Tab5** (keyboard + touch; same app catalog, hosted C6 WiFi/BLE).
 
 The project began by borrowing ideas from [Bruce](https://github.com/BruceDevices/Firmware) and [Evil-Cardputer](https://github.com/7h30th3r0n3/Evil-M5project), but its architecture, UI, module layout, and feature set have since diverged into their own thing.
 
@@ -615,7 +615,7 @@ Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on
 
 ## M5Stack Tab5
 
-Same `src/` tree; board HAL under `tools/porting/boards/m5stack-tab5/`. Milestone 1 targets boot, M5GFX 1280×720, Tab5 Keyboard, touch gestures, Grove modules, and SD. Hosted C6 WiFi attack / NimBLE BLE stay gated (`radio later`).
+Same `src/` tree; board HAL under `tools/porting/boards/m5stack-tab5/`. Boot, M5GFX 1280×720, Tab5 Keyboard, touch, Grove, and SD match milestone 1. The app catalog matches Cardputer. BLE is the hosted-C6 GAP backend; raw WiFi inject / promiscuous / CSI / GATT HID fail closed with a named message.
 
 | | Cardputer | Tab5 |
 |---|-----------|------|
@@ -623,7 +623,7 @@ Same `src/` tree; board HAL under `tools/porting/boards/m5stack-tab5/`. Mileston
 | Channel grid | 2×3 (6 per page) | 3×6 (18 per page) |
 | Display | 240×135 ST7789 | 1280×720 MIPI (ST7123 / ST7121 / ILI9881C via M5GFX) |
 | IR / RF / RFID | Onboard + Grove | Grove PORT.A (G53/G54); EXT 5V in Infrared menu |
-| WiFi / BLE attack | Full | Menu tiles visible; attack/NimBLE still gated (`radio later`) |
+| WiFi / BLE | Full NimBLE-Arduino + raw TX | Same menus. Hosted C6 GAP scan/adv and STA/AP. Raw TX, promiscuous, CSI, GATT HID fail closed |
 | Artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-tab5.bin` |
 
 Pin matrix: [`tools/porting/boards/m5stack-tab5/connections.md`](tools/porting/boards/m5stack-tab5/connections.md).

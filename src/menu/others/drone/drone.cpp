@@ -6,6 +6,7 @@
 #include "opendroneid.h"
 #include "odid_wifi.h"
 #include "root/net/wifi_common.h"
+#include "root/hal/ble/ble_backend.h"
 #include "root/ui/display.h"
 #include "root/ui/scanner_list.h"
 #include "root/input/mykeyboard.h"
@@ -380,7 +381,7 @@ void beepNew() {
 }
 
 void runWifiScanLoop() {
-    if (!tab5RadioLater("Drone ID WiFi gated\n(radio later)")) return;
+    if (!tab5RadioLater("Drone ID WiFi")) return;
 
     ScannerListState list;
     scannerListBegin(list, "Drone ID WiFi", "scanning…");
@@ -430,7 +431,7 @@ void runWifiScanLoop() {
 }
 
 void runBleScanLoop() {
-    if (!tab5RadioLater("BLE gated on Tab5\n(radio later)")) return;
+    if (!bleNimbleProfileOrExplain("Drone ID BLE")) return;
 
     ScannerListState list;
     scannerListBegin(list, "Drone ID BLE", "scanning…");

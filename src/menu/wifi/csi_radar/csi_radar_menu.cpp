@@ -75,6 +75,7 @@ void drawScope(const char *label) {
 }
 
 void runHopRssi() {
+    if (!tab5RadioLater("CSI Radar")) return;
     for (int i = 0; i < 14; i++) {
         peak[i] = -127;
         pkts[i] = 0;
@@ -108,6 +109,10 @@ void runHopRssi() {
 }
 
 void runCsiSta() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    displayError("CSI Radar\nhosted C6 WiFi-remote:\nCSI unsupported", true);
+    return;
+#endif
     if (!WiFi.isConnected() && !wifiConnectMenu(WIFI_STA)) return;
     memset((void *)gAmp, 0, sizeof(gAmp));
     gCsiFrames = 0;
@@ -150,7 +155,11 @@ void runEspNow() {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(true, true);
     if (esp_now_init() != ESP_OK) {
+#if defined(ARDUINO_M5STACK_TAB5)
+        displayError("hosted C6: ESP-NOW\nnot in WiFi-remote", true);
+#else
         displayError("ESP-NOW init fail", true);
+#endif
         return;
     }
     esp_now_register_recv_cb(onEspNow);

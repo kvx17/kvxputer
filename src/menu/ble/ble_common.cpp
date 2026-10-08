@@ -7,11 +7,28 @@
 #include "root/ui/scanner_list.h"
 #include "esp_mac.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
+#include "root/hal/ble/ble_backend.h"
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
 #endif
 #include <set>
 #include <vector>
+
+#if defined(KVX_NO_NIMBLE)
+
+BLEScan *pBLEScan = nullptr;
+int scanTime = SCANTIME;
+
+bool bleNotifyRetry(NimBLECharacteristic *, const uint8_t *, size_t, uint8_t) { return false; }
+bool bleNotifyRetry(NimBLECharacteristic *, uint8_t) { return false; }
+void stopBLEStack() {}
+bool ble_scan_setup() { return false; }
+void disPlayBLESend() {}
+void ble_test() {}
+
+void ble_scan() { bleHostedScanApp(); }
+
+#else
 
 #define SERVICE_UUID "1bc68b2a-f3e3-11e9-81b4-2a2ae2dbcce4"
 #define CHARACTERISTIC_RX_UUID "1bc68da0-f3e3-11e9-81b4-2a2ae2dbcce4"
@@ -263,6 +280,10 @@ std::vector<ScannerDetailField> bleScanDetail(const BleScanHit &h) {
 } // namespace
 
 void ble_scan() {
+#if defined(KVX_BLE_BACKEND_HOSTED)
+    bleHostedScanApp();
+    return;
+#endif
     bool bleWasActiveBefore = BLEConnected || (BLEDevice::getServer() != nullptr);
 #if !defined(LITE_VERSION)
     bleWasActiveBefore =
@@ -510,3 +531,5 @@ void ble_test() {
 
     printf("Quit ble test\n");
 }
+
+#endif // !KVX_NO_NIMBLE

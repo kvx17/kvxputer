@@ -29,6 +29,7 @@
  */
 
 #include "ble_spam.h"
+#include "root/hal/ble/ble_backend.h"
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "root/hal/radio_mem.h"
@@ -485,6 +486,46 @@ BLEAdvertisementData GetUniversalAdvertisementData(EBLEPayloadType Type, const S
 // ============================================================================
 
 void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId) {
+#if defined(KVX_BLE_BACKEND_HOSTED)
+    uint8_t mfg[25];
+    memset(mfg, 0, sizeof(mfg));
+    mfg[0] = (uint8_t)(ManufacturerId & 0xFF);
+    mfg[1] = (uint8_t)((ManufacturerId >> 8) & 0xFF);
+    mfg[2] = 0x02;
+    mfg[3] = 0x15;
+    int nibble = 0;
+    int bi = 4;
+    if (BEACON_UUID) {
+        for (const char *p = BEACON_UUID; *p && bi < 20; p++) {
+            char c = *p;
+            int v = -1;
+            if (c >= '0' && c <= '9') v = c - '0';
+            else if (c >= 'a' && c <= 'f') v = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') v = c - 'A' + 10;
+            if (v < 0) continue;
+            if ((nibble++ & 1) == 0) mfg[bi] = (uint8_t)(v << 4);
+            else mfg[bi++] |= (uint8_t)v;
+        }
+    }
+    mfg[20] = 0;
+    mfg[21] = 1;
+    mfg[22] = 0;
+    mfg[23] = 1;
+    mfg[24] = (uint8_t)(-59);
+    if (!bleBackend().advertiseMfg(DeviceName ? DeviceName : "kvxputer", mfg, sizeof(mfg))) {
+        displayError("iBeacon\nneeds hosted C6 BLE GAP", true);
+        bleBackend().deinit();
+        return;
+    }
+    drawMainBorderWithTitle("iBeacon");
+    tft.drawString(DeviceName ? DeviceName : "iBeacon", 10, uiStatusY(0));
+    tft.drawString("hosted C6 GAP  ESC stop", 10, uiFooterY(FP));
+    EscPress = false;
+    while (!check(EscPress) && !returnToMenu) delay(30);
+    bleBackend().stopAdvertise();
+    bleBackend().deinit();
+    return;
+#else
     // CRITICAL: Clear any pending button presses before starting
     delay(50);
     while (check(AnyKeyPress)) { vTaskDelay(10 / portTICK_PERIOD_MS); }
@@ -547,6 +588,7 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     // Deinit the BLE stack - self-contained module
     BLEDevice::deinit();
     Serial.println("[iBeacon] BLE stack deinitialized");
+#endif
 }
 
 // ============================================================================
@@ -1954,6 +1996,12 @@ static bool bleSpamStoppedPrompt(const BleSpamSelection &selection, uint32_t sen
 }
 
 static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &config) {
+#if defined(KVX_BLE_BACKEND_HOSTED)
+    (void)selection;
+    (void)config;
+    bleNimbleProfileOrExplain("BLE Spam profile");
+    return;
+#else
     bool restart = false;
     do {
         BleSpamRunState runState;
@@ -2094,6 +2142,7 @@ static void bleSpamRunScreen(const BleSpamSelection &selection, BleSpamConfig &c
         bleSpamDeinitAdvertiser();
         restart = bleSpamStoppedPrompt(selection, runState.sent_count);
     } while (restart);
+#endif
 }
 
 // Show a 2-option popup. Returns 0 for first option, 1 for second, -1 for ESC.

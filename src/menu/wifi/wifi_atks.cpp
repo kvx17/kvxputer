@@ -242,7 +242,7 @@ bool wifi_atk_unsetWifi() {
 }
 
 void wifi_atk_menu() {
-    if (!tab5RadioLater()) return;
+    if (!tab5RadioLater("Wifi Atks")) return;
 
     resetGlobalState();
 

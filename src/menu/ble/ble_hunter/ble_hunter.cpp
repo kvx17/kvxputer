@@ -1,5 +1,6 @@
 #if !defined(LITE_VERSION)
 #include "ble_hunter.h"
+#include "root/hal/ble/ble_backend.h"
 
 #include "menu/others/audio.h"
 #include "root/input/mykeyboard.h"
@@ -81,6 +82,7 @@ static void drawHud(
 } // namespace
 
 void bleHunterMenu() {
+    if (!bleNimbleProfileOrExplain("BLE Hunter")) return;
     returnToMenu = false;
 
     NimBLEScan *scan = scannerBleStart();

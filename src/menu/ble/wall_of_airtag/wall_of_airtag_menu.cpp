@@ -4,6 +4,7 @@
  * Combined firmware: AGPL-3.0-or-later (Bruce).
  */
 #include "wall_of_airtag.h"
+#include "root/hal/ble/ble_backend.h"
 #if defined(EVIL_EXTENSIONS)
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
@@ -99,6 +100,7 @@ bool parseFindMy(const ScannerAdvSnap &dev, FindMyParse &out) {
 }
 
 void wallOfAirtagMenu() {
+    if (!bleNimbleProfileOrExplain("Wall Of Airtag")) return;
     FS *fs = nullptr;
     getFsStorage(fs);
     String logPath;

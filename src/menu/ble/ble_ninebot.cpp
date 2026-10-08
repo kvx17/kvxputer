@@ -8,6 +8,7 @@
  */
 #if !defined(LITE_VERSION)
 #include "ble_ninebot.h"
+#include "root/hal/ble/ble_backend.h"
 #include "root/input/mykeyboard.h"
 #include "root/app/utils.h"
 #include <functional>
@@ -96,6 +97,7 @@ void BLENinebot::clientDisconnect() {
 }
 
 void BLENinebot::setup() {
+    if (!bleNimbleProfileOrExplain("Ninebot")) return;
     tft.setTextSize(1);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
 

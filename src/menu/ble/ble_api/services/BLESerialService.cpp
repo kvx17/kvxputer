@@ -1,4 +1,4 @@
-#if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION) && !defined(KVX_NO_NIMBLE)
 #include "BLESerialService.h"
 #include "menu/ble/ble_common.h" // bleNotifyRetry
 #include <NimBLEDevice.h>

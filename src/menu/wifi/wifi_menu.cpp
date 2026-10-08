@@ -69,15 +69,8 @@ void WifiMenu::optionsMenu() {
     if (WiFi.getMode() & WIFI_MODE_STA && WiFi.isConnected()) {
         options.push_back({"AP info", displayAPInfo});
     }
-    options.push_back({"Wifi Atks", []() {
-                           if (!tab5RadioLater()) return;
-                           wifi_atk_menu();
-                       }});
-    options.push_back({"Evil Portal", [=]() {
-                           if (!tab5RadioLater("Evil Portal gated\n(radio later)")) return;
-                           // WebUI cleanup now handled automatically inside EvilPortal constructor
-                           EvilPortal();
-                       }});
+    options.push_back({"Wifi Atks", wifi_atk_menu});
+    options.push_back({"Evil Portal", [=]() { EvilPortal(); }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});
     // options.push_back({"ReverseShell", [=]()       { ReverseShell(); }});
 #ifndef LITE_VERSION

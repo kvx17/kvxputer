@@ -1136,7 +1136,7 @@ static void sendDeauthNow() {
 
 //===== SETUP =====//
 void sniffer_setup() {
-    if (!tab5RadioLater("Sniffer gated\n(radio later)")) return;
+    if (!tab5RadioLater("Sniffer")) return;
 
     // Stop WebUI before setting WiFi mode for sniffer
     cleanlyStopWebUiForWiFiFeature();

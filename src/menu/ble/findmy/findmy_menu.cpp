@@ -4,6 +4,8 @@
  * Combined firmware: AGPL-3.0-or-later (Bruce).
  */
 #include "findmy.h"
+#include "root/hal/ble/ble_backend.h"
+#include "root/input/mykeyboard.h"
 #if defined(EVIL_EXTENSIONS)
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
@@ -27,6 +29,50 @@ void findMyMenu() {
         }
     }
 
+#if defined(KVX_BLE_BACKEND_HOSTED)
+    auto buildPayload = [&](uint8_t *out, size_t &len) {
+        out[0] = 0x4C;
+        out[1] = 0x00;
+        out[2] = 0x12;
+        out[3] = 0x19;
+        for (int i = 4; i < 29; i++) out[i] = random(256);
+        len = 29;
+        if (!keys.empty()) {
+            String k = keys[random(keys.size())];
+            for (int i = 0; i < 12 && i * 2 + 1 < (int)k.length(); i++) {
+                char buf[3] = {k[i * 2], k[i * 2 + 1], 0};
+                out[4 + i] = (uint8_t)strtoul(buf, nullptr, 16);
+            }
+        }
+    };
+    uint8_t payload[32];
+    size_t plen = 0;
+    buildPayload(payload, plen);
+    if (!bleBackend().advertiseMfg("", payload, plen)) {
+        displayError("FindMyEvil\nneeds hosted C6 BLE GAP", true);
+        bleBackend().deinit();
+        return;
+    }
+    unsigned long last = 0, count = 0;
+    drawMainBorderWithTitle("FindMyEvil");
+    tft.drawString(keys.empty() ? "Random lab keys" : "SD keys loaded", 10, uiStatusY(0));
+    tft.drawString("hosted C6 GAP  ESC stop", 10, uiFooterY(FP));
+    EscPress = false;
+    while (!check(EscPress) && !returnToMenu) {
+        if (millis() - last > 400) {
+            last = millis();
+            buildPayload(payload, plen);
+            bleBackend().advertiseMfg("", payload, plen);
+            count++;
+            tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
+            tft.drawString("Adv: " + String((unsigned)count), 10, uiStatusY(1));
+        }
+        delay(20);
+    }
+    bleBackend().stopAdvertise();
+    bleBackend().deinit();
+    return;
+#else
     if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
     NimBLEDevice::init("");
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -72,5 +118,6 @@ void findMyMenu() {
     }
     adv->stop();
     NimBLEDevice::deinit(true);
+#endif
 }
 #endif

@@ -332,21 +332,11 @@ void InputHandler(void) {
 
     if (pressed) {
         tm = now;
+        // getDetail() is already in the current display orientation.
+        // M5GFX convertRawXY applies M5.Display rotation (set by gsetRotation),
+        // so a second Core2-style remap turns taps and swipes the other way.
         int16_t x = t.x;
         int16_t y = t.y;
-        // Match Core2 rotation remap for landscape default ROTATION=1
-        if (kvxConfigPins.rotation == 3) {
-            y = (tftHeight + 20) - y;
-            x = tftWidth - x;
-        } else if (kvxConfigPins.rotation == 0) {
-            int tmp = x;
-            x = tftWidth - y;
-            y = tmp;
-        } else if (kvxConfigPins.rotation == 2) {
-            int tmp = x;
-            x = y;
-            y = (tftHeight + 20) - tmp;
-        }
 
         if (!s_touchDown) {
             if (wakeUpScreen()) return;

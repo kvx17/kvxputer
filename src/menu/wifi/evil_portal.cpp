@@ -22,8 +22,6 @@ EvilPortal::EvilPortal(
 )
     : apName(tssid), _channel(channel), _deauth(deauth), _verifyPwd(verifyPwd), _autoMode(autoMode),
       _backgroundMode(backgroundMode), _autoTemplateFile(templateFile), webServer(80), _launchTime(millis()) {
-    if (!tab5RadioLater("Evil Portal gated\n(radio later)")) return;
-
     dnsServer = &sharedEvilPortalDnsServer();
 
     _originalWifiMode = WiFi.getMode();

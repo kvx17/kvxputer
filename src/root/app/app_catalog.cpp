@@ -154,22 +154,14 @@ static bool evilOn() { return true; }
 #else
 static bool evilOn() { return false; }
 #endif
-#if defined(ARDUINO_M5STACK_TAB5)
-// Tab5: STA / scan tools OK; attack + NimBLE BLE still gated.
-static bool tab5WifiStaOn() { return true; }
-static bool tab5WifiAtkOn() { return false; }
-static bool tab5BleOn() { return false; }
-#else
-static bool tab5WifiStaOn() { return true; }
-static bool tab5WifiAtkOn() { return true; }
-static bool tab5BleOn() { return true; }
-#endif
-static bool wifiCatalogOn() { return tab5WifiStaOn() && alwaysOn(); }
-static bool wifiCatalogNotLite() { return tab5WifiStaOn() && notLite(); }
-static bool wifiCatalogAtk() { return tab5WifiAtkOn() && alwaysOn(); }
-static bool wifiCatalogAtkNotLite() { return tab5WifiAtkOn() && notLite(); }
-static bool bleCatalogOn() { return tab5BleOn() && alwaysOn(); }
-static bool bleCatalogNotLite() { return tab5BleOn() && notLite(); }
+// Tab5 and Cardputer share alwaysOn / notLite / evilOn. Attack and BLE rows stay
+// listed; unsupported radios fail closed inside the app with a named reason.
+static bool wifiCatalogOn() { return alwaysOn(); }
+static bool wifiCatalogNotLite() { return notLite(); }
+static bool wifiCatalogAtk() { return alwaysOn(); }
+static bool wifiCatalogAtkNotLite() { return notLite(); }
+static bool bleCatalogOn() { return alwaysOn(); }
+static bool bleCatalogNotLite() { return notLite(); }
 static bool devModeOn() { return kvxConfig.devMode; }
 
 // --- WiFi ---

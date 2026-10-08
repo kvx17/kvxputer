@@ -13,7 +13,7 @@
 #include "root/ui/display.h"
 class Amiibo {
 public:
-    Amiibo() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+    Amiibo() { displayError("Amiibolink\nneeds hosted C6 BLE GATT", true); }
 };
 #else
 #include <amiibolink.h>

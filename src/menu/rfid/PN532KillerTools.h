@@ -5,7 +5,7 @@
 #include "root/ui/display.h"
 class PN532KillerTools {
 public:
-    PN532KillerTools() { displayError("PN532Killer unavailable (Tab5 M1)", true); }
+    PN532KillerTools() { displayError("PN532Killer BLE\nneeds hosted C6 BLE GATT", true); }
 };
 #else
 #include "PN532Killer.h"

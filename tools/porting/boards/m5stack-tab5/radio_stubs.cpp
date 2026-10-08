@@ -1,38 +1,8 @@
-// Milestone-1 link stubs: NimBLE sources are excluded on ESP32-P4, and hosted
-// ESP-NOW symbols are not linked from the P4 WiFi-remote package.
-#if defined(KVX_NO_NIMBLE)
+// Hosted ESP-NOW symbols are not linked from the P4 WiFi-remote package.
+// BLE entry points live in menu/ble and the hosted-C6 backend.
+#if defined(ARDUINO_M5STACK_TAB5)
 
-#include "menu/ble/ble_common.h"
-#include "menu/ble/ble_ninebot.h"
-#include "root/ui/display.h"
 #include <esp_now.h>
-
-BLEScan *pBLEScan = nullptr;
-int scanTime = SCANTIME;
-
-void ble_scan() { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-void stopBLEStack() {}
-bool ble_scan_setup() { return false; }
-void ble_test() {}
-bool bleNotifyRetry(NimBLECharacteristic *, const uint8_t *, size_t, uint8_t) { return false; }
-bool bleNotifyRetry(NimBLECharacteristic *, uint8_t) { return false; }
-void disPlayBLESend() {}
-
-// hidRemoteMenu is compiled from menu/ble/hid_remote/ (USB path works; BLE returns error).
-
-void bleHunterMenu() { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-void spamMenu() { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-void ibeacon(const char *, const char *, int) { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-void BleSuiteMenu() { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-
-#if !defined(LITE_VERSION)
-BLENinebot::BLENinebot() { displayInfo("BLE gated on Tab5\n(NimBLE/P4)", true); }
-BLENinebot::~BLENinebot() {}
-void BLENinebot::setup() {}
-void BLENinebot::loop() {}
-void BLENinebot::clientDisconnect() {}
-void BLENinebot::redrawMainBorder() {}
-#endif
 
 extern "C" {
 
@@ -72,4 +42,4 @@ esp_err_t esp_now_remain_on_channel(esp_now_remain_on_channel_t *) { return ESP_
 
 } // extern "C"
 
-#endif // KVX_NO_NIMBLE
+#endif // ARDUINO_M5STACK_TAB5

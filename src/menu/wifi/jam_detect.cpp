@@ -183,7 +183,7 @@ static void jd_draw(
 }
 
 void jam_detect_setup() {
-    if (!tab5RadioLater("Jam Detect gated\n(radio later)")) return;
+    if (!tab5RadioLater("Jam Detect")) return;
 
     returnToMenu = false;
 

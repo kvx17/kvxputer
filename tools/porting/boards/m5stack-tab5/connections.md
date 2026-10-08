@@ -13,7 +13,7 @@ Keyboard: https://docs.m5stack.com/en/tab5/Tab5_Keyboard (SKU A164)
 | microSD SPI | MISO G39, CS G42, SCK G43, MOSI G44 | Files (SPI mode — not SDIO; C6 uses SDIO) |
 | M5-Bus SPI | SCK G5, MOSI G18, MISO G19 | Optional CC1101 / NRF24 (CS defaults to -1) |
 | Display (MIPI-DSI) | DSI lanes dedicated; LEDA **G22** PWM | M5GFX `Bus_DSI` + `Panel_ST7121` / `Panel_ST7123` / `Panel_ILI9881C` (M5Unified ≥0.2.23, M5GFX ≥0.2.30). Native panel 720×1280; default UI rotation **3** → 1280×720 with keyboard along the bottom (flip via Settings → Orientation). |
-| C6 SDIO host | CLK G12, CMD G13, D0–D3 G11/G10/G9/G8, RST G15 | Hosted WiFi STA (scan/connect); attack/NimBLE still gated |
+| C6 SDIO host | CLK G12, CMD G13, D0–D3 G11/G10/G9/G8, RST G15 | Hosted WiFi (STA/AP) and hosted BLE HCI (`BleBackendHostedC6`) |
 
 ## EXT 5V
 
@@ -44,8 +44,13 @@ Defaults in firmware: CS / GDO0 / CE = **-1** (not driven at boot).
 | Si4713 FM | Grove I2C | `FM_SI4713=1`, RST=-1 |
 | CC1101 / NRF24 | M5-Bus SPI | Configure CS in Pins |
 
-## Radios (milestone 1)
+## Radios
 
-WiFi attack, CSI, Evil Portal, and NimBLE BLE menus are **gated** (`radio later`).  
-Hosted C6 STA (WiFi Connect / scan) uses `WiFi.setPins` + settle before `WiFi.mode`.  
+Catalog matches Cardputer (`EVIL_EXTENSIONS`, no lite).  
+
+- **WiFi:** STA/AP and Evil Portal run on the hosted C6. `esp_wifi_80211_tx`, promiscuous, CSI, and ESP-NOW are weak `esp_wifi_remote_*` stubs in pioarduino 55.03.39 (`ESP_ERR_NOT_SUPPORTED`). Those menu entries stay visible and fail closed with that reason. No external WiFi inject module is wired.
+- **BLE:** `BleBackendHostedC6` — `hostedInitBLE()` + IDF NimBLE host over ESP-Hosted VHCI (`CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE`). GAP scan and non-connectable advertise are implemented. GATT client/server and HID are not; those entries name `needs hosted C6 BLE GATT`. NimBLE-Arduino is not linked.
+- **External BLE UART/SPI:** not selected. Onboard/hosted C6 covers GAP. A Grove UART bridge would be a new `-DKVX_BLE_BACKEND=...` only if a later app needs GATT the C6 host cannot do. Do not use keyboard G0/G1, sys I2C G31/G32, C6 SDIO, SD SPI, or backlight G22.
+
+Hosted C6 STA uses `WiFi.setPins` + settle before `WiFi.mode`.  
 UI stays direct-to-panel (no 720p frame canvas) — canvas blit + SDIO races paint cyan.

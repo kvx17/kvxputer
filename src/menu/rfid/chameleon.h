@@ -12,7 +12,7 @@
 #include "root/ui/display.h"
 class Chameleon {
 public:
-    Chameleon() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+    Chameleon() { displayError("Chameleon\nneeds hosted C6 BLE GATT", true); }
 };
 #else
 #include <chameleonUltra.h>

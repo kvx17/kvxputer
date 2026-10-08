@@ -39,18 +39,13 @@ bool wifiConnecttoKnownNet(void);
 String checkMAC();
 
 /**
- * @brief Tab5 gate for raw TX / promiscuous / Evil Portal / NimBLE apps.
- * On Tab5 shows msg and returns false. On every other board returns true.
+ * Probe hosted raw TX / promiscuous. On Cardputer and StickS3 this is a no-op
+ * (returns true). On Tab5, if the WiFi-remote weak stub returns
+ * ESP_ERR_NOT_SUPPORTED, show one error naming `feature` and return false so
+ * the menu entry stays visible but does not spin. Any other error (stack not
+ * up yet) returns true and the caller starts WiFi itself.
  */
-inline bool tab5RadioLater(const char *msg = "WiFi attack gated\n(radio later)") {
-#if defined(ARDUINO_M5STACK_TAB5)
-    displayInfo(msg, true);
-    return false;
-#else
-    (void)msg;
-    return true;
-#endif
-}
+bool tab5RadioLater(const char *feature = "WiFi raw/promisc");
 
 /**
  * @brief Transmits a raw 802.11 frame while respecting TX-buffer backpressure.

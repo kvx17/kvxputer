@@ -2535,7 +2535,7 @@ void saveNetworkHistory(FS &fs) {
 }
 
 void karma_setup() {
-    if (!tab5RadioLater("Karma gated\n(radio later)")) return;
+    if (!tab5RadioLater("Karma")) return;
 
     if (!ensureKarmaState()) {
         displayError("Karma alloc failed", true);

@@ -10,6 +10,7 @@
 #include "menu/others/pda/pda_editor.h"
 #include "esp_mac.h"
 #include "menu/ble/ble_common.h"
+#include "root/hal/ble/ble_backend.h"
 #include <NimBLEDevice.h>
 #if defined(USB_as_HID)
 #include "tusb.h"
@@ -1105,6 +1106,7 @@ static void badusbBrowseAndRun(HIDInterface *&hid, bool ble, bool &first_time) {
 }
 
 void ducky_setup(HIDInterface *&hid, bool ble) {
+    if (ble && !bleNimbleProfileOrExplain("Bad BLE")) return;
     Serial.println("Ducky typer begin");
 
     if (ble && kvxConfig.badUSBBLEKeyDelay < 50) {
@@ -1339,6 +1341,7 @@ void key_input_from_string(const String &text) {
 // ============================================================================
 
 void ducky_keyboard(HIDInterface *&hid, bool ble) {
+    if (ble && !bleNimbleProfileOrExplain("BLE Keyboard")) return;
     String _mymsg = "";
     keyStroke key;
     long debounce = millis();
@@ -1528,6 +1531,7 @@ EXIT:
 // ============================================================================
 
 void MediaCommands(HIDInterface *hid, bool ble) {
+    if (ble && !bleNimbleProfileOrExplain("Media Cmds")) return;
     // Double cleanup before starting
     safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, true, 1); // functionId 1 = Media
@@ -1731,6 +1735,7 @@ bool handlePauseResume() {
 // ============================================================================
 
 void PresenterMode(HIDInterface *&hid, bool ble) {
+    if (ble && !bleNimbleProfileOrExplain("Presenter")) return;
     // Double cleanup before starting
     if (ble) safeCleanupDuckyBLE(hid);
     ducky_startKb(hid, ble, 3); // functionId 3 = Presenter

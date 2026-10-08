@@ -5,7 +5,7 @@
 #include "root/ui/display.h"
 class Pn532ble {
 public:
-    Pn532ble() { displayError("BLE RFID unavailable (Tab5 M1)", true); }
+    Pn532ble() { displayError("PN532 BLE\nneeds hosted C6 BLE GATT", true); }
 };
 #else
 #include "root/ui/scrollableTextArea.h"

@@ -4,6 +4,9 @@
  * Combined firmware: AGPL-3.0-or-later (Bruce).
  */
 #include "name_flood.h"
+#include "root/hal/ble/ble_backend.h"
+#include "root/hal/radio_mem.h"
+#include "root/input/mykeyboard.h"
 #if defined(EVIL_EXTENSIONS)
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
@@ -28,6 +31,35 @@ void nameFloodMenu() {
             f.close();
         }
     }
+#if defined(KVX_BLE_BACKEND_HOSTED)
+    if (names.empty() || !bleBackend().advertiseName(names[0].c_str())) {
+        displayError("BLE Name Flood\nneeds hosted C6 BLE GAP", true);
+        bleBackend().deinit();
+        return;
+    }
+    size_t idx = 0;
+    unsigned long last = 0;
+    unsigned long count = 0;
+    drawMainBorderWithTitle("BLE Name Flood");
+    tft.drawString("hosted C6 GAP", 10, uiStatusY(0));
+    tft.drawString("ESC to stop", 10, uiFooterY(FP));
+    EscPress = false;
+    while (!check(EscPress) && !returnToMenu) {
+        if (millis() - last > 250) {
+            last = millis();
+            idx = (idx + 1) % names.size();
+            bleBackend().advertiseName(names[idx].c_str());
+            count++;
+            tft.fillRect(10, 40, tftWidth - 20, 40, kvxConfig.bgColor);
+            tft.drawString(names[idx], 10, uiStatusY(1));
+            tft.drawString("Ads: " + String((unsigned)count), 10, uiStatusY(2));
+        }
+        delay(10);
+    }
+    bleBackend().stopAdvertise();
+    bleBackend().deinit();
+    return;
+#else
     if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
     NimBLEDevice::init(names[0].c_str());
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -56,5 +88,6 @@ void nameFloodMenu() {
     }
     adv->stop();
     NimBLEDevice::deinit(true);
+#endif
 }
 #endif

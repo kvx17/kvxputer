@@ -1825,7 +1825,7 @@ void setTheme() {
 }
 #if !defined(LITE_VERSION)
 #if defined(KVX_NO_NIMBLE)
-void enableBLEAPI() { displayInfo("BLE API gated\n(radio later)", true); }
+void enableBLEAPI() { displayError("BLE API\nneeds hosted C6 BLE GATT", true); }
 #else
 BLE_API bleApi;
 static bool ble_api_enabled = false;

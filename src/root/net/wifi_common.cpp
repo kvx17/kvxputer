@@ -57,21 +57,36 @@ static bool tab5WifiModeSta() {
 }
 #endif
 
-esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
+bool tab5RadioLater(const char *feature) {
 #if defined(ARDUINO_M5STACK_TAB5)
-    (void)ifx;
-    (void)frame;
-    (void)len;
-    (void)retries;
-    return ESP_ERR_NOT_SUPPORTED;
+    // esp_wifi_80211_tx / set_promiscuous on this SDK call weak
+    // esp_wifi_remote_* stubs that return ESP_ERR_NOT_SUPPORTED (0x106).
+    // There is no strong esp_hosted_wifi_80211_tx in pioarduino 55.03.39.
+    esp_err_t err = esp_wifi_set_promiscuous(true);
+    if (err == ESP_OK) {
+        esp_wifi_set_promiscuous(false);
+        return true;
+    }
+    if (err != ESP_ERR_NOT_SUPPORTED) return true;
+    const char *what = (feature && feature[0]) ? feature : "WiFi raw/promisc";
+    displayError(String(what) + "\nhosted C6 WiFi-remote:\npromiscuous/raw TX unsupported", true);
+    return false;
 #else
+    (void)feature;
+    return true;
+#endif
+}
+
+esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t retries) {
+    // Tab5's linked esp_wifi_80211_tx is the remote trampoline. Today that
+    // trampoline hits a weak stub and returns ESP_ERR_NOT_SUPPORTED; calling it
+    // is what a future strong hosted inject would use.
     esp_err_t err = esp_wifi_80211_tx(ifx, frame, len, false);
     for (uint8_t i = 0; err == ESP_ERR_NO_MEM && i < retries; i++) {
         vTaskDelay(1); // let the driver drain TX buffers and retry
         err = esp_wifi_80211_tx(ifx, frame, len, false);
     }
     return err;
-#endif
 }
 
 void ensureWifiPlatform() {

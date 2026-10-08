@@ -1,4 +1,4 @@
-#if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION) && !defined(KVX_NO_NIMBLE)
 #include "ble_api.hpp"
 #include <NimBLEDevice.h>
 #include <root/serial/USBSerial/USBSerial.h>

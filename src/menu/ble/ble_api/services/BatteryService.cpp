@@ -1,4 +1,4 @@
-#if !defined(LITE_VERSION)
+#if !defined(LITE_VERSION) && !defined(KVX_NO_NIMBLE)
 #include "BatteryService.hpp"
 #include "ArduinoJson.h"
 #include <NimBLEDevice.h>

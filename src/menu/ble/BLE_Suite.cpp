@@ -12,6 +12,7 @@
 
 #if !defined(LITE_VERSION)
 #include "BLE_Suite.h"
+#include "root/hal/ble/ble_backend.h"
 #include "root/storage/paths.h"
 #include "HFP_Exploit.h"
 #include "ble_common.h"
@@ -28,6 +29,8 @@
 #include <esp_heap_caps.h>
 #include <esp_random.h>
 #include <globals.h>
+
+#if !defined(KVX_NO_NIMBLE)
 
 int showSubMenu(const char *title, const char *options[], int optionCount);
 
@@ -4923,6 +4926,7 @@ void showWelcomeScreen() {
 //=============================================================================
 
 void BleSuiteMenu() {
+    if (!bleNimbleProfileOrExplain("BLE Suite")) return;
     // FIX: Init BLE stack ONCE when entering the suite
     BLEStateManager::initBLE("Bruce-BLESuite", ESP_PWR_LVL_P9);
 
@@ -6448,4 +6452,7 @@ void showDeviceInfoScreen(
     for (const auto &line : lines) area.addLine(line);
     area.show();
 }
+#else
+void BleSuiteMenu() { bleNimbleProfileOrExplain("BLE Suite"); }
+#endif
 #endif

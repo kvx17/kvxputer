@@ -319,7 +319,7 @@ static void advertisePhase(BruceState &s) {
 // kvxgotchi_start — main entry point
 // ---------------------------------------------------------------------------
 void kvxgotchi_start() {
-    if (!tab5RadioLater("Kvxgotchi gated\n(radio later)")) return;
+    if (!tab5RadioLater("Kvxgotchi")) return;
 
     set_pwnagotchi_exit(false);
 

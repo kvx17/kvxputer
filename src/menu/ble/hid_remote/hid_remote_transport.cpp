@@ -398,7 +398,7 @@ bool HidRemoteTransportSession::begin(HidRemoteTransport t, HidRemoteCapability 
     if (t == HID_REMOTE_BLE) {
 #if defined(KVX_NO_NIMBLE)
         (void)caps;
-        displayError("BLE HID gated on Tab5\n(NimBLE/P4)", true);
+        displayError("kvxkeyboard HID\nneeds hosted C6 BLE GATT (HID)", true);
         return false;
 #else
         bool ok = ensureBle(*this);

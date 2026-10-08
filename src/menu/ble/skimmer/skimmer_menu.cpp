@@ -4,6 +4,7 @@
  * Combined firmware: AGPL-3.0-or-later (Bruce).
  */
 #include "skimmer.h"
+#include "root/hal/ble/ble_backend.h"
 #if defined(EVIL_EXTENSIONS)
 #include "root/ui/display.h"
 #include "root/ui/scanner_list.h"
@@ -77,6 +78,7 @@ const char *skimmerMatchRule(const String &name, const String &addr) {
 }
 
 void skimmerMenu() {
+    if (!bleNimbleProfileOrExplain("Skimmer Detector")) return;
     NimBLEScan *scan = scannerBleStart();
     if (!scan) {
         displayError("BLE scan failed", true);

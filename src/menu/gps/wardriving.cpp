@@ -15,6 +15,7 @@
 #include "root/net/wifi_common.h"
 #include "current_year.h"
 #include "menu/ble/ble_common.h"
+#include "root/hal/ble/ble_backend.h"
 #include <cctype>
 #include <vector>
 
@@ -42,11 +43,6 @@ static bool parseMacToU64(const String &mac, uint64_t &out) {
 Wardriving::Wardriving(bool scanWiFi, bool scanBLE) {
     this->scanWiFi = scanWiFi;
     this->scanBLE = scanBLE;
-    // Tab5: BLE half needs NimBLE; keep WiFi-only wardriving when both requested.
-    if (this->scanBLE && !tab5RadioLater("BLE gated on Tab5\n(radio later)")) {
-        this->scanBLE = false;
-        if (!this->scanWiFi) return;
-    }
     setup();
 }
 
@@ -399,6 +395,61 @@ void Wardriving::scanWiFiBLE() {
     }
 
     if (scanBLE) {
+#if defined(KVX_BLE_BACKEND_HOSTED)
+        if (!bleBackend().startScan()) {
+            displayError("WD BLE\nneeds hosted C6 BLE GAP", true);
+            file.close();
+            return;
+        }
+        vTaskDelay((scanTime * 1000) / portTICK_PERIOD_MS);
+        BleScanResult hits[32];
+        int count = bleBackend().copyScan(hits, 32);
+        bleBackend().stopScan();
+        bleBackend().deinit();
+        bleFound = count;
+        for (int i = 0; i < count; i++) {
+            String address = hits[i].addr;
+            String name = hits[i].name;
+            int rssi = hits[i].rssi;
+            uint16_t manufacturerId = 0;
+            if (hits[i].mfgLen >= 2) {
+                manufacturerId = (uint16_t(hits[i].mfg[1]) << 8) | uint16_t(hits[i].mfg[0]);
+            }
+            enforceRegisteredMACLimit();
+            uint64_t macKey = 0;
+            bool macKeyOk = parseMacToU64(address, macKey);
+            if (!macKeyOk || registeredMACs.find(macKey) == registeredMACs.end()) {
+                if (macKeyOk) registeredMACs.insert(macKey);
+                char buffer[512];
+                char manufacturerIdStr[8] = "";
+                if (manufacturerId != 0) {
+                    snprintf(manufacturerIdStr, sizeof(manufacturerIdStr), "%04X", manufacturerId);
+                }
+                snprintf(
+                    buffer,
+                    sizeof(buffer),
+                    "%s,\"%s\",Misc [BLE],%04d-%02d-%02d %02d:%02d:%02d,0,,%d,%f,%f,%f,%f,,%s,BLE\n",
+                    address.c_str(),
+                    name.c_str(),
+                    gps.date.year(),
+                    gps.date.month(),
+                    gps.date.day(),
+                    gps.time.hour(),
+                    gps.time.minute(),
+                    gps.time.second(),
+                    rssi,
+                    gps.location.lat(),
+                    gps.location.lng(),
+                    gps.altitude.meters(),
+                    gps.hdop.hdop() * 1.0,
+                    manufacturerIdStr
+                );
+                file.print(buffer);
+                checkForAlert(address, "BLE", name);
+                bluetoothDeviceCount++;
+            }
+        }
+#else
         if (!bleInitialized || pBLEScan == nullptr) {
             if (!BLEDevice::init("")) {
                 Serial.println(" Failed to init BLE");
@@ -502,6 +553,7 @@ void Wardriving::scanWiFiBLE() {
 
         pBLEScan->clearResults();
         vTaskDelay(20 / portTICK_PERIOD_MS);
+#endif
     }
 
 scan_summary:
