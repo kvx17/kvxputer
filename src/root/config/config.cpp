@@ -115,6 +115,10 @@ JsonDocument KvxputerConfig::toJson() const {
     setting["rokuName"] = rokuName;
     setting["rokuSerial"] = rokuSerial;
     setting["morseWpm"] = morseWpm;
+    setting["calcUseImperial"] = calcUseImperial;
+    setting["calcUnitDim"] = calcUnitDim;
+    setting["calcUnitFrom"] = calcUnitFrom;
+    setting["calcUnitTo"] = calcUnitTo;
     setting["jamDetectAlertPerSec"] = jamDetectAlertPerSec;
     setting["jamDetectRssiFloor"] = jamDetectRssiFloor;
     setting["bleHunterAlertPkts"] = bleHunterAlertPkts;
@@ -643,6 +647,12 @@ void KvxputerConfig::fromFile(bool checkFS) {
         if (w > 40) w = 40;
         morseWpm = (uint8_t)w;
     }
+    if (!setting["calcUseImperial"].isNull()) {
+        calcUseImperial = setting["calcUseImperial"].as<bool>();
+    }
+    if (!setting["calcUnitDim"].isNull()) calcUnitDim = setting["calcUnitDim"].as<int>();
+    if (!setting["calcUnitFrom"].isNull()) calcUnitFrom = setting["calcUnitFrom"].as<int>();
+    if (!setting["calcUnitTo"].isNull()) calcUnitTo = setting["calcUnitTo"].as<int>();
     if (!setting["jamDetectAlertPerSec"].isNull()) {
         jamDetectAlertPerSec = setting["jamDetectAlertPerSec"].as<int>();
         if (jamDetectAlertPerSec < 5) jamDetectAlertPerSec = 5;

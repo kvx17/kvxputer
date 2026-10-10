@@ -50,6 +50,7 @@
 #include "menu/rfid/tag_o_matic.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
 #include "menu/others/calculator.h"
+#include "menu/others/calc/calc_menu.h"
 #include "menu/others/qrcode_menu.h"
 #if defined(HAS_KEYBOARD)
 #include "menu/others/passgen/passgen.h"
@@ -345,6 +346,25 @@ static void launchSdCard() {
 }
 static void launchQrcode() { qrcode_menu(); }
 static void launchCalculator() { calculatorApp(); }
+static void launchCalculators() { calcMenu(); }
+static void launchCalcSubnet() { calcSubnet(); }
+static void launchCalcBase() { calcBase(); }
+static void launchCalcBytes() { calcBytes(); }
+static void launchCalcResistor() { calcResistor(); }
+static void launchCalcLed() { calcLed(); }
+static void launchCalcDivider() { calcDivider(); }
+static void launchCalcBaud() { calcBaud(); }
+static void launchCalcDbm() { calcDbm(); }
+static void launchCalcEpoch() { calcEpoch(); }
+static void launchCalcMeasure() { calcMeasure(); }
+static void launchCalcBitmask() { calcBitmask(); }
+static void launchCalcCrc() { calcCrc(); }
+static void launchCalcUnits() { calcUnits(); }
+static void launchCalcOhm() { calcOhm(); }
+static void launchCalcVdrop() { calcVdrop(); }
+static void launchCalcMotor() { calcMotor(); }
+static void launchCalcGas() { calcGas(); }
+static void launchCalcFlow() { calcFlow(); }
 #if defined(HAS_KEYBOARD)
 static void launchPassgen() { passgenMenu(); }
 static void launchBarcode() { barcodeMenu(); }
@@ -632,6 +652,25 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #endif
 #endif
         {"tools_calc", "Calculator", "Tools", false, alwaysOn, launchCalculator},
+        {"calculators", "Calculators", "Tools", false, alwaysOn, launchCalculators},
+        {"calc_subnet", "Subnet", "Tools", false, alwaysOn, launchCalcSubnet},
+        {"calc_base", "Base converter", "Tools", false, alwaysOn, launchCalcBase},
+        {"calc_bytes", "Byte units", "Tools", false, alwaysOn, launchCalcBytes},
+        {"calc_resistor", "Resistor color", "Tools", false, alwaysOn, launchCalcResistor},
+        {"calc_led", "LED resistor", "Tools", false, alwaysOn, launchCalcLed},
+        {"calc_divider", "Voltage divider", "Tools", false, alwaysOn, launchCalcDivider},
+        {"calc_baud", "Baud bit-time", "Tools", false, alwaysOn, launchCalcBaud},
+        {"calc_dbm", "dBm and power", "Tools", false, alwaysOn, launchCalcDbm},
+        {"calc_epoch", "Epoch", "Tools", false, alwaysOn, launchCalcEpoch},
+        {"calc_measure", "Temp/Length/AWG", "Tools", false, alwaysOn, launchCalcMeasure},
+        {"calc_bitmask", "Bitmask", "Tools", false, alwaysOn, launchCalcBitmask},
+        {"calc_crc", "CRC", "Tools", false, alwaysOn, launchCalcCrc},
+        {"calc_units", "Units", "Tools", false, alwaysOn, launchCalcUnits},
+        {"calc_ohm", "Ohm's law", "Tools", false, alwaysOn, launchCalcOhm},
+        {"calc_vdrop", "Voltage drop", "Tools", false, alwaysOn, launchCalcVdrop},
+        {"calc_motor", "Motor", "Tools", false, alwaysOn, launchCalcMotor},
+        {"calc_gas", "Gas law", "Tools", false, alwaysOn, launchCalcGas},
+        {"calc_flow", "Flow and pipe", "Tools", false, alwaysOn, launchCalcFlow},
 #if defined(HAS_NS4168_SPKR)
         {"media_player", "Media Player", "Tools", false, notLite, launchMediaPlayer},
 #endif

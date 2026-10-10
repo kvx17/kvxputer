@@ -152,6 +152,12 @@ public:
     // Morse trainer WPM (PARIS). 0 = use default 20 at first launch.
     uint8_t morseWpm = 20;
 
+    // Calculators: sticky metric/imperial and Units applet last pair.
+    bool calcUseImperial = false;
+    int calcUnitDim = 0;
+    int calcUnitFrom = 0;
+    int calcUnitTo = 1;
+
     // Wireless attack detectors (Jam Detect / BLE Hunter / PineAP Hunter)
     int jamDetectAlertPerSec = 10;   // deauth/s threshold (5..250)
     int jamDetectRssiFloor = -20;    // RSSI meter floor (dBm, -100..-10)

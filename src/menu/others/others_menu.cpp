@@ -4,6 +4,7 @@
 #include "root/app/utils.h"
 #include "root/scripting/bjs_interpreter/interpreter.h"
 #include "menu/others/calculator.h"
+#include "menu/others/calc/calc_menu.h"
 #include "menu/others/ibutton.h"
 #include "menu/others/mic.h"
 #include "menu/others/qrcode_menu.h"
@@ -30,6 +31,7 @@
 void OthersMenu::optionsMenu() {
     options = {
         {"Calculator",   calculatorApp                },
+        {"Calculators",  calcMenu                     },
 #if defined(HAS_NS4168_SPKR)
         {"Media Player", mediaPlayerApp               },
 #endif
