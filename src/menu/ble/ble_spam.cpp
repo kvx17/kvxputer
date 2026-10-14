@@ -1213,47 +1213,49 @@ static uint16_t bleSpamResolveProximityDeviceId(int deviceIndex) {
 #endif
 
 static void bleSpamPickRandomSelection(BleSpamAttackType &attackType, int &deviceIndex) {
-    struct AttackCount {
-        BleSpamAttackType type;
-        int count;
-    };
-
-    AttackCount counts[] = {
+    // One turn each for iOS, Android, and Windows. Picking by catalog size put
+    // ~28 AirPods IDs and ~15 Nearby Actions against 2 Fast Pair rows and 6
+    // Swift Pair names, so nearly every packet was an iPhone popup.
+    static uint8_t turn = 0;
 #if !defined(LITE_VERSION)
-        {BLE_SPAM_ATTACK_APPLE_PAIRING,
-                                  bleSpamGetDeviceCount(BLE_SPAM_ATTACK_APPLE_PAIRING) - 1                                   }, // -1 to exclude Random/All sentinel
-        {BLE_SPAM_ATTACK_APPLE_ACTION,       bleSpamGetDeviceCount(BLE_SPAM_ATTACK_APPLE_ACTION) - 1},
+    const int families = 3;
+#else
+    const int families = 2;
 #endif
-        {BLE_SPAM_ATTACK_ANDROID_ALERT,      2                                                      }, // only Pixel + Generic, not Random/All
-        {BLE_SPAM_ATTACK_WINDOWS_SWIFT_PAIR,
-                                  (int)(sizeof(BLE_SPAM_WINDOWS_PRESETS) / sizeof(BLE_SPAM_WINDOWS_PRESETS[0]))              },
-        {BLE_SPAM_ATTACK_SAMSUNG,            3                                                      }  // Galaxy Buds/Watch/Generic only
-    };
+    int which = turn % families;
+    turn++;
 
-    int total = 0;
-    for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
-        if (counts[i].count > 0) total += counts[i].count;
+#if !defined(LITE_VERSION)
+    if (which == 0) {
+        if (random(2) == 0) {
+            attackType = BLE_SPAM_ATTACK_APPLE_PAIRING;
+            deviceIndex = random(APPLE_PROXIMITY_DEVICE_COUNT);
+        } else {
+            attackType = BLE_SPAM_ATTACK_APPLE_ACTION;
+            int actionCount =
+                (int)(sizeof(BLE_SPAM_APPLE_ACTION_DEVICES) / sizeof(BLE_SPAM_APPLE_ACTION_DEVICES[0]));
+            deviceIndex = random(actionCount);
+        }
+        return;
     }
+    which--;
+#endif
 
-    if (total == 0) {
-        attackType = BLE_SPAM_ATTACK_ANDROID_ALERT;
-        deviceIndex = 0;
+    if (which == 0) {
+        // Android slot: Fast Pair, or Samsung EasySetup on the same turn.
+        if (random(2) == 0) {
+            attackType = BLE_SPAM_ATTACK_ANDROID_ALERT;
+            deviceIndex = random(2); // Pixel or Generic, not the Random/All row
+        } else {
+            attackType = BLE_SPAM_ATTACK_SAMSUNG;
+            deviceIndex = random(3); // Buds, Watch, or Generic
+        }
         return;
     }
 
-    int roll = random(total);
-    for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
-        if (counts[i].count == 0) continue;
-        if (roll < counts[i].count) {
-            attackType = counts[i].type;
-            deviceIndex = roll;
-            return;
-        }
-        roll -= counts[i].count;
-    }
-
-    attackType = BLE_SPAM_ATTACK_ANDROID_ALERT;
-    deviceIndex = 0;
+    attackType = BLE_SPAM_ATTACK_WINDOWS_SWIFT_PAIR;
+    int nPresets = (int)(sizeof(BLE_SPAM_WINDOWS_PRESETS) / sizeof(BLE_SPAM_WINDOWS_PRESETS[0]));
+    deviceIndex = random(nPresets);
 }
 
 static esp_power_level_t bleSpamTxPowerToLevel(BleSpamTxPower level) {
