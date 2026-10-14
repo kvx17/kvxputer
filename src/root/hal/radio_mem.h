@@ -48,6 +48,32 @@ constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 // Minimum contiguous DMA block required before bringing the BLE stack up.
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
 
+// Drop the other internal-DRAM users before the controller is created.
+// On no-PSRAM boards, esp_bt_controller_init overflows the ipc0 stack while
+// Wi-Fi is still running, and a failed init leaves the host mutex uncreated so
+// the next host call asserts. Callers that are about to start BLE should run
+// this first, then check radioLargestDmaBlock().
+static inline void radioReleaseContenders() {
+    tftReleaseFrameCanvas();
+#ifdef HAS_RGB_LED
+    ledEffects(false);
+    delay(30);
+#endif
+    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
+        wifiDisconnect();
+        delay(100);
+    }
+    WiFi.mode(WIFI_OFF);
+    delay(50);
+    esp_wifi_stop();
+    esp_wifi_deinit();
+    delay(200);
+    if (sdcardMounted) {
+        closeSdCard();
+        delay(100);
+    }
+}
+
 // Session-level RAM gate: drop the UI canvas and FastLED effect task while a
 // heavy app (Wi-Fi/BLE/media) holds DRAM. Nested enter/leave is refcounted.
 static inline int &uiRamHeavyDepth() {
