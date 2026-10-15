@@ -16,6 +16,9 @@
 #include "menu/others/dtmf/dtmf.h"
 #include "menu/others/morse/morse.h"
 #endif
+#if defined(HAS_KEYBOARD) && !defined(LITE_VERSION)
+#include "menu/others/totp/totp.h"
+#endif
 #endif
 #if defined(HAS_NS4168_SPKR)
 #include "menu/others/media_player.h"
@@ -23,6 +26,8 @@
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_menu.h"
 #include "menu/others/drone/drone.h"
+#include "menu/others/codec/codec.h"
+#include "menu/others/mqtt/mqtt.h"
 #endif
 #if defined(EVIL_EXTENSIONS)
 #include "menu/others/llm_chat/llm_chat.h"
@@ -42,6 +47,9 @@ void OthersMenu::optionsMenu() {
 #if defined(HAS_KEYBOARD)
         {"Barcode",      barcodeMenu                  },
         {"Passgen",      passgenMenu                  },
+#if defined(HAS_KEYBOARD) && !defined(LITE_VERSION)
+        {"TOTP",         totpMenu                     },
+#endif
         {"Combo",        comboMenu                    },
 #if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
         {"DTMF",         dtmfMenu                     },
@@ -49,6 +57,8 @@ void OthersMenu::optionsMenu() {
 #endif
 #endif
 #ifndef LITE_VERSION
+        {"Codec / Hash", codecHashMenu                },
+        {"MQTT",         mqttMenu                     },
         {"Drone ID",     droneIdMenu                  },
 #endif
 

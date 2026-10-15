@@ -52,6 +52,15 @@ constexpr const char *NETOPS_CRAWLER         = "/support_files/netops/crawler";
 constexpr const char *NETOPS_PRINTER         = "/support_files/netops/printer";
 constexpr const char *NETOPS_CCTV            = "/support_files/netops/cctv";
 constexpr const char *NETOPS_CIW             = "/support_files/netops/ciw";
+constexpr const char *NETOPS_TOOLKIT         = "/support_files/netops/toolkit";
+constexpr const char *NETOPS_TOOLKIT_SCANS   = "/support_files/netops/toolkit/scans";
+constexpr const char *NETOPS_TOOLKIT_TOP20   = "/support_files/netops/toolkit/ports_top20.txt";
+constexpr const char *NETOPS_TOOLKIT_TOP100  = "/support_files/netops/toolkit/ports_top100.txt";
+constexpr const char *NETOPS_LOOT            = "/support_files/netops/loot";
+constexpr const char *WIFI_BLUE_WATCH        = "/support_files/wifi/blue_watch";
+constexpr const char *TOTP_DIR               = "/kvxputer/totp";
+constexpr const char *MQTT_TOPICS            = "/support_files/mqtt/topics.txt";
+constexpr const char *MQTT_DIR               = "/support_files/mqtt";
 
 // RFID
 constexpr const char *RFID                 = "/support_files/rfid";

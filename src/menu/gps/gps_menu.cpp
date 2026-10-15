@@ -4,6 +4,9 @@
 #include "root/app/utils.h"
 #include "menu/gps/gps_tracker.h"
 #include "menu/gps/wardriving.h"
+#if !defined(LITE_VERSION)
+#include "menu/gps/site_survey.h"
+#endif
 #if defined(EVIL_EXTENSIONS)
 #include "menu/gps/wardriving_master/wardriving_master.h"
 #endif
@@ -16,6 +19,7 @@ void GpsMenu::optionsMenu() {
     options = {
         {"Wardriving",  [this]() { wardrivingMenu(); }},
 #if !defined(LITE_VERSION)
+        {"Site Survey", siteSurveyMenu               },
         {"GPS Tracker", [=]() { GPSTracker(); }       },
 #endif
         {"Config",      [this]() { configMenu(); }    },

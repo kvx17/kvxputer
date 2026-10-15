@@ -11,6 +11,9 @@
 // visual alert when it crosses a user-adjustable threshold.
 void jam_detect_setup();
 
+// Per-BSSID deauth/disassoc IDS with SD logging (lab / defensive).
+void deauthIdsMenu();
+
 // Headless session for PC Connect (no TFT / keyboard).
 struct JamChannelSample {
     uint8_t ch = 0;

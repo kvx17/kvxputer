@@ -8,10 +8,14 @@ Standalone sketches for extra ESP chips. **Not** compiled into Cardputer firmwar
 | `companion-findmy` | ESP32-S3 | FindMy advertiser |
 | `companion-chatmesh-relay` | ESP32 | EvilChatMesh relay |
 | `companion-c5-unified` | ESP32-C5 | UART slave for WiFi → ESP32C5 Serial |
+| `companion-c5-802154` | ESP32-C5 | 802.15.4 sniff (SNIFF154 / CHAN154); use with WiFi → ESP32C5 Serial → **802.15.4 Sniff** |
 
 ```bash
 pio run -e companion-csi-beacon
 pio run -e companion-c5-unified -t upload
+pio run -e companion-c5-802154
 ```
+
+`companion-c5-802154` is a separate bin from WiFi unified — flash the matching image for the host submenu you use.
 
 Binaries are copied to `tools/sd_pack/support_files/companions/`. Put them on the Cardputer SD card at `/support_files/companions/`. Source was extracted from Evil-M5Project slave sketches (7h30th3r0n3); firmware does not read `resources/`.

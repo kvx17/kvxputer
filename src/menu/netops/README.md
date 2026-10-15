@@ -4,6 +4,11 @@ Bruce first-class rows (SSH, Scan Hosts, TCP, Responder, Reverse Shell) plus Evi
 
 | Folder | Feature |
 |--------|---------|
+| `net_toolkit/` | Port scan, banners, ping, dig, curl-lite (`!LITE`) |
+| `loot_console/` | Unified portal/responder/EAP loot browser (`!LITE`) |
+| `mdns/` | mDNS / Bonjour poisoner (`EVIL_EXTENSIONS`) |
+| `smb_enum/` | SMB/NetBIOS port + share name helpers (`EVIL_EXTENSIONS`) |
+| `ipv6_ra/` | ICMPv6 Router Advertisement lab (`EVIL_EXTENSIONS`) |
 | `reverseShell/` | BruceC2 reverse shell (AP + websocket) |
 | `web_crawler/` | Path crawler |
 | `reverse_tcp/` | Reverse TCP tunnel |

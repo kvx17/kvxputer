@@ -10,6 +10,8 @@
 #include "menu/wifi/responder.h"
 #include "menu/wifi/tcp_utils.h"
 #include "menu/netops/reverseShell/reverseShell.h"
+#include "menu/netops/net_toolkit/net_toolkit.h"
+#include "menu/netops/loot_console/loot_console.h"
 #include <esp_netif.h>
 #endif
 
@@ -35,6 +37,9 @@
 #include "menu/netops/autodiscover/autodiscover.h"
 #include "menu/netops/ciw/ciw.h"
 #include "menu/netops/imsi_eap/imsi_eap.h"
+#include "menu/netops/mdns/mdns.h"
+#include "menu/netops/smb_enum/smb_enum.h"
+#include "menu/netops/ipv6_ra/ipv6_ra.h"
 #endif
 
 void NetOpsMenu::optionsMenu() {
@@ -54,6 +59,8 @@ void NetOpsMenu::optionsMenu() {
     options.push_back({"Listen TCP", listenTcpPort});
     options.push_back({"Client TCP", clientTCP});
     options.push_back({"Responder", responder});
+    options.push_back({"Net Toolkit", netToolkitMenu});
+    options.push_back({"Loot Console", lootConsoleMenu});
     options.push_back({"Reverse Shell", ReverseShell});
 #endif
 
@@ -62,8 +69,11 @@ void NetOpsMenu::optionsMenu() {
     options.push_back({"Reverse TCP Tunnel", reverseTcpMenu});
     options.push_back({"DHCP Starvation", dhcpStarvationMenu});
     options.push_back({"Rogue DHCP", rogueDhcpMenu});
+    options.push_back({"IPv6 RA", ipv6RaMenu});
     options.push_back({"Switch DNS", switchDnsMenu});
     options.push_back({"Network Hijacking", hijackMenu});
+    options.push_back({"mDNS Poison", mdnsPoisonMenu});
+    options.push_back({"SMB Enum", smbEnumMenu});
     options.push_back({"WPAD Abuse", wpadMenu});
     options.push_back({"NTLMv2", ntlmMenu});
     options.push_back({"UART Shell", uartShellMenu});

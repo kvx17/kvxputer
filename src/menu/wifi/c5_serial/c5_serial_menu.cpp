@@ -313,6 +313,64 @@ void listCompanions() {
 
 } // namespace
 
+void sniff154Menu() {
+    displayInfo("Needs companion-c5-802154\n.bin — not WiFi unified.\nNo Zigbee decrypt.", true);
+    if (!gOn) uartBegin();
+    sendLine("HELP");
+    options = {
+        {"SNIFF154 ON",
+         []() {
+             sendLine("SNIFF154 ON");
+             rawMonitor();
+         }},
+        {"SNIFF154 OFF", []() { sendLine("SNIFF154 OFF"); }},
+        {"Channel 11-26",
+         []() {
+             String s = num_keyboard("11", 2, "CHAN154");
+             int c = s.toInt();
+             if (c >= 11 && c <= 26) sendLine(("CHAN154 " + String(c)).c_str());
+         }},
+        {"Info", []() { sendLine("INFO"); rawMonitor(); }},
+        {"Live capture",
+         []() {
+             FS *fs = nullptr;
+             getFsStorage(fs);
+             File log;
+             if (fs) {
+                 kvx::paths::ensureDir(*fs, kvx::paths::WIFI_CAPTURES);
+                 String p = String(kvx::paths::WIFI_CAPTURES) + "/c5_154_" + String((uint32_t)millis()) + ".txt";
+                 log = fs->open(p, FILE_WRITE);
+             }
+             sendLine("SNIFF154 ON");
+             drawMainBorderWithTitle("802.15.4 sniff");
+             padprintln("ESC stop / save");
+             EscPress = false;
+             uint32_t n = 0;
+             while (!check(EscPress) && !returnToMenu) {
+                 while (c5uart.available()) {
+                     String line = c5uart.readStringUntil('\n');
+                     line.trim();
+                     if (line.startsWith("F154|")) {
+                         n++;
+                         if (log) log.println(line);
+                         tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
+                         tft.drawString(String(n) + " " + line.substring(0, 24), 10, 40);
+                     }
+                 }
+                 delay(5);
+             }
+             sendLine("SNIFF154 OFF");
+             if (log) {
+                 log.close();
+                 displayInfo("Saved " + String(n) + " frames", true);
+             }
+         }},
+        {"Back", []() {}},
+    };
+    loopOptions(options, MENU_TYPE_SUBMENU, "802.15.4 Sniff");
+    options.clear();
+}
+
 void c5SerialMenu() {
     uartBegin();
     drawMainBorderWithTitle("ESP32C5 Serial");
@@ -325,6 +383,7 @@ void c5SerialMenu() {
         String ward = gWard ? "Ward ON" : "Ward OFF";
         String sniff = gSniff ? "Sniff ON" : "Sniff OFF";
         std::vector<Option> opts = {
+            {"802.15.4 Sniff", sniff154Menu},
             {"Start + monitor", []() { sendLine("START"); rawMonitor(); }},
             {"Stop", []() { sendLine("STOP"); displayInfo("Stopped", true); }},
             {"Scan ALL", []() { if (runListCommand("SCAN ALL")) viewApList(); }},

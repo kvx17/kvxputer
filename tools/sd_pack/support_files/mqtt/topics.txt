@@ -1,0 +1,3 @@
+# MQTT topics to subscribe (one per line)
+kvxputer/#
+homeassistant/#

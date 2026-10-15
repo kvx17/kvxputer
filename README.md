@@ -400,9 +400,13 @@ pio run -e companion-c5-unified -t upload
 | **Sniffer** *(lite off)* | 802.11 capture / PCAP-style dumps. |
 | **Channel Analyzer** *(lite off)* | Channel occupancy view. |
 | **Jam Detect** *(lite off)* | Heuristic jamming / noise detection. |
+| **Deauth IDS** *(lite off)* | Per-BSSID deauth/disassoc counts + SD log. |
+| **PineAP / Rogue AP Hunter** *(lite off)* | Multi-SSID BSSIDs + same-SSID twin APs (`t` toggles). |
+| **LAN Watch** *(lite off)* | Gateway MAC/IP/DNS change alerts while STA. |
 | **Scan Hosts** *(lite off)* | ARP host discovery on the Wi‑Fi LAN. |
 | **Wireguard** *(lite off)* | WireGuard tunnel. |
 | **Responder** *(lite off)* | LLMNR/NBT-NS style responder for hash labs. |
+| **Net Toolkit** *(lite off)* | Port scan + banners, ping, dig, curl-lite (STA). |
 | **Kvxgotchi** *(lite off)* | Pwnagotchi-inspired grid companion UI. |
 | **WiFi Pass Recovery** *(lite off)* | Offline helpers against captured material. |
 | **Probes** *(ext)* | Probe SSID lists / spear content. |
@@ -429,7 +433,12 @@ Shortcuts to tools tagged as discovery in the app catalog (sniffer, analyzers, w
 | **Scan Hosts** *(lite off)* | ARP discovery. |
 | **Listen TCP / Client TCP** *(lite off)* | Raw TCP. |
 | **Responder** *(lite off)* | Name-service poisoning / hash collection. |
+| **Net Toolkit** *(lite off)* | Port scan + banners, ping, dig, curl-lite (STA). |
+| **Loot Console** *(lite off)* | Unified portal / responder / EAP loot browser + export. |
 | **Reverse Shell** *(lite off)* | Reverse shell / web-shell helper. |
+| **mDNS Poison** *(ext)* | Spoof Bonjour/mDNS answers (lab). |
+| **SMB Enum** *(ext)* | SMB/NetBIOS port probe + share-name helpers. |
+| **IPv6 RA** *(ext)* | ICMPv6 Router Advertisement lab helper. |
 | **Web Crawler** *(ext)* | HTTP crawl with SD wordlists. |
 | **Reverse TCP Tunnel** *(ext)* | Reverse tunnel for a local service. |
 | **DHCP Starvation** *(ext)* | Exhaust DHCP pools. |
@@ -527,6 +536,7 @@ Wired readers and companions — see [Modules & Add-ons](#modules--add-ons).
 | Tool | Purpose |
 |------|---------|
 | **Wardriving** | Log WiFi and/or BLE with GPS to CSV. |
+| **Site Survey** *(lite off)* | Channel airtime × GPS CSV under `/kvxputer/app/WdBoth/survey_*.csv`. |
 | **Wardriving Master** *(ext)* | Multi-device collector mode. |
 | **GPS Tracker** *(lite off)* | Tracks / simple map HTML. |
 | **Config** | Baud rate and UART pins. |
@@ -562,6 +572,10 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 | **Media Player** *(speaker)* | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL). |
 | **PDA** *(lite off)* | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
 | **QRCodes** | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll. |
+| **TOTP** *(lite off, keyboard)* | Authenticator codes; device-bound store under `/kvxputer/totp/`. |
+| **Codec / Hash** *(lite off)* | Base64/hex/URL + MD5/SHA1/SHA256 of text or SD file. |
+| **MQTT** *(lite off)* | Connect / subscribe / publish (ESP-IDF mqtt client). |
+| **Bus Scanner** | Grove I2C scan (+ PaHub) and SPI pin map (Modules). |
 | **Microphone** | Spectrum and WAV record. |
 | **iButton** *(lite off)* | 1-Wire iButton read/write. |
 | **LLM Chat** *(ext)* | Stream chat to a configured LLM endpoint. |

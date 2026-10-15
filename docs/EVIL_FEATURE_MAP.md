@@ -59,5 +59,9 @@ Gated by `-DEVIL_EXTENSIONS=1` (on for `m5stack-cardputer`, off for lite).
 | 86 | TagTinker ESL | Infrared | P2 | port | `infrared/tagtinker/` |
 | 87 | CSI Radar | WiFi | P2 | port | `wifi/csi_radar/` |
 | 88 | Settings | Config | P0 | reuse | `config_menu.cpp` |
+| 89 | mDNS Poison | NetOps | P2 | port | `netops/mdns/` |
+| 90 | SMB Enum | NetOps | P2 | port | `netops/smb_enum/` |
+| 91 | IPv6 RA | NetOps | P2 | port | `netops/ipv6_ra/` |
+| 92 | C5 802.15.4 sniff | WiFi | P2 | port | `wifi/c5_serial/` + `companion-c5-802154` |
 
 Slave / companion firmware is tracked under [`tools/companions/`](../tools/companions/) (not compiled into Cardputer firmware). Copy `.bin` files to SD `/support_files/companions/`. `resources/` is optional development reference only.

@@ -8,11 +8,15 @@
 #include "nvs_flash.h"
 
 #include "menu/others/audio.h"
+#include "root/storage/paths.h"
+#include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include <Arduino.h>
 #include <globals.h>
+#include <map>
+#include <vector>
 
 static const uint8_t JD_CHANNELS[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 static const int JD_NCH = sizeof(JD_CHANNELS) / sizeof(JD_CHANNELS[0]);
@@ -32,11 +36,16 @@ static volatile uint32_t jd_deauth = 0;
 static volatile uint32_t jd_total = 0;
 static volatile int8_t jd_last_rssi = -127;
 
+// IDS (non-ISR) aggregation — filled from a deferred copy in IDS mode only.
+static volatile bool jd_ids_mode = false;
+static volatile uint8_t jd_ids_bssid[6] = {0};
+static volatile bool jd_ids_hit = false;
+
 static void IRAM_ATTR jd_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     if (!pkt) return;
     jd_total = jd_total + 1;
-    if (pkt->rx_ctrl.sig_len < 2) return;
+    if (pkt->rx_ctrl.sig_len < 16) return;
     const uint8_t *f = pkt->payload;
     uint16_t fc = (uint16_t)f[0] | ((uint16_t)f[1] << 8);
     uint8_t ftype = (fc & 0x0C) >> 2; // 0 = management
@@ -44,6 +53,11 @@ static void IRAM_ATTR jd_rx_cb(void *buf, wifi_promiscuous_pkt_type_t type) {
     if (ftype == 0x00 && (fsub == 0x0C || fsub == 0x0A)) {
         jd_deauth = jd_deauth + 1;
         jd_last_rssi = pkt->rx_ctrl.rssi;
+        if (jd_ids_mode && !jd_ids_hit) {
+            // addr2 transmitter at offset 10
+            for (int i = 0; i < 6; i++) jd_ids_bssid[i] = f[10 + i];
+            jd_ids_hit = true;
+        }
     }
 }
 
@@ -387,6 +401,101 @@ bool jamSessionDwell(
 
     jam_sess_idx = (jam_sess_idx + 1) % JD_NCH;
     return true;
+}
+
+void deauthIdsMenu() {
+    if (!tab5RadioLater("Deauth IDS")) return;
+    returnToMenu = false;
+
+    struct IdsRow {
+        String bssid;
+        uint32_t count = 0;
+        int8_t rssi = -127;
+        uint8_t ch = 0;
+    };
+    std::map<String, IdsRow> table;
+    uint32_t threshold = 10;
+    uint32_t logged = 0;
+
+    FS *fs = nullptr;
+    getFsStorage(fs);
+    if (fs) kvx::paths::ensureDir(*fs, kvx::paths::WIFI_BLUE_WATCH);
+
+    jd_ids_mode = true;
+    jd_start_wifi();
+    drawMainBorderWithTitle("Deauth IDS");
+    padprintln("thr=" + String(threshold) + " UP/DN  ESC");
+    EscPress = false;
+    int idx = 0;
+    while (!check(EscPress) && !returnToMenu && !forceHome) {
+        if (check(UpPress) && threshold < 200) threshold += 5;
+        if (check(DownPress) && threshold > 5) threshold -= 5;
+
+        uint8_t ch = JD_CHANNELS[idx];
+        esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
+        jd_deauth = 0;
+        jd_ids_hit = false;
+        uint32_t t0 = millis();
+        while (millis() - t0 < JD_DWELL) {
+            if (jd_ids_hit) {
+                char mac[18];
+                snprintf(
+                    mac,
+                    sizeof(mac),
+                    "%02X:%02X:%02X:%02X:%02X:%02X",
+                    jd_ids_bssid[0],
+                    jd_ids_bssid[1],
+                    jd_ids_bssid[2],
+                    jd_ids_bssid[3],
+                    jd_ids_bssid[4],
+                    jd_ids_bssid[5]
+                );
+                auto &row = table[String(mac)];
+                if (row.bssid.isEmpty()) row.bssid = mac;
+                row.count++;
+                row.rssi = jd_last_rssi;
+                row.ch = ch;
+                jd_ids_hit = false;
+                if (row.count == threshold && fs) {
+                    String path = String(kvx::paths::WIFI_BLUE_WATCH) + "/deauth_ids.csv";
+                    File f = fs->open(path, FILE_APPEND);
+                    if (f) {
+                        f.printf(
+                            "%lu,%s,%u,%d,%lu\n",
+                            (unsigned long)millis(),
+                            mac,
+                            (unsigned)ch,
+                            (int)jd_last_rssi,
+                            (unsigned long)row.count
+                        );
+                        f.close();
+                        logged++;
+                        _tone(3500, 40);
+                    }
+                }
+            }
+            if (check(EscPress)) break;
+            vTaskDelay(5 / portTICK_PERIOD_MS);
+        }
+        idx = (idx + 1) % JD_NCH;
+
+        jd_clear_body();
+        tft.setTextSize(FP);
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        tft.drawString("ch" + String(ch) + " thr" + String(threshold) + " log" + String(logged), 8, 28);
+        int y = 40;
+        int shown = 0;
+        for (auto &kv : table) {
+            if (shown >= 5) break;
+            String line = String(kv.second.count) + " " + kv.first.substring(0, 14) + " c" +
+                          String(kv.second.ch);
+            tft.drawString(line, 8, y);
+            y += LH * FP;
+            shown++;
+        }
+    }
+    jd_ids_mode = false;
+    jd_stop_wifi();
 }
 
 #endif

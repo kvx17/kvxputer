@@ -22,6 +22,7 @@
 #include "menu/wifi/channel_analyzer.h"
 #include "menu/wifi/jam_detect.h"
 #include "menu/wifi/pineap_hunter/pineap_hunter.h"
+#include "menu/wifi/lan_watch/lan_watch.h"
 #include "menu/wifi/wifi_recover.h"
 #endif
 
@@ -39,6 +40,9 @@
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
 #include "menu/wifi/roku/roku.h"
+#ifndef LITE_VERSION
+#include "menu/netops/net_toolkit/net_toolkit.h"
+#endif
 
 #if defined(EVIL_EXTENSIONS)
 #include "menu/wifi/probe/probe.h"
@@ -82,7 +86,9 @@ void WifiMenu::optionsMenu() {
     options.push_back({"Sniffer", sniffer_setup});
     options.push_back({"kvx wifi analyzer", channel_analyzer_setup});
     options.push_back({"Jam Detect", jam_detect_setup});
+    options.push_back({"Deauth IDS", deauthIdsMenu});
     options.push_back({"PineAP Hunter", pineapHunterMenu});
+    options.push_back({"LAN Watch", lanWatchMenu});
     options.push_back({"Scan Hosts", [=]() {
                            bool doScan = true;
                            if (!WiFi.isConnected()) doScan = wifiConnectMenu();
@@ -99,6 +105,7 @@ void WifiMenu::optionsMenu() {
                        }});
     options.push_back({"Wireguard", wg_setup});
     options.push_back({"Responder", responder});
+    options.push_back({"Net Toolkit", netToolkitMenu});
     options.push_back({"Kvxgotchi", kvxgotchi_start});
     options.push_back({"WiFi Pass Recovery", wifi_recover_menu});
 #endif

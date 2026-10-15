@@ -60,6 +60,9 @@
 #include "menu/others/dtmf/dtmf.h"
 #include "menu/others/morse/morse.h"
 #endif
+#if defined(HAS_KEYBOARD) && !defined(LITE_VERSION)
+#include "menu/others/totp/totp.h"
+#endif
 #endif
 #include "menu/others/timer.h"
 #if defined(HAS_NS4168_SPKR)
@@ -71,13 +74,18 @@
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_menu.h"
 #include "menu/others/drone/drone.h"
+#include "menu/others/codec/codec.h"
+#include "menu/others/mqtt/mqtt.h"
+#include "menu/gps/site_survey.h"
 #endif
+#include "menu/modules/bus_scan.h"
 #include "menu/charge/charge_screen.h"
 
 #ifndef LITE_VERSION
 #include "menu/ethernet/ARPScanner.h"
 #include "menu/wifi/channel_analyzer.h"
 #include "menu/wifi/jam_detect.h"
+#include "menu/wifi/lan_watch/lan_watch.h"
 #include "menu/wifi/sniffer.h"
 #include "menu/wifi/pwnagotchi/pwnagotchi.h"
 #include "menu/wifi/wifi_recover.h"
@@ -96,6 +104,8 @@
 #include "menu/rfid/rfid125.h"
 #include "menu/gps/gps_tracker.h"
 #include "menu/netops/reverseShell/reverseShell.h"
+#include "menu/netops/net_toolkit/net_toolkit.h"
+#include "menu/netops/loot_console/loot_console.h"
 #include "menu/others/ibutton.h"
 #include "menu/others/mic.h"
 #include "root/serial/connect/file_sharing.h"
@@ -133,6 +143,9 @@
 #include "menu/netops/upnp/upnp.h"
 #include "menu/netops/web_crawler/web_crawler.h"
 #include "menu/netops/wpad/wpad.h"
+#include "menu/netops/mdns/mdns.h"
+#include "menu/netops/smb_enum/smb_enum.h"
+#include "menu/netops/ipv6_ra/ipv6_ra.h"
 #include "menu/others/llm_chat/llm_chat.h"
 #include "menu/wifi/aircrack/aircrack.h"
 #include "menu/wifi/c5_serial/c5_serial.h"
@@ -187,7 +200,9 @@ static void launchSsh() { ssh_setup(""); }
 static void launchSniffer() { sniffer_setup(); }
 static void launchChannelAnalyzer() { channel_analyzer_setup(); }
 static void launchJamDetect() { jam_detect_setup(); }
+static void launchDeauthIds() { deauthIdsMenu(); }
 static void launchPineapHunter() { pineapHunterMenu(); }
+static void launchLanWatch() { lanWatchMenu(); }
 static void launchScanHosts() {
     bool doScan = true;
     if (!WiFi.isConnected()) doScan = wifiConnectMenu();
@@ -313,6 +328,8 @@ static void launchNrfMousejack() { nrf_mousejack(); }
 #ifndef LITE_VERSION
 static void launchReverseShell() { ReverseShell(); }
 static void launchNetopsScanHosts() { launchScanHosts(); }
+static void launchNetToolkit() { netToolkitMenu(); }
+static void launchLootConsole() { lootConsoleMenu(); }
 #endif
 #if defined(EVIL_EXTENSIONS)
 static void launchWebCrawler() { webCrawlerMenu(); }
@@ -334,6 +351,9 @@ static void launchLdap() { ldapMenu(); }
 static void launchAutodiscover() { autodiscoverMenu(); }
 static void launchCiw() { ciwMenu(); }
 static void launchImsiEap() { imsiEapMenu(); }
+static void launchMdnsPoison() { mdnsPoisonMenu(); }
+static void launchSmbEnum() { smbEnumMenu(); }
+static void launchIpv6Ra() { ipv6RaMenu(); }
 static void launchUpnp() { upnpMenu(); }
 static void launchCctv() { cctvMenu(); }
 #endif
@@ -373,6 +393,9 @@ static void launchCombo() { comboMenu(); }
 static void launchDtmf() { dtmfMenu(); }
 static void launchMorse() { morseMenu(); }
 #endif
+#if defined(HAS_KEYBOARD) && !defined(LITE_VERSION)
+static void launchTotp() { totpMenu(); }
+#endif
 #endif
 #if defined(HAS_NS4168_SPKR)
 static void launchMediaPlayer() { mediaPlayerApp(); }
@@ -380,7 +403,11 @@ static void launchMediaPlayer() { mediaPlayerApp(); }
 #ifndef LITE_VERSION
 static void launchPda() { pdaMenu(); }
 static void launchDroneId() { droneIdMenu(); }
+static void launchCodecHash() { codecHashMenu(); }
+static void launchMqtt() { mqttMenu(); }
+static void launchSiteSurvey() { siteSurveyMenu(); }
 #endif
+static void launchBusScan() { busScanMenu(); }
 static void launchTimer() { Timer(); }
 static void launchClock() { runClockLoop(true); }
 static void launchCharge() { runChargeLoop(); }
@@ -473,7 +500,9 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"sniffer", "Sniffer", "WiFi", true, wifiCatalogAtkNotLite, launchSniffer},
         {"channel_analyzer", "kvx wifi analyzer", "WiFi", true, wifiCatalogNotLite, launchChannelAnalyzer},
         {"jam_detect", "Jam Detect", "WiFi", true, wifiCatalogAtkNotLite, launchJamDetect},
-        {"pineap_hunter", "PineAP Hunter", "WiFi", true, wifiCatalogNotLite, launchPineapHunter},
+        {"deauth_ids", "Deauth IDS", "WiFi", true, wifiCatalogAtkNotLite, launchDeauthIds},
+        {"pineap_hunter", "Rogue AP Hunter", "WiFi", true, wifiCatalogNotLite, launchPineapHunter},
+        {"lan_watch", "LAN Watch", "WiFi", true, wifiCatalogNotLite, launchLanWatch},
         {"scan_hosts", "Scan Hosts", "WiFi", true, wifiCatalogNotLite, launchScanHosts},
         {"wireguard", "Wireguard", "WiFi", false, wifiCatalogNotLite, launchWireguard},
         {"responder", "Responder", "WiFi", false, wifiCatalogNotLite, launchResponder},
@@ -574,6 +603,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"gps_config", "GPS Config", "GPS", false, alwaysOn, launchGpsConfig},
 #ifndef LITE_VERSION
         {"gps_tracker", "GPS Tracker", "GPS", false, notLite, launchGpsTracker},
+        {"site_survey", "Site Survey", "GPS", true, notLite, launchSiteSurvey},
 #endif
 #if defined(EVIL_EXTENSIONS)
         {"wardriving_master", "Wardriving Master", "GPS", true, evilOn, launchWardrivingMaster},
@@ -592,6 +622,8 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #ifndef LITE_VERSION
         {"reverse_shell", "Reverse Shell", "NetOps", false, notLite, launchReverseShell},
         {"netops_scan_hosts", "Scan Hosts", "NetOps", false, notLite, launchNetopsScanHosts},
+        {"net_toolkit", "Net Toolkit", "NetOps", false, notLite, launchNetToolkit},
+        {"loot_console", "Loot Console", "NetOps", false, notLite, launchLootConsole},
 #endif
 #if defined(EVIL_EXTENSIONS)
         {"web_crawler", "Web Crawler", "NetOps", false, evilOn, launchWebCrawler},
@@ -613,6 +645,9 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"autodiscover", "Autodiscover Abuse", "NetOps", false, evilOn, launchAutodiscover},
         {"ciw", "CIW Zeroclick", "NetOps", false, evilOn, launchCiw},
         {"imsi_eap", "EAP Identity Sniff", "NetOps", false, evilOn, launchImsiEap},
+        {"mdns_poison", "mDNS Poison", "NetOps", false, evilOn, launchMdnsPoison},
+        {"smb_enum", "SMB Enum", "NetOps", false, evilOn, launchSmbEnum},
+        {"ipv6_ra", "IPv6 RA", "NetOps", false, evilOn, launchIpv6Ra},
         {"upnp", "UPnP Tools", "NetOps", true, evilOn, launchUpnp},
         {"cctv", "CCTV Toolkit", "NetOps", true, evilOn, launchCctv},
 #endif
@@ -645,12 +680,20 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #if defined(HAS_KEYBOARD)
         {"barcode", "Barcode", "Tools", false, alwaysOn, launchBarcode},
         {"passgen", "Passgen", "Tools", false, alwaysOn, launchPassgen},
+#if defined(HAS_KEYBOARD) && !defined(LITE_VERSION)
+        {"totp", "TOTP", "Tools", false, notLite, launchTotp},
+#endif
         {"combo", "Combo Cracker", "Tools", false, alwaysOn, launchCombo},
 #if !defined(LITE_VERSION) && (defined(HAS_NS4168_SPKR) || defined(BUZZ_PIN))
         {"dtmf", "DTMF", "Tools", false, notLite, launchDtmf},
         {"morse", "Morse", "Tools", false, notLite, launchMorse},
 #endif
 #endif
+#ifndef LITE_VERSION
+        {"codec_hash", "Codec / Hash", "Tools", false, notLite, launchCodecHash},
+        {"mqtt", "MQTT", "Tools", false, notLite, launchMqtt},
+#endif
+        {"bus_scan", "Bus Scanner", "Modules", false, alwaysOn, launchBusScan},
         {"tools_calc", "Calculator", "Tools", false, alwaysOn, launchCalculator},
         {"calculators", "Calculators", "Tools", false, alwaysOn, launchCalculators},
         {"calc_subnet", "Subnet", "Tools", false, alwaysOn, launchCalcSubnet},

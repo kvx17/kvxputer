@@ -1,4 +1,5 @@
 #include "modules_menu.h"
+#include "bus_scan.h"
 #include "root/ui/display.h"
 #include "root/hal/pahub.h"
 #include "root/input/unit_scroll.h"
@@ -50,6 +51,7 @@ void ModulesMenu::optionsMenu() {
             {"Unit Joystick", [this]() { unitJoystick2Menu(); }},
 #endif
             {"PaHub", [this]() { pahubMenu(); }},
+            {"Bus Scanner", busScanMenu},
             {"Companion bins", [this]() { companionBinsMenu(); }},
             {"Main Menu", []() {}},
         };
