@@ -120,6 +120,32 @@ void exportMerged(FS &fs, const std::vector<LootEntry> &entries) {
 
 } // namespace
 
+void lootConsoleHelp() {
+    showAppHelp(
+        {
+            "One place for captured creds",
+            "and hashes on SD/LittleFS.",
+            "",
+            "Indexes:",
+            "  wifi/portals/creds/*.csv",
+            "  netops/responder/ntlm_hashes",
+            "  responder/autodiscover.txt",
+            "  wifi/captures/eap_identity",
+            "",
+            "Redact toggle:",
+            "  Masks passwords / hash middles",
+            "  in previews and View.",
+            "",
+            "Per entry: View or Delete.",
+            "Export merged CSV:",
+            "  support_files/netops/loot/",
+            "",
+            "Refresh by reopening the menu.",
+            "No live tail while tools run.",
+        }
+    );
+}
+
 void lootConsoleMenu() {
     FS *fs = nullptr;
     if (!getFsStorage(fs) || !fs) {
@@ -129,6 +155,7 @@ void lootConsoleMenu() {
 
     auto entries = indexLoot(*fs);
     options.clear();
+    options.push_back({"Help", lootConsoleHelp});
     options.push_back({redact ? "Redact: ON (toggle)" : "Redact: OFF (toggle)", []() {
                            redact = !redact;
                            lootConsoleMenu();

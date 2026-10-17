@@ -52,8 +52,8 @@ void ScrollableTextArea::scrollUp() {
 }
 
 void ScrollableTextArea::scrollDown() {
-    if (firstVisibleLine + _maxVisibleLines <= linesBuffer.size()) {
-        if (firstVisibleLine == 0) firstVisibleLine++;
+    if (linesBuffer.size() <= _maxVisibleLines) return;
+    if (firstVisibleLine + _maxVisibleLines < linesBuffer.size()) {
         firstVisibleLine++;
         _redraw = true;
     }
@@ -79,13 +79,15 @@ size_t ScrollableTextArea::getMaxLines() { return linesBuffer.size(); }
 void ScrollableTextArea::show(bool force) {
     draw(force);
 
+    // Only the first paint may be forced. Passing force into the idle loop
+    // caused constant body flicker (fillRect + redraw every yield).
     while (check(SelPress)) {
-        update(force);
+        update(false);
         yield();
     }
     while (!check(SelPress) && !check(EscPress)) {
         if (returnToMenu || forceHome) break;
-        update(force);
+        update(false);
         yield();
     }
 }
@@ -197,24 +199,8 @@ void ScrollableTextArea::draw(bool force) {
 
     uint16_t yOffset = 0;
     size_t lines = 0;
-
-    // if there is text above
-    if (firstVisibleLine) {
-        _scrollBuffer.drawString("...", 0 + _startX, _startY + yOffset);
-        yOffset += _pixelsPerLine;
-        lines++;
-    }
-
-    int32_t tmpHeight = _height;
-    // if there is text below
-    if (linesBuffer.size() - firstVisibleLine >= _maxVisibleLines) {
-        _scrollBuffer.drawString("...", 0 + _startX, _startY + _height - _pixelsPerLine);
-        tmpHeight -= _pixelsPerLine;
-        lines++;
-    }
-
     size_t idx{firstVisibleLine};
-    while (yOffset < tmpHeight && lines < _maxVisibleLines && idx < linesBuffer.size()) {
+    while (yOffset + _pixelsPerLine <= _height && lines < _maxVisibleLines && idx < linesBuffer.size()) {
         _scrollBuffer.drawString(linesBuffer[idx], 0 + _startX, _startY + yOffset);
         yOffset += _pixelsPerLine;
         lines++;

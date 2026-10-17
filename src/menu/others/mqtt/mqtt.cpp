@@ -87,12 +87,39 @@ void showLog() {
 
 } // namespace
 
-void mqttMenu() {
-    if (!ensureConnected()) return;
+void mqttHelp() {
+    showAppHelp(
+        {
+            "Client for IoT brokers",
+            "(not a broker itself).",
+            "Needs WiFi STA.",
+            "",
+            "Connect:",
+            "  URI e.g. mqtt://192.168.1.10",
+            "  Optional user/password.",
+            "",
+            "Subscribe / Publish:",
+            "  Topic + message via keyboard.",
+            "",
+            "Load topics.txt:",
+            "  support_files/mqtt/topics.txt",
+            "  one topic per line.",
+            "",
+            "Message log: recent events.",
+            "Disconnect cleans the client.",
+            "",
+            "TLS limited by stack; prefer",
+            "lab/LAN brokers for testing.",
+        }
+    );
+}
 
+void mqttMenu() {
     options = {
+        {"Help", mqttHelp},
         {"Connect",
          []() {
+             if (!ensureConnected()) return;
              String host = keyboard("mqtt://192.168.1.1", 64, "Broker URI");
              if (host.isEmpty() || host == "\x1B") return;
              if (!host.startsWith("mqtt")) host = "mqtt://" + host;

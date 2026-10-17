@@ -2,8 +2,11 @@
 #define __UTILS_H__
 #include <Arduino.h>
 #include <Wire.h>
+#include <initializer_list>
 void backToMenu();
 void addOptionToMainMenu();
+/// Scrollable in-app help. Title lives in the kvx system topbar (battery strip).
+void showAppHelp(std::initializer_list<const char *> lines);
 int getBattery() __attribute__((weak));
 int getBatteryMilliVolts();
 int getBatteryTrendMilliVoltsPerMin();

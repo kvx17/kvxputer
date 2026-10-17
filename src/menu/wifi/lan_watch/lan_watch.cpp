@@ -1,10 +1,11 @@
 #if !defined(LITE_VERSION)
 #include "lan_watch.h"
 
+#include "menu/others/audio.h"
+#include "root/app/utils.h"
 #include "root/net/wifi_common.h"
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
-#include "menu/others/audio.h"
 #include "root/ui/display.h"
 #include <WiFi.h>
 #include <esp_netif.h>
@@ -61,7 +62,30 @@ void logEvent(FS *fs, const String &line) {
 
 } // namespace
 
-void lanWatchMenu() {
+static void lanWatchHelp() {
+    showAppHelp(
+        {
+            "Defensive monitor while STA",
+            "connected to a WiFi LAN.",
+            "",
+            "Learns gateway IP/MAC and DNS",
+            "then alerts if they change",
+            "(rogue DHCP / ARP spoof labs).",
+            "",
+            "Logs to:",
+            "  wifi/blue_watch/lan_watch.csv",
+            "",
+            "Beep on alert. ESC exits.",
+            "Not a full DHCP packet sniffer;",
+            "GW/DNS changes cover common",
+            "rogue-DHCP outcomes.",
+            "",
+            "Read-only / defensive use.",
+        }
+    );
+}
+
+static void lanWatchRun() {
     if (!WiFi.isConnected() && !wifiConnectMenu(WIFI_STA)) return;
 
     FS *fs = nullptr;
@@ -82,6 +106,8 @@ void lanWatchMenu() {
     EscPress = false;
     uint32_t last = 0;
     int alerts = 0;
+    int paintedAlerts = -1;
+    String paintedStatus;
     while (!check(EscPress) && !returnToMenu && !forceHome) {
         if (millis() - last < 1500) {
             delay(50);
@@ -122,14 +148,25 @@ void lanWatchMenu() {
             baseDns = dns;
         }
 
-        // Heuristic second DHCP server: if SoftAP peers advertise different gateway via ARP
-        // (full DHCP sniff is heavier) — note DNS/GW changes cover common rogue DHCP outcomes.
-
-        tft.fillRect(8, 50, tftWidth - 16, 40, kvxConfig.bgColor);
-        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawString("alerts " + String(alerts), 8, 50);
-        tft.drawString(status.substring(0, 28), 8, 62);
+        if (alerts != paintedAlerts || status != paintedStatus) {
+            tft.fillRect(8, 50, tftWidth - 16, 40, kvxConfig.bgColor);
+            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+            tft.drawString("alerts " + String(alerts), 8, 50);
+            tft.drawString(status.substring(0, 28), 8, 62);
+            paintedAlerts = alerts;
+            paintedStatus = status;
+        }
     }
+}
+
+void lanWatchMenu() {
+    options = {
+        {"Help",  lanWatchHelp},
+        {"Start", lanWatchRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "LAN Watch");
+    options.clear();
 }
 
 #endif

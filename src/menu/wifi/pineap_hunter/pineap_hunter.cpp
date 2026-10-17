@@ -2,6 +2,7 @@
 #include "pineap_hunter.h"
 
 #include "menu/others/audio.h"
+#include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include "root/ui/display.h"
@@ -217,6 +218,15 @@ static bool pinesVisuallyChanged(const std::vector<PineRecord> &a, const std::ve
     return false;
 }
 
+static bool twinsVisuallyChanged(const std::vector<TwinRecord> &a, const std::vector<TwinRecord> &b) {
+    if (a.size() != b.size()) return true;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].essid != b[i].essid) return true;
+        if (a[i].aps.size() != b[i].aps.size()) return true;
+    }
+    return false;
+}
+
 static void drawMainList(const std::vector<PineRecord> &pines, int cursor, int alertSsids, int totalScans) {
     clearBody();
     const int dense = uiDenseFont();
@@ -306,7 +316,37 @@ static void drawSsidList(const PineRecord &pine, int cursor) {
 
 } // namespace
 
-void pineapHunterMenu() {
+static void pineapHunterHelp() {
+    showAppHelp(
+        {
+            "Detects suspicious APs from",
+            "WiFi scans (every ~2s).",
+            "",
+            "Two modes (press t to toggle):",
+            "",
+            "PineAP:",
+            "  One BSSID advertising many",
+            "  SSIDs (multi-SSID rogue).",
+            "  UP/DN = alert threshold",
+            "  (# SSIDs to flag).",
+            "",
+            "Twins:",
+            "  Same SSID on different BSSIDs",
+            "  (evil-twin / multi-AP).",
+            "",
+            "Navigation:",
+            "  ;/. or arrows  move list",
+            "  Enter          open detail",
+            "  t              toggle mode",
+            "  ESC            exit",
+            "",
+            "Beeps when new hits appear.",
+            "Defensive / survey use.",
+        }
+    );
+}
+
+static void pineapHunterRun() {
     returnToMenu = false;
 
     ensureWifiPlatform();
@@ -458,15 +498,16 @@ void pineapHunterMenu() {
                 totalScans++;
                 maintainBuffer(buffer);
                 std::vector<PineRecord> next = detectPineaps(buffer, alertSsids);
-                twins = detectEvilTwins(buffer);
+                std::vector<TwinRecord> nextTwins = detectEvilTwins(buffer);
                 if (listMode == 0) {
                     if (cursor >= (int)next.size()) cursor = next.empty() ? 0 : (int)next.size() - 1;
                     if (selectedPine >= (int)next.size()) selectedPine = 0;
                 } else {
-                    if (cursor >= (int)twins.size()) cursor = twins.empty() ? 0 : (int)twins.size() - 1;
-                    if (selectedTwin >= (int)twins.size()) selectedTwin = 0;
+                    if (cursor >= (int)nextTwins.size())
+                        cursor = nextTwins.empty() ? 0 : (int)nextTwins.size() - 1;
+                    if (selectedTwin >= (int)nextTwins.size()) selectedTwin = 0;
                 }
-                size_t alertCount = listMode == 0 ? next.size() : twins.size();
+                size_t alertCount = listMode == 0 ? next.size() : nextTwins.size();
                 if (alertCount > lastAlertCount && (now - lastBeepMs > 500)) {
                     _tone(4000, 50);
                     lastBeepMs = now;
@@ -478,7 +519,9 @@ void pineapHunterMenu() {
                         needsRedraw = true;
                     }
                 } else if (viewMode == 1) {
-                    needsRedraw = true;
+                    if (twinsVisuallyChanged(twins, nextTwins) || totalScans != paintedScans) {
+                        needsRedraw = true;
+                    }
                 } else if (viewMode == 2 && selectedPine < (int)next.size()) {
                     bool sameBssid = selectedPine < (int)pines.size() &&
                                      pines[selectedPine].bssid == next[selectedPine].bssid;
@@ -486,6 +529,7 @@ void pineapHunterMenu() {
                     if (!sameBssid || next[selectedPine].essids.size() != oldN) needsRedraw = true;
                 }
                 pines = std::move(next);
+                twins = std::move(nextTwins);
             } else if (totalScans != paintedScans) {
                 needsRedraw = true;
             }
@@ -518,6 +562,16 @@ void pineapHunterMenu() {
     }
 
     wifiDisconnect();
+}
+
+void pineapHunterMenu() {
+    options = {
+        {"Help",  pineapHunterHelp},
+        {"Start", pineapHunterRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "Rogue AP Hunter");
+    options.clear();
 }
 
 #endif

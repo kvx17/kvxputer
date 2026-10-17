@@ -33,8 +33,34 @@ void spiPinMap() {
 
 } // namespace
 
+void busScanHelp() {
+    showAppHelp(
+        {
+            "Debug Grove PORT.A wiring.",
+            "",
+            "I2C Scan (Grove):",
+            "  Probes 0x01-0x7F on SDA/SCL.",
+            "  If PaHub is enabled, scans",
+            "  each mux channel instead.",
+            "  Hints: RFID2 0x28, Scroll",
+            "  0x40, Joystick 0x63, etc.",
+            "  Esc/Sel to exit results.",
+            "",
+            "SPI pin map:",
+            "  Shows shared SPI pins only.",
+            "  Does NOT bit-bang the bus",
+            "  (avoids corrupting SD).",
+            "",
+            "Conflict: do not share PORT.A",
+            "between CC1101 SPI and I2C",
+            "RFID at the same time.",
+        }
+    );
+}
+
 void busScanMenu() {
     options = {
+        {"Help",             busScanHelp },
         {"I2C Scan (Grove)", i2cGroveScan},
         {"SPI pin map",      spiPinMap   },
     };

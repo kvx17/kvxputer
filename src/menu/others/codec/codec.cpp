@@ -3,6 +3,7 @@
 
 #include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
+// showAppHelp via utils.h
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include "root/ui/scrollableTextArea.h"
@@ -200,8 +201,32 @@ void runHash(mbedtls_md_type_t type, bool useMd5) {
 
 } // namespace
 
+void codecHashHelp() {
+    showAppHelp(
+        {
+            "Encode, decode, and hash",
+            "typed text or an SD file.",
+            "",
+            "Each tool asks Input:",
+            "  Typed text — keyboard.",
+            "  SD file — pick a file",
+            "  (hashed up to 64 KB).",
+            "",
+            "Base64 / Hex / URL:",
+            "  Encode or decode and show",
+            "  the result (scrollable).",
+            "",
+            "MD5 / SHA1 / SHA256:",
+            "  Digest as lowercase hex.",
+            "",
+            "Esc/Sel closes the result.",
+        }
+    );
+}
+
 void codecHashMenu() {
     options = {
+        {"Help",          codecHashHelp},
         {"Base64 encode", []() { runEncode("b64e"); }},
         {"Base64 decode", []() { runEncode("b64d"); }},
         {"Hex encode",    []() { runEncode("hexe"); }},

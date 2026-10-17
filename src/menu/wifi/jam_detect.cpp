@@ -8,6 +8,7 @@
 #include "nvs_flash.h"
 
 #include "menu/others/audio.h"
+#include "root/app/utils.h"
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
@@ -403,7 +404,32 @@ bool jamSessionDwell(
     return true;
 }
 
-void deauthIdsMenu() {
+static void deauthIdsHelp() {
+    showAppHelp(
+        {
+            "Defensive deauth/disassoc",
+            "detector (inverse of attacks).",
+            "",
+            "Promiscuous hop ch 1-11.",
+            "Counts frames per transmitter",
+            "BSSID. When count hits thr,",
+            "appends CSV under",
+            "  wifi/blue_watch/deauth_ids.csv",
+            "and beeps.",
+            "",
+            "Controls:",
+            "  UP/DN  threshold (+/- 5)",
+            "  ESC    stop",
+            "",
+            "Screen shows channel, thr,",
+            "log count, top BSSIDs.",
+            "",
+            "Read-only / lab monitoring.",
+        }
+    );
+}
+
+static void deauthIdsRun() {
     if (!tab5RadioLater("Deauth IDS")) return;
     returnToMenu = false;
 
@@ -427,14 +453,26 @@ void deauthIdsMenu() {
     padprintln("thr=" + String(threshold) + " UP/DN  ESC");
     EscPress = false;
     int idx = 0;
+    uint8_t paintedCh = 0xFF;
+    uint32_t paintedLogged = UINT32_MAX;
+    size_t paintedRows = SIZE_MAX;
+    uint32_t paintedTopCount = UINT32_MAX;
     while (!check(EscPress) && !returnToMenu && !forceHome) {
-        if (check(UpPress) && threshold < 200) threshold += 5;
-        if (check(DownPress) && threshold > 5) threshold -= 5;
+        bool thrChanged = false;
+        if (check(UpPress) && threshold < 200) {
+            threshold += 5;
+            thrChanged = true;
+        }
+        if (check(DownPress) && threshold > 5) {
+            threshold -= 5;
+            thrChanged = true;
+        }
 
         uint8_t ch = JD_CHANNELS[idx];
         esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
         jd_deauth = 0;
         jd_ids_hit = false;
+        bool tableChanged = false;
         uint32_t t0 = millis();
         while (millis() - t0 < JD_DWELL) {
             if (jd_ids_hit) {
@@ -455,6 +493,7 @@ void deauthIdsMenu() {
                 row.count++;
                 row.rssi = jd_last_rssi;
                 row.ch = ch;
+                tableChanged = true;
                 jd_ids_hit = false;
                 if (row.count == threshold && fs) {
                     String path = String(kvx::paths::WIFI_BLUE_WATCH) + "/deauth_ids.csv";
@@ -479,6 +518,25 @@ void deauthIdsMenu() {
         }
         idx = (idx + 1) % JD_NCH;
 
+        uint32_t topCount = 0;
+        if (!table.empty()) topCount = table.begin()->second.count;
+        // Skip full-body redraw on channel hops alone — that is the main flicker source.
+        bool needPaint = thrChanged || tableChanged || logged != paintedLogged ||
+                         table.size() != paintedRows || topCount != paintedTopCount ||
+                         paintedRows == SIZE_MAX;
+        if (!needPaint) {
+            if (ch != paintedCh) {
+                tft.fillRect(8, 28, tftWidth - 16, LH * FP + 2, kvxConfig.bgColor);
+                tft.setTextSize(FP);
+                tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+                tft.drawString(
+                    "ch" + String(ch) + " thr" + String(threshold) + " log" + String(logged), 8, 28
+                );
+                paintedCh = ch;
+            }
+            continue;
+        }
+
         jd_clear_body();
         tft.setTextSize(FP);
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
@@ -493,9 +551,23 @@ void deauthIdsMenu() {
             y += LH * FP;
             shown++;
         }
+        paintedCh = ch;
+        paintedLogged = logged;
+        paintedRows = table.size();
+        paintedTopCount = topCount;
     }
     jd_ids_mode = false;
     jd_stop_wifi();
+}
+
+void deauthIdsMenu() {
+    options = {
+        {"Help",  deauthIdsHelp},
+        {"Start", deauthIdsRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "Deauth IDS");
+    options.clear();
 }
 
 #endif

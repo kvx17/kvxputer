@@ -1,5 +1,6 @@
 #include "smb_enum.h"
 #if defined(EVIL_EXTENSIONS)
+#include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include "root/ui/display.h"
@@ -43,7 +44,31 @@ String probeBanner(const String &host, uint16_t port) {
 
 } // namespace
 
-void smbEnumMenu() {
+static void smbEnumHelp() {
+    showAppHelp(
+        {
+            "Quick SMB/NetBIOS recon on",
+            "a host (lab / authorized).",
+            "",
+            "Needs WiFi STA.",
+            "",
+            "Enter target IP (default GW).",
+            "Checks TCP 139 and 445,",
+            "reads a short banner if any,",
+            "lists common share names to",
+            "try manually (IPC$, C$, …).",
+            "",
+            "Does not mount shares or run",
+            "full SMB dialect negotiate.",
+            "For guest access use a PC:",
+            "  smbclient -N //host/share",
+            "",
+            "Results are scrollable; Esc back.",
+        }
+    );
+}
+
+static void smbEnumRun() {
     if (!WiFi.isConnected() && !wifiConnectMenu(WIFI_STA)) return;
     String host = keyboard(WiFi.gatewayIP().toString(), 64, "Host IP");
     host.trim();
@@ -61,7 +86,6 @@ void smbEnumMenu() {
 
     if (p445) {
         lines.push_back("445: " + probeBanner(host, 445));
-        // Probe common share names with TCP reconnect (path existence via SMB needs full stack)
         const char *shares[] = {"IPC$", "ADMIN$", "C$", "print$", "shared", "public", "users"};
         lines.push_back("Common share names (manual check):");
         for (auto *s : shares) lines.push_back(String("  \\\\") + host + "\\" + s);
@@ -76,5 +100,15 @@ void smbEnumMenu() {
     ScrollableTextArea area("SMB Enum");
     for (auto &l : lines) area.addLine(l);
     area.show(true);
+}
+
+void smbEnumMenu() {
+    options = {
+        {"Help",  smbEnumHelp},
+        {"Start", smbEnumRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "SMB Enum");
+    options.clear();
 }
 #endif

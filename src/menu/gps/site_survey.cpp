@@ -2,6 +2,7 @@
 #include "site_survey.h"
 
 #include "menu/wifi/channel_analyzer.h"
+#include "root/app/utils.h"
 #include "root/config/configPins.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/paths.h"
@@ -33,9 +34,33 @@ bool beginGps() {
 
 } // namespace
 
-void siteSurveyMenu() {
-    displayInfo("Site survey logs\nchannel airtime + GPS\nto WdBoth/survey_*.csv", true);
+static void siteSurveyHelp() {
+    showAppHelp(
+        {
+            "Channel airtime survey with",
+            "optional GPS stamps.",
+            "",
+            "Writes CSV under:",
+            "  /kvxputer/app/WdBoth/",
+            "  survey_<ms>.csv",
+            "",
+            "Columns:",
+            "  time,lat,lon,alt,ch,",
+            "  load_pct,peak_rssi,ap_count",
+            "",
+            "Uses channel analyzer dwells",
+            "(promiscuous hop). GPS UART",
+            "on Grove pins from Config.",
+            "Without a fix, lat/lon are 0.",
+            "",
+            "ESC stops and saves.",
+            "Distinct from Wardriving",
+            "(Wigle AP rows).",
+        }
+    );
+}
 
+static void siteSurveyRun() {
     FS *fs = nullptr;
     if (!getFsStorage(fs) || !fs) {
         displayError("No storage", true);
@@ -72,6 +97,7 @@ void siteSurveyMenu() {
     padprintln("ESC stop");
     EscPress = false;
     int rows = 0;
+    String paintedHud;
     while (!check(EscPress) && !returnToMenu && !forceHome) {
         while (gpsSer.available()) gps.encode(gpsSer.read());
         CaChannelSample sample;
@@ -99,16 +125,29 @@ void siteSurveyMenu() {
         );
         out.println(line);
         rows++;
-        tft.fillRect(10, 50, tftWidth - 20, 24, kvxConfig.bgColor);
-        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawString(
-            "ch" + String(sample.ch) + " load" + String(sample.load) + "% n" + String(rows), 10, 50
-        );
+        String hud =
+            "ch" + String(sample.ch) + " load" + String(sample.load) + "% n" + String(rows);
+        if (hud != paintedHud) {
+            tft.fillRect(10, 50, tftWidth - 20, 24, kvxConfig.bgColor);
+            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+            tft.drawString(hud, 10, 50);
+            paintedHud = hud;
+        }
     }
     out.close();
     caSessionStop();
     gpsSer.end();
     displayInfo("Saved " + String(rows) + " rows", true);
+}
+
+void siteSurveyMenu() {
+    options = {
+        {"Help",  siteSurveyHelp},
+        {"Start", siteSurveyRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "Site Survey");
+    options.clear();
 }
 
 #endif

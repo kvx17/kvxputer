@@ -168,6 +168,33 @@ void showCodes() {
     }
     EscPress = false;
     size_t idx = 0;
+    size_t paintedIdx = SIZE_MAX;
+    String paintedCode;
+    int paintedRemain = -1;
+    bool chromeDrawn = false;
+
+    auto paint = [&](size_t i, const String &code, int remain) {
+        if (!chromeDrawn) {
+            drawMainBorderWithTitle("TOTP");
+            chromeDrawn = true;
+        } else {
+            tft.fillRect(6, 26, tftWidth - 12, tftHeight - 32, kvxConfig.bgColor);
+        }
+        tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y + FM * LH);
+        tft.setTextSize(FP);
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        padprintln(g_accounts[i].name);
+        tft.setTextSize(FG);
+        padprintln(code);
+        tft.setTextSize(FP);
+        padprintln(String(remain) + "s  " + String(i + 1) + "/" + String(g_accounts.size()));
+        padprintln(",/. next  ESC exit");
+        padprintln("Device-bound store");
+        paintedIdx = i;
+        paintedCode = code;
+        paintedRemain = remain;
+    };
+
     while (!check(EscPress) && !returnToMenu) {
         time_t now = nowEpoch();
         uint64_t step = (uint64_t)now / 30ULL;
@@ -177,18 +204,12 @@ void showCodes() {
         String code = "??????";
         if (base32Decode(a.secretB32, key)) code = formatCode(hotp(key.data(), key.size(), step));
 
-        drawMainBorderWithTitle("TOTP");
-        tft.setTextSize(FP);
-        padprintln(a.name);
-        tft.setTextSize(FG);
-        padprintln(code);
-        tft.setTextSize(FP);
-        padprintln(String(remain) + "s  " + String(idx + 1) + "/" + String(g_accounts.size()));
-        padprintln(",/. next  ESC exit");
-        padprintln("Device-bound store");
+        if (idx != paintedIdx || code != paintedCode || remain != paintedRemain) {
+            paint(idx, code, remain);
+        }
 
         uint32_t t0 = millis();
-        while (millis() - t0 < 500) {
+        while (millis() - t0 < 250) {
             if (check(EscPress) || returnToMenu) return;
             if (check(NextPress) || check(PrevPress)) {
                 if (check(NextPress)) idx = (idx + 1) % g_accounts.size();
@@ -235,13 +256,41 @@ void deleteAccount() {
 
 } // namespace
 
+void totpHelp() {
+    showAppHelp(
+        {
+            "Authenticator (RFC 6238).",
+            "6-digit codes, 30s step.",
+            "",
+            "Add account:",
+            "  Name + Base32 secret",
+            "  (from authenticator setup).",
+            "",
+            "Show codes:",
+            "  ,/.  next/prev account",
+            "  Countdown until refresh",
+            "  ESC exit",
+            "",
+            "Storage:",
+            "  /kvxputer/totp/accounts.json",
+            "  Obfuscated with device MAC",
+            "  — not strong encryption.",
+            "  Do not rely on this alone",
+            "  for high-value accounts.",
+            "",
+            "Needs correct device time",
+            "  (NTP / clock) for matches.",
+        }
+    );
+}
+
 void totpMenu() {
     loadAccounts();
-    displayInfo("TOTP secrets stored\ndevice-bound (XOR).\nLab use only.", true);
     options = {
-        {"Show codes", showCodes   },
-        {"Add account", addAccount },
-        {"Delete",     deleteAccount},
+        {"Help",        totpHelp     },
+        {"Show codes",  showCodes    },
+        {"Add account", addAccount   },
+        {"Delete",      deleteAccount},
     };
     addOptionToMainMenu();
     loopOptions(options, MENU_TYPE_SUBMENU, "TOTP");

@@ -311,13 +311,20 @@ void pingMenu() {
     padprintln(host + " (" + ip.toString() + ")");
     esp_ping_start(hdl);
     EscPress = false;
+    uint32_t paintedOk = UINT32_MAX, paintedFail = UINT32_MAX, paintedRtt = UINT32_MAX;
     while (!stats.done && !check(EscPress) && !returnToMenu) {
-        tft.fillRect(10, uiStatusY(0), tftWidth - 20, LH * FP * 2 + 4, kvxConfig.bgColor);
-        tft.drawString(
-            "ok=" + String(stats.ok) + " fail=" + String(stats.fail) + " rtt=" + String(stats.lastRtt) + "ms",
-            10,
-            uiStatusY(0)
-        );
+        if (stats.ok != paintedOk || stats.fail != paintedFail || stats.lastRtt != paintedRtt) {
+            tft.fillRect(10, uiStatusY(0), tftWidth - 20, LH * FP * 2 + 4, kvxConfig.bgColor);
+            tft.drawString(
+                "ok=" + String(stats.ok) + " fail=" + String(stats.fail) + " rtt=" + String(stats.lastRtt) +
+                    "ms",
+                10,
+                uiStatusY(0)
+            );
+            paintedOk = stats.ok;
+            paintedFail = stats.fail;
+            paintedRtt = stats.lastRtt;
+        }
         delay(100);
     }
     if (!stats.done) {
@@ -588,8 +595,43 @@ void curlMenu() {
 
 } // namespace
 
+void netToolkitHelp() {
+    showAppHelp(
+        {
+            "Everyday STA network tools.",
+            "Join WiFi first (prompted).",
+            "",
+            "Port Scan:",
+            "  Pick host + port preset.",
+            "  Sequential TCP connect.",
+            "  Open ports + banners.",
+            "  CSV -> netops/toolkit/scans/",
+            "  ESC aborts mid-scan.",
+            "",
+            "Banner Grab:",
+            "  One host:port; short read",
+            "  or HTTP HEAD / SSH id.",
+            "",
+            "Ping:",
+            "  ICMP via esp_ping.",
+            "  Shows ok/fail + last RTT.",
+            "",
+            "Dig:",
+            "  DNS A/AAAA/CNAME/TXT/MX",
+            "  via DHCP DNS or custom.",
+            "",
+            "Curl-lite:",
+            "  HTTP(S) GET/HEAD/POST.",
+            "  Preview + save response.",
+            "",
+            "Not full nmap. Lab use only.",
+        }
+    );
+}
+
 void netToolkitMenu() {
     options = {
+        {"Help",        netToolkitHelp},
         {"Port Scan",   portScanMenu  },
         {"Banner Grab", bannerGrabMenu},
         {"Ping",        pingMenu      },

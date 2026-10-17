@@ -77,21 +77,50 @@ bool sendRouterAdvertisement() {
 
 } // namespace
 
+void ipv6RaHelp() {
+    showAppHelp(
+        {
+            "Lab dual-stack MITM helper.",
+            "Authorized networks only.",
+            "",
+            "Send RA (ff02::1):",
+            "  ICMPv6 Router Advertisement",
+            "  once per second until ESC.",
+            "  Clients may learn a rogue",
+            "  default route / hop limit.",
+            "",
+            "Verify on a lab PC:",
+            "  rdisc6 <iface>",
+            "  ip -6 route",
+            "",
+            "Needs WiFi STA connected.",
+            "Raw ICMPv6 may fail on some",
+            "builds — check send count.",
+            "",
+            "Not a full DHCPv6 server.",
+        }
+    );
+}
+
 void ipv6RaMenu() {
-    displayInfo("IPv6 RA — lab only\nAuthorized networks.", true);
     if (!WiFi.isConnected() && !wifiConnectMenu(WIFI_STA)) return;
 
     options = {
+        {"Help", ipv6RaHelp},
         {"Send RA (ff02::1)",
          []() {
              int n = 0;
+             int painted = -1;
              drawMainBorderWithTitle("IPv6 RA");
              padprintln("Sending... ESC stop");
              EscPress = false;
              while (!check(EscPress) && !returnToMenu) {
                  if (sendRouterAdvertisement()) n++;
-                 tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-                 tft.drawString("RAs sent: " + String(n), 10, 40);
+                 if (n != painted) {
+                     tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
+                     tft.drawString("RAs sent: " + String(n), 10, 40);
+                     painted = n;
+                 }
                  delay(1000);
              }
          }},

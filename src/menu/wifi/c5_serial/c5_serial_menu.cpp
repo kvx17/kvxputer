@@ -5,6 +5,7 @@
  */
 #include "c5_serial.h"
 #if defined(EVIL_EXTENSIONS)
+#include "root/app/utils.h"
 #include "root/config/config.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/paths.h"
@@ -199,6 +200,7 @@ void rawMonitor() {
     tft.drawString("ESC to exit", 10, uiFooterY(FP));
     EscPress = false;
     uint32_t lastDraw = 0;
+    bool dirty = true;
     while (!check(EscPress) && !returnToMenu) {
         while (c5uart.available()) {
             char c = (char)c5uart.read();
@@ -209,6 +211,7 @@ void rawMonitor() {
                     strncpy(lines[head], gRxline, LINE_LEN - 1);
                     lines[head][LINE_LEN - 1] = 0;
                     head = (head + 1) % MAX_LINES;
+                    dirty = true;
                 }
                 gRxpos = 0;
             } else if (isprint((uint8_t)c) || c == '\t') {
@@ -216,8 +219,9 @@ void rawMonitor() {
                 else gRxpos = 0;
             }
         }
-        if (millis() - lastDraw > 120) {
+        if (dirty && millis() - lastDraw > 120) {
             lastDraw = millis();
+            dirty = false;
             // Dense UART monitor — FP body cannot fit ~10 lines on 135px.
             const int dense = uiDenseFont();
             tft.setTextSize(dense);
@@ -270,12 +274,18 @@ bool runListCommand(const char *cmdLine) {
     sendLine(cmdLine);
     uint32_t t0 = millis();
     EscPress = false;
+    int paintedAp = -1;
+    bool paintedHeader = false;
     while (millis() - t0 < C5_GLOBAL_TIMEOUT_MS) {
         pollUart();
         if (check(EscPress) || returnToMenu) break;
-        tft.fillRect(10, 40, tftWidth - 20, 24, kvxConfig.bgColor);
-        tft.drawString("AP:" + String(gApCount), 10, uiStatusY(0));
-        tft.drawString(gSeenHeader ? "Parsing OK" : "Parsing...", 10, 52);
+        if (gApCount != paintedAp || gSeenHeader != paintedHeader) {
+            tft.fillRect(10, 40, tftWidth - 20, 24, kvxConfig.bgColor);
+            tft.drawString("AP:" + String(gApCount), 10, uiStatusY(0));
+            tft.drawString(gSeenHeader ? "Parsing OK" : "Parsing...", 10, 52);
+            paintedAp = gApCount;
+            paintedHeader = gSeenHeader;
+        }
         if (gApCount > 0 && gLastUseful > 0 && millis() - gLastUseful > C5_IDLE_DONE_MS) break;
         delay(5);
     }
@@ -314,10 +324,35 @@ void listCompanions() {
 } // namespace
 
 void sniff154Menu() {
-    displayInfo("Needs companion-c5-802154\n.bin — not WiFi unified.\nNo Zigbee decrypt.", true);
     if (!gOn) uartBegin();
-    sendLine("HELP");
     options = {
+        {"Help",
+         []() {
+             showAppHelp(
+                 {
+                     "UART host for the",
+                     "companion-c5-802154.bin",
+                     "(not WiFi unified C5).",
+                     "",
+                     "Wiring: same GPS UART pins",
+                     "as ESP32C5 Serial (115200).",
+                     "",
+                     "SNIFF154 ON/OFF:",
+                     "  Start/stop frame stream.",
+                     "Channel 11-26:",
+                     "  CHAN154 <n>",
+                     "Live capture:",
+                     "  Shows F154| lines and",
+                     "  saves to wifi/captures/",
+                     "  ESC stops.",
+                     "",
+                     "Honest limits: raw hex only;",
+                     "no Zigbee NWK decrypt.",
+                     "Stub companion may emit",
+                     "heartbeat frames for UI.",
+                 }
+             );
+         }},
         {"SNIFF154 ON",
          []() {
              sendLine("SNIFF154 ON");

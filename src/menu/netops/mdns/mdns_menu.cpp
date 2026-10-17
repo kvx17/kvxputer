@@ -1,5 +1,6 @@
 #include "mdns.h"
 #if defined(EVIL_EXTENSIONS)
+#include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include "root/storage/paths.h"
@@ -9,7 +10,33 @@
 #include <WiFiUdp.h>
 #include <globals.h>
 
-void mdnsPoisonMenu() {
+static void mdnsPoisonHelp() {
+    showAppHelp(
+        {
+            "Spoof Bonjour/mDNS answers",
+            "on the local LAN (lab only).",
+            "",
+            "Needs WiFi STA.",
+            "",
+            "You enter:",
+            "  Name (e.g. kvxputer.local)",
+            "  IP to return in A records",
+            "",
+            "Listens UDP 5353. When a",
+            "query mentions your name,",
+            "sends a forged answer and",
+            "logs to responder/mdns_log.",
+            "",
+            "Screen: q=queries a=answers",
+            "ESC stops.",
+            "",
+            "Use only on networks you own",
+            "or have permission to test.",
+        }
+    );
+}
+
+static void mdnsPoisonRun() {
     if (!WiFi.isConnected() && !wifiConnectMenu(WIFI_STA)) return;
     String name = keyboard("kvxputer.local", 48, "Spoof name");
     name.trim();
@@ -100,5 +127,15 @@ void mdnsPoisonMenu() {
         delay(10);
     }
     udp.stop();
+}
+
+void mdnsPoisonMenu() {
+    options = {
+        {"Help",  mdnsPoisonHelp},
+        {"Start", mdnsPoisonRun },
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "mDNS Poison");
+    options.clear();
 }
 #endif

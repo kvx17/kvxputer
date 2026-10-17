@@ -1,5 +1,7 @@
 #include "root/app/utils.h"
 #include "root/net/wifi_common.h" //to return MAC addr
+#include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
 #include "root/ui/scrollableTextArea.h"
 #include <Preferences.h>
 #include <globals.h>
@@ -35,6 +37,22 @@ while(1) {
 */
 
 void backToMenu() { returnToMenu = true; }
+
+void showAppHelp(std::initializer_list<const char *> lines) {
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("Help");
+    }
+    const int bodyY = KVX_TOPBAR_H + 4;
+    const int bodyH = tftHeight - bodyY - 4;
+    ScrollableTextArea area(FP, BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false);
+    for (const char *line : lines) {
+        if (line) area.addLine(line);
+        else area.addLine("");
+    }
+    area.show(false);
+}
 
 void addOptionToMainMenu() {
     if (!forceHome) returnToMenu = false;
