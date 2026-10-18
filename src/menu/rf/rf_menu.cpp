@@ -16,8 +16,9 @@ void RFMenu::optionsMenu() {
     options = {
         {"Scan/copy",       [=]() { RFScan(); }       },
 #if !defined(LITE_VERSION)
-        {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
-        {"Custom SubGhz",   sendCustomRF              },
+        {"Record RAW",       rf_raw_record             }, // Pablo-Ortiz-Lopez
+        {"Custom SubGhz",    sendCustomRF              },
+        {"Protocol Library", rfProtocolLibrary         },
 #endif
         {"Spectrum",        rf_spectrum               },
 #if !defined(LITE_VERSION)

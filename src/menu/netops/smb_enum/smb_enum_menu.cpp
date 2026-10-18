@@ -3,6 +3,8 @@
 #include "root/app/utils.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
+#include "root/storage/paths.h"
+#include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include "root/ui/scrollableTextArea.h"
 #include <WiFi.h>
@@ -60,6 +62,9 @@ static void smbEnumHelp() {
             "",
             "Does not mount shares or run",
             "full SMB dialect negotiate.",
+            "Port/banner probe only.",
+            "CSV append -> netops/smb/",
+            "  enum.csv",
             "For guest access use a PC:",
             "  smbclient -N //host/share",
             "",
@@ -84,17 +89,39 @@ static void smbEnumRun() {
     lines.push_back(String("139/tcp ") + (p139 ? "open" : "closed"));
     lines.push_back(String("445/tcp ") + (p445 ? "open" : "closed"));
 
+    String banner445;
+    String banner139;
     if (p445) {
-        lines.push_back("445: " + probeBanner(host, 445));
+        banner445 = probeBanner(host, 445);
+        lines.push_back("445: " + banner445);
         const char *shares[] = {"IPC$", "ADMIN$", "C$", "print$", "shared", "public", "users"};
         lines.push_back("Common share names (manual check):");
         for (auto *s : shares) lines.push_back(String("  \\\\") + host + "\\" + s);
         lines.push_back("Guest/null: try from PC (smbclient -N)");
     } else if (p139) {
-        lines.push_back("139: " + probeBanner(host, 139));
+        banner139 = probeBanner(host, 139);
+        lines.push_back("139: " + banner139);
         lines.push_back("NetBIOS present; prefer 445");
     } else {
         lines.push_back("No SMB ports open");
+    }
+
+    FS *fs = nullptr;
+    if (getFsStorage(fs) && fs) {
+        kvx::paths::ensureDir(*fs, "/support_files/netops/smb");
+        bool needHdr = !fs->exists(kvx::paths::NETOPS_SMB_CSV);
+        File out = fs->open(kvx::paths::NETOPS_SMB_CSV, FILE_APPEND);
+        if (out) {
+            if (needHdr) out.println("host,port139,port445,banner");
+            String ban = p445 ? banner445 : banner139;
+            ban.replace(",", ";");
+            ban.replace("\"", "'");
+            out.printf(
+                "%s,%d,%d,\"%s\"\n", host.c_str(), p139 ? 1 : 0, p445 ? 1 : 0, ban.c_str()
+            );
+            out.close();
+            lines.push_back("CSV appended");
+        }
     }
 
     ScrollableTextArea area("SMB Enum");

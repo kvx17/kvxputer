@@ -337,9 +337,106 @@ void pingMenu() {
     );
 }
 
-// Minimal DNS query (A/AAAA/CNAME/TXT/MX)
+// Build QNAME into pkt starting at pos; returns new pos or 0 on error.
+size_t dnsEncodeName(uint8_t *pkt, size_t pktCap, size_t pos, const String &name, String &err) {
+    String n = name;
+    if (n.endsWith(".")) n.remove(n.length() - 1);
+    int start = 0;
+    while (start <= (int)n.length()) {
+        int dot = n.indexOf('.', start);
+        if (dot < 0) dot = n.length();
+        int labLen = dot - start;
+        if (labLen <= 0 || labLen > 63 || pos + 1 + labLen >= pktCap - 5) {
+            err = "bad name";
+            return 0;
+        }
+        pkt[pos++] = (uint8_t)labLen;
+        for (int i = 0; i < labLen; i++) pkt[pos++] = (uint8_t)n[start + i];
+        start = dot + 1;
+        if (dot >= (int)n.length()) break;
+    }
+    pkt[pos++] = 0;
+    return pos;
+}
+
+void dnsParseAnswers(const uint8_t *pkt, int nread, std::vector<String> &answers) {
+    if (nread < 12) return;
+    uint16_t ancount = (pkt[6] << 8) | pkt[7];
+    size_t i = 12;
+    while (i < (size_t)nread && pkt[i] != 0) {
+        if ((pkt[i] & 0xC0) == 0xC0) {
+            i += 2;
+            break;
+        }
+        i += pkt[i] + 1;
+    }
+    if (i < (size_t)nread && pkt[i] == 0) i++;
+    i += 4; // type + class
+    for (uint16_t a = 0; a < ancount && i + 10 <= (size_t)nread; a++) {
+        if ((pkt[i] & 0xC0) == 0xC0) i += 2;
+        else {
+            while (i < (size_t)nread && pkt[i] != 0) {
+                if ((pkt[i] & 0xC0) == 0xC0) {
+                    i += 2;
+                    break;
+                }
+                i += pkt[i] + 1;
+            }
+            if (i < (size_t)nread && pkt[i] == 0) i++;
+        }
+        if (i + 10 > (size_t)nread) break;
+        uint16_t type = (pkt[i] << 8) | pkt[i + 1];
+        uint16_t rdlen = (pkt[i + 8] << 8) | pkt[i + 9];
+        i += 10;
+        if (i + rdlen > (size_t)nread) break;
+        if (type == 1 && rdlen == 4) {
+            answers.push_back(
+                String(pkt[i]) + "." + String(pkt[i + 1]) + "." + String(pkt[i + 2]) + "." + String(pkt[i + 3])
+            );
+        } else if (type == 28 && rdlen == 16) {
+            char buf[48];
+            snprintf(
+                buf,
+                sizeof(buf),
+                "%02x%02x:%02x%02x:%02x%02x:%02x%02x:...",
+                pkt[i],
+                pkt[i + 1],
+                pkt[i + 2],
+                pkt[i + 3],
+                pkt[i + 4],
+                pkt[i + 5],
+                pkt[i + 6],
+                pkt[i + 7]
+            );
+            answers.push_back(String(buf));
+        } else if (type == 16) {
+            String txt;
+            size_t j = i;
+            while (j < i + rdlen) {
+                uint8_t l = pkt[j++];
+                for (uint8_t k = 0; k < l && j < i + rdlen; k++) txt += (char)pkt[j++];
+            }
+            answers.push_back("TXT " + txt);
+        } else if (type == 15 && rdlen >= 3) {
+            uint16_t pref = (pkt[i] << 8) | pkt[i + 1];
+            answers.push_back("MX " + String(pref));
+        } else if (type == 5) {
+            answers.push_back("CNAME");
+        } else if (type == 2) {
+            answers.push_back("NS");
+        } else if (type == 6) {
+            answers.push_back("SOA");
+        } else {
+            answers.push_back("type=" + String(type) + " len=" + String(rdlen));
+        }
+        i += rdlen;
+    }
+}
+
+// Minimal DNS query (A/AAAA/CNAME/TXT/MX). flags default 0x0100 = RD.
 bool dnsQuery(
-    const IPAddress &resolver, const String &name, uint16_t qtype, std::vector<String> &answers, String &err
+    const IPAddress &resolver, const String &name, uint16_t qtype, std::vector<String> &answers, String &err,
+    uint16_t flags = 0x0100
 ) {
     answers.clear();
     WiFiUDP udp;
@@ -351,35 +448,21 @@ bool dnsQuery(
     uint8_t pkt[512];
     memset(pkt, 0, sizeof(pkt));
     pkt[0] = 0x12;
-    pkt[1] = 0x34; // id
-    pkt[2] = 0x01;
-    pkt[3] = 0x00; // recursion desired
+    pkt[1] = 0x34;
+    pkt[2] = (flags >> 8) & 0xff;
+    pkt[3] = flags & 0xff;
     pkt[4] = 0x00;
-    pkt[5] = 0x01; // QDCOUNT=1
+    pkt[5] = 0x01;
 
-    size_t pos = 12;
-    int start = 0;
-    String n = name;
-    if (n.endsWith(".")) n.remove(n.length() - 1);
-    while (start <= (int)n.length()) {
-        int dot = n.indexOf('.', start);
-        if (dot < 0) dot = n.length();
-        int labLen = dot - start;
-        if (labLen <= 0 || labLen > 63 || pos + 1 + labLen >= sizeof(pkt) - 5) {
-            err = "bad name";
-            udp.stop();
-            return false;
-        }
-        pkt[pos++] = (uint8_t)labLen;
-        for (int i = 0; i < labLen; i++) pkt[pos++] = (uint8_t)n[start + i];
-        start = dot + 1;
-        if (dot >= (int)n.length()) break;
+    size_t pos = dnsEncodeName(pkt, sizeof(pkt), 12, name, err);
+    if (pos == 0) {
+        udp.stop();
+        return false;
     }
-    pkt[pos++] = 0;
     pkt[pos++] = (qtype >> 8) & 0xff;
     pkt[pos++] = qtype & 0xff;
     pkt[pos++] = 0x00;
-    pkt[pos++] = 0x01; // IN
+    pkt[pos++] = 0x01;
 
     if (!udp.beginPacket(resolver, 53)) {
         err = "send fail";
@@ -399,63 +482,7 @@ bool dnsQuery(
                 err = "short reply";
                 return false;
             }
-            uint16_t ancount = (pkt[6] << 8) | pkt[7];
-            size_t i = 12;
-            // skip question
-            while (i < (size_t)nread && pkt[i] != 0) {
-                i += pkt[i] + 1;
-            }
-            i += 5; // 0 + type + class
-            for (uint16_t a = 0; a < ancount && i + 12 <= (size_t)nread; a++) {
-                if ((pkt[i] & 0xC0) == 0xC0) i += 2;
-                else {
-                    while (i < (size_t)nread && pkt[i] != 0) i += pkt[i] + 1;
-                    i++;
-                }
-                if (i + 10 > (size_t)nread) break;
-                uint16_t type = (pkt[i] << 8) | pkt[i + 1];
-                uint16_t rdlen = (pkt[i + 8] << 8) | pkt[i + 9];
-                i += 10;
-                if (i + rdlen > (size_t)nread) break;
-                if (type == 1 && rdlen == 4) {
-                    answers.push_back(
-                        String(pkt[i]) + "." + String(pkt[i + 1]) + "." + String(pkt[i + 2]) + "." +
-                        String(pkt[i + 3])
-                    );
-                } else if (type == 28 && rdlen == 16) {
-                    char buf[48];
-                    snprintf(
-                        buf,
-                        sizeof(buf),
-                        "%02x%02x:%02x%02x:%02x%02x:%02x%02x:...",
-                        pkt[i],
-                        pkt[i + 1],
-                        pkt[i + 2],
-                        pkt[i + 3],
-                        pkt[i + 4],
-                        pkt[i + 5],
-                        pkt[i + 6],
-                        pkt[i + 7]
-                    );
-                    answers.push_back(String(buf));
-                } else if (type == 16) { // TXT
-                    String txt;
-                    size_t j = i;
-                    while (j < i + rdlen) {
-                        uint8_t l = pkt[j++];
-                        for (uint8_t k = 0; k < l && j < i + rdlen; k++) txt += (char)pkt[j++];
-                    }
-                    answers.push_back("TXT " + txt);
-                } else if (type == 15 && rdlen >= 3) { // MX
-                    uint16_t pref = (pkt[i] << 8) | pkt[i + 1];
-                    answers.push_back("MX " + String(pref));
-                } else if (type == 5) {
-                    answers.push_back("CNAME");
-                } else {
-                    answers.push_back("type=" + String(type) + " len=" + String(rdlen));
-                }
-                i += rdlen;
-            }
+            dnsParseAnswers(pkt, nread, answers);
             if (answers.empty()) answers.push_back("(no answers)");
             return true;
         }
@@ -464,6 +491,178 @@ bool dnsQuery(
     udp.stop();
     err = "timeout";
     return false;
+}
+
+IPAddress pickResolver() {
+    IPAddress resolver = WiFi.dnsIP(0);
+    if ((uint32_t)resolver == 0) resolver = IPAddress(8, 8, 8, 8);
+    options = {
+        {"DHCP DNS (" + resolver.toString() + ")", []() {}},
+        {"8.8.8.8", [&]() { resolver = IPAddress(8, 8, 8, 8); }},
+        {"1.1.1.1", [&]() { resolver = IPAddress(1, 1, 1, 1); }},
+        {"Custom",
+         [&]() {
+             String s = keyboard(resolver.toString(), 15, "DNS IP");
+             IPAddress tmp;
+             if (tmp.fromString(s)) resolver = tmp;
+         }},
+    };
+    loopOptions(options, MENU_TYPE_SUBMENU, "Resolver");
+    options.clear();
+    return resolver;
+}
+
+bool saveScanCsv(const String &prefix, const std::vector<String> &rows) {
+    FS *fs = toolkitFs();
+    if (!fs) return false;
+    ensureToolkitDirs(*fs);
+    String fname =
+        String(kvx::paths::NETOPS_TOOLKIT_SCANS) + "/" + prefix + "_" + String((uint32_t)millis()) + ".csv";
+    File out = fs->open(fname, FILE_WRITE);
+    if (!out) return false;
+    for (const auto &r : rows) out.println(r);
+    out.close();
+    return true;
+}
+
+// Extract printable DNS labels from a message (AXFR name harvest).
+void dnsHarvestNames(const uint8_t *pkt, int nread, std::vector<String> &names, size_t maxNames) {
+    for (int i = 12; i < nread && names.size() < maxNames;) {
+        if ((pkt[i] & 0xC0) == 0xC0) {
+            i += 2;
+            continue;
+        }
+        if (pkt[i] == 0) {
+            i++;
+            continue;
+        }
+        if (pkt[i] > 63) {
+            i++;
+            continue;
+        }
+        String name;
+        int j = i;
+        int hops = 0;
+        while (j < nread && hops++ < 32) {
+            if ((pkt[j] & 0xC0) == 0xC0) {
+                if (j + 1 >= nread) break;
+                j = ((pkt[j] & 0x3F) << 8) | pkt[j + 1];
+                continue;
+            }
+            uint8_t lab = pkt[j++];
+            if (lab == 0) break;
+            if (j + lab > nread) break;
+            if (name.length()) name += '.';
+            for (uint8_t k = 0; k < lab; k++) {
+                char c = (char)pkt[j++];
+                if (c >= 32 && c < 127) name += c;
+            }
+        }
+        if (name.length() >= 2 && name.indexOf('.') > 0) {
+            bool dup = false;
+            for (const auto &n : names) {
+                if (n == name) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup) names.push_back(name);
+        }
+        i++;
+    }
+}
+
+void axfrMenu() {
+    if (!ensureSta()) return;
+    String zone = keyboard("example.com", 64, "Zone");
+    zone.trim();
+    if (zone.isEmpty() || zone == "\x1B") return;
+    String nsStr = keyboard(WiFi.dnsIP(0).toString(), 15, "NS IP");
+    IPAddress ns;
+    if (!ns.fromString(nsStr)) {
+        displayError("Bad NS IP", true);
+        return;
+    }
+
+    WiFiClient client;
+    client.setTimeout(5);
+    drawMainBorderWithTitle("AXFR");
+    padprintln(zone);
+    padprintln(ns.toString());
+    if (!client.connect(ns, 53, 4000)) {
+        displayError("TCP/53 fail", true);
+        return;
+    }
+
+    // TCP DNS: 2-byte length + message. Message starts at offset 2.
+    uint8_t q[300];
+    memset(q, 0, sizeof(q));
+    const size_t msgStart = 2;
+    q[msgStart + 0] = 0x12;
+    q[msgStart + 1] = 0x34;
+    q[msgStart + 4] = 0x00;
+    q[msgStart + 5] = 0x01; // QDCOUNT=1
+    String err;
+    size_t pos = dnsEncodeName(q, sizeof(q), msgStart + 12, zone, err);
+    if (pos == 0) {
+        client.stop();
+        displayError(err, true);
+        return;
+    }
+    q[pos++] = 0x00;
+    q[pos++] = 252; // AXFR
+    q[pos++] = 0x00;
+    q[pos++] = 0x01;
+    uint16_t msgLen = (uint16_t)(pos - msgStart);
+    q[0] = (msgLen >> 8) & 0xff;
+    q[1] = msgLen & 0xff;
+    client.write(q, pos);
+
+    std::vector<String> names;
+    std::vector<String> rows;
+    rows.push_back("zone,ns,name");
+    const size_t kMaxNames = 64;
+    const size_t kMaxBytes = 8192;
+    size_t total = 0;
+    uint8_t buf[512];
+    uint32_t t0 = millis();
+    EscPress = false;
+    while (millis() - t0 < 8000 && total < kMaxBytes && names.size() < kMaxNames &&
+           !check(EscPress) && !returnToMenu) {
+        if (!client.connected() && !client.available()) break;
+        if (client.available() < 2) {
+            delay(20);
+            continue;
+        }
+        int hi = client.read();
+        int lo = client.read();
+        if (hi < 0 || lo < 0) break;
+        uint16_t rlen = ((uint16_t)hi << 8) | (uint16_t)lo;
+        if (rlen == 0 || rlen > sizeof(buf)) break;
+        size_t got = 0;
+        uint32_t w0 = millis();
+        while (got < rlen && millis() - w0 < 3000) {
+            if (client.available()) {
+                int n = client.read(buf + got, rlen - got);
+                if (n > 0) got += n;
+            } else delay(5);
+        }
+        if (got < rlen) break;
+        total += got;
+        dnsHarvestNames(buf, (int)got, names, kMaxNames);
+        // Stop after second SOA typically ends AXFR — count SOA markers loosely
+        if (got >= 12) {
+            uint16_t an = (buf[6] << 8) | buf[7];
+            if (an == 0 && names.size() > 0) break;
+        }
+    }
+    client.stop();
+
+    for (const auto &n : names) rows.push_back(zone + "," + ns.toString() + "," + n);
+    if (names.empty()) rows.push_back(zone + "," + ns.toString() + ",(none/refused)");
+    saveScanCsv("axfr", rows);
+    displayInfo(String(names.size()) + " names", true);
+    showLines("AXFR", names.empty() ? std::vector<String>{"(none — often refused)"} : names);
 }
 
 void digMenu() {
@@ -483,21 +682,7 @@ void digMenu() {
     loopOptions(options, MENU_TYPE_SUBMENU, "Query type");
     options.clear();
 
-    IPAddress resolver = WiFi.dnsIP(0);
-    if ((uint32_t)resolver == 0) resolver = IPAddress(8, 8, 8, 8);
-    options = {
-        {"DHCP DNS (" + resolver.toString() + ")", []() {}},
-        {"8.8.8.8", [&]() { resolver = IPAddress(8, 8, 8, 8); }},
-        {"1.1.1.1", [&]() { resolver = IPAddress(1, 1, 1, 1); }},
-        {"Custom",
-         [&]() {
-             String s = keyboard(resolver.toString(), 15, "DNS IP");
-             IPAddress tmp;
-             if (tmp.fromString(s)) resolver = tmp;
-         }},
-    };
-    loopOptions(options, MENU_TYPE_SUBMENU, "Resolver");
-    options.clear();
+    IPAddress resolver = pickResolver();
 
     std::vector<String> answers;
     String err;
@@ -511,6 +696,167 @@ void digMenu() {
     lines.push_back("@ " + resolver.toString());
     lines.insert(lines.end(), answers.begin(), answers.end());
     showLines("Dig", lines);
+}
+
+void cacheSnoopMenu() {
+    if (!ensureSta()) return;
+    IPAddress resolver = pickResolver();
+
+    std::vector<String> names = {
+        "www.google.com",
+        "www.cloudflare.com",
+        "www.microsoft.com",
+        "www.apple.com",
+        "www.amazon.com",
+        "www.facebook.com",
+        "www.youtube.com",
+        "www.wikipedia.org",
+    };
+    FS *fs = toolkitFs();
+    if (fs && fs->exists(String(kvx::paths::NETOPS_TOOLKIT) + "/names.txt")) {
+        File f = fs->open(String(kvx::paths::NETOPS_TOOLKIT) + "/names.txt", FILE_READ);
+        if (f) {
+            names.clear();
+            while (f.available() && names.size() < 32) {
+                String line = f.readStringUntil('\n');
+                line.trim();
+                if (line.length() && !line.startsWith("#")) names.push_back(line);
+            }
+            f.close();
+        }
+    }
+
+    drawMainBorderWithTitle("Cache Snoop");
+    padprintln(resolver.toString());
+    padprintln("RD=0  ESC abort");
+    std::vector<String> rows;
+    rows.push_back("name,hit,answers");
+    std::vector<String> lines;
+    EscPress = false;
+    String painted;
+    for (size_t i = 0; i < names.size() && !check(EscPress) && !returnToMenu; i++) {
+        String hud = String(i + 1) + "/" + String(names.size()) + " " + names[i].substring(0, 20);
+        if (hud != painted) {
+            tft.fillRect(10, uiStatusY(0), tftWidth - 20, LH * FP + 2, kvxConfig.bgColor);
+            tft.drawString(hud, 10, uiStatusY(0));
+            painted = hud;
+        }
+        std::vector<String> answers;
+        String err;
+        bool ok = dnsQuery(resolver, names[i], 1, answers, err, 0x0000);
+        bool hit = ok && !answers.empty() && answers[0] != "(no answers)";
+        String ans = hit ? answers[0] : (ok ? "empty" : err);
+        ans.replace(",", ";");
+        rows.push_back(names[i] + "," + String(hit ? "1" : "0") + "," + ans);
+        lines.push_back(String(hit ? "HIT " : "miss ") + names[i].substring(0, 22));
+        delay(30);
+    }
+    saveScanCsv("snoop", rows);
+    displayInfo(String(lines.size()) + " queries", true);
+    showLines("Cache Snoop", lines);
+}
+
+struct TraceHop {
+    volatile bool done = false;
+    volatile bool ok = false;
+    volatile uint32_t rtt = 0;
+    volatile uint32_t replyTtl = 0;
+    char ipStr[24] = {0};
+};
+
+static void onTraceOk(esp_ping_handle_t hdl, void *args) {
+    auto *st = (TraceHop *)args;
+    uint32_t ttl = 0, time_ms = 0;
+    ip_addr_t addr;
+    memset(&addr, 0, sizeof(addr));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TTL, &ttl, sizeof(ttl));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_TIMEGAP, &time_ms, sizeof(time_ms));
+    esp_ping_get_profile(hdl, ESP_PING_PROF_IPADDR, &addr, sizeof(addr));
+    st->ok = true;
+    st->rtt = time_ms;
+    st->replyTtl = ttl;
+    if (addr.type == IPADDR_TYPE_V4) {
+        IPAddress ip(addr.u_addr.ip4.addr);
+        snprintf(st->ipStr, sizeof(st->ipStr), "%s", ip.toString().c_str());
+    }
+}
+
+static void onTraceTimeout(esp_ping_handle_t hdl, void *args) {
+    auto *st = (TraceHop *)args;
+    st->ok = false;
+}
+
+static void onTraceEnd(esp_ping_handle_t hdl, void *args) {
+    auto *st = (TraceHop *)args;
+    st->done = true;
+    esp_ping_delete_session(hdl);
+}
+
+void tracerouteMenu() {
+    if (!ensureSta()) return;
+    String host = askTargetHost();
+    if (host.isEmpty()) return;
+    IPAddress ip;
+    if (!WiFi.hostByName(host.c_str(), ip)) {
+        displayError("DNS failed", true);
+        return;
+    }
+
+    ip_addr_t target;
+    memset(&target, 0, sizeof(target));
+    target.type = IPADDR_TYPE_V4;
+    target.u_addr.ip4.addr = (uint32_t)ip;
+
+    drawMainBorderWithTitle("Trace");
+    padprintln(host);
+    padprintln(ip.toString());
+    std::vector<String> rows;
+    rows.push_back("hop,ttl,ip,rtt_ms");
+    std::vector<String> lines;
+    EscPress = false;
+    String painted;
+    bool reached = false;
+    for (int ttl = 1; ttl <= 8 && !reached && !check(EscPress) && !returnToMenu; ttl++) {
+        TraceHop hop;
+        esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
+        cfg.target_addr = target;
+        cfg.count = 1;
+        cfg.timeout_ms = 1200;
+        cfg.interval_ms = 200;
+        cfg.ttl = ttl;
+        esp_ping_callbacks_t cbs = {
+            .cb_args = &hop,
+            .on_ping_success = onTraceOk,
+            .on_ping_timeout = onTraceTimeout,
+            .on_ping_end = onTraceEnd,
+        };
+        esp_ping_handle_t hdl = nullptr;
+        if (esp_ping_new_session(&cfg, &cbs, &hdl) != ESP_OK) {
+            lines.push_back(String(ttl) + " err");
+            break;
+        }
+        esp_ping_start(hdl);
+        while (!hop.done && !check(EscPress)) delay(20);
+        if (!hop.done) {
+            esp_ping_stop(hdl);
+            esp_ping_delete_session(hdl);
+        }
+        String ipOut = hop.ok ? String(hop.ipStr) : "*";
+        String line = String(ttl) + " " + ipOut + (hop.ok ? (" " + String(hop.rtt) + "ms") : " timeout");
+        lines.push_back(line);
+        rows.push_back(
+            String(ttl) + "," + String(ttl) + "," + ipOut + "," + (hop.ok ? String(hop.rtt) : "")
+        );
+        if (line != painted) {
+            tft.fillRect(10, uiStatusY(0), tftWidth - 20, LH * FP + 2, kvxConfig.bgColor);
+            tft.drawString(line.substring(0, 28), 10, uiStatusY(0));
+            painted = line;
+        }
+        if (hop.ok && strcmp(hop.ipStr, ip.toString().c_str()) == 0) reached = true;
+    }
+    saveScanCsv("trace", rows);
+    displayInfo(reached ? "reached" : "done", true);
+    showLines("Trace", lines);
 }
 
 void curlMenu() {
@@ -600,43 +946,39 @@ void netToolkitHelp() {
         {
             "Everyday STA network tools.",
             "Join WiFi first (prompted).",
+            "CSV -> netops/toolkit/scans/",
             "",
-            "Port Scan:",
-            "  Pick host + port preset.",
-            "  Sequential TCP connect.",
-            "  Open ports + banners.",
-            "  CSV -> netops/toolkit/scans/",
-            "  ESC aborts mid-scan.",
+            "Port Scan / Banner / Ping",
+            "Dig: A/AAAA/CNAME/TXT/MX",
+            "Curl-lite: GET/HEAD/POST",
             "",
-            "Banner Grab:",
-            "  One host:port; short read",
-            "  or HTTP HEAD / SSH id.",
+            "AXFR:",
+            "  TCP/53 zone transfer try.",
+            "  Often refused — lab only.",
             "",
-            "Ping:",
-            "  ICMP via esp_ping.",
-            "  Shows ok/fail + last RTT.",
+            "Cache Snoop:",
+            "  RD=0 queries; HIT if cached.",
+            "  names.txt or built-in list.",
             "",
-            "Dig:",
-            "  DNS A/AAAA/CNAME/TXT/MX",
-            "  via DHCP DNS or custom.",
+            "Trace:",
+            "  ICMP TTL 1..8 hop probe.",
             "",
-            "Curl-lite:",
-            "  HTTP(S) GET/HEAD/POST.",
-            "  Preview + save response.",
-            "",
-            "Not full nmap. Lab use only.",
+            "Not full nmap/dig. Lab use.",
         }
     );
 }
 
 void netToolkitMenu() {
     options = {
-        {"Help",        netToolkitHelp},
-        {"Port Scan",   portScanMenu  },
-        {"Banner Grab", bannerGrabMenu},
-        {"Ping",        pingMenu      },
-        {"Dig",         digMenu       },
-        {"Curl-lite",   curlMenu      },
+        {"Help",         netToolkitHelp },
+        {"Port Scan",    portScanMenu   },
+        {"Banner Grab",  bannerGrabMenu },
+        {"Ping",         pingMenu       },
+        {"Dig",          digMenu        },
+        {"AXFR",         axfrMenu       },
+        {"Cache Snoop",  cacheSnoopMenu },
+        {"Trace",        tracerouteMenu },
+        {"Curl-lite",    curlMenu       },
     };
     addOptionToMainMenu();
     loopOptions(options, MENU_TYPE_SUBMENU, "Net Toolkit");

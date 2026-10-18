@@ -1,0 +1,6 @@
+# Cache-snoop name list (one FQDN per line)
+www.google.com
+www.cloudflare.com
+www.microsoft.com
+www.apple.com
+www.amazon.com

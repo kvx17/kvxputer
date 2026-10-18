@@ -342,14 +342,15 @@ void sniff154Menu() {
                      "Channel 11-26:",
                      "  CHAN154 <n>",
                      "Live capture:",
-                     "  Shows F154| lines and",
-                     "  saves to wifi/captures/",
+                     "  Optional substring filter",
+                     "  on F154| lines (HUD+log).",
+                     "  Saves to wifi/captures/",
                      "  ESC stops.",
                      "",
                      "Honest limits: raw hex only;",
                      "no Zigbee NWK decrypt.",
-                     "Stub companion may emit",
-                     "heartbeat frames for UI.",
+                     "Companion not a full sniffer;",
+                     "may emit heartbeat frames.",
                  }
              );
          }},
@@ -368,6 +369,9 @@ void sniff154Menu() {
         {"Info", []() { sendLine("INFO"); rawMonitor(); }},
         {"Live capture",
          []() {
+             String filt = keyboard("", 24, "Filter (empty=all)");
+             if (filt == "\x1B") return;
+             filt.trim();
              FS *fs = nullptr;
              getFsStorage(fs);
              File log;
@@ -378,18 +382,23 @@ void sniff154Menu() {
              }
              sendLine("SNIFF154 ON");
              drawMainBorderWithTitle("802.15.4 sniff");
-             padprintln("ESC stop / save");
+             padprintln(filt.length() ? ("filt " + filt) : "ESC stop / save");
              EscPress = false;
              uint32_t n = 0;
+             String painted;
              while (!check(EscPress) && !returnToMenu) {
                  while (c5uart.available()) {
                      String line = c5uart.readStringUntil('\n');
                      line.trim();
-                     if (line.startsWith("F154|")) {
-                         n++;
-                         if (log) log.println(line);
+                     if (!line.startsWith("F154|")) continue;
+                     if (filt.length() && line.indexOf(filt) < 0) continue;
+                     n++;
+                     if (log) log.println(line);
+                     String hud = String(n) + " " + line.substring(0, 24);
+                     if (hud != painted) {
                          tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-                         tft.drawString(String(n) + " " + line.substring(0, 24), 10, 40);
+                         tft.drawString(hud, 10, 40);
+                         painted = hud;
                      }
                  }
                  delay(5);

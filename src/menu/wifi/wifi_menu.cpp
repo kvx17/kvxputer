@@ -47,6 +47,7 @@
 #if defined(EVIL_EXTENSIONS)
 #include "menu/wifi/probe/probe.h"
 #include "menu/wifi/handshake_master/handshake_master.h"
+#include "menu/wifi/pmkid/pmkid.h"
 #include "menu/wifi/wall_of_flipper/wall_of_flipper.h"
 #include "menu/wifi/dead_drop/dead_drop.h"
 #include "menu/wifi/open_wifi/open_wifi.h"
@@ -116,6 +117,9 @@ void WifiMenu::optionsMenu() {
 #if defined(EVIL_EXTENSIONS)
     options.push_back({"Probes", probeMenu});
     options.push_back({"Handshakes", handshakeMasterMenu});
+#if !defined(LITE_VERSION)
+    options.push_back({"PMKID", pmkidMenu});
+#endif
     options.push_back({"Wall Of Flipper", wallOfFlipperMenu});
     options.push_back({"WiFi Dead Drop", deadDropMenu});
     options.push_back({"Open Wifi Checker", openWifiMenu});

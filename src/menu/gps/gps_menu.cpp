@@ -35,6 +35,8 @@ void GpsMenu::wardrivingMenu() {
         {"Scan WiFi Networks", []() { Wardriving(true, false); }},
         {"Scan BLE Devices",   []() { Wardriving(false, true); }},
         {"Scan Both",          []() { Wardriving(true, true); } },
+        {"View Captures",      wardrivingViewCaptures           },
+        {"WD Config",          wardrivingConfigMenu             },
 #if defined(EVIL_EXTENSIONS)
         {"Wardriving Master",  wardrivingMasterMenu             },
 #endif

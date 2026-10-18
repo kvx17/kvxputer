@@ -1,0 +1,21 @@
+REM Lab only — authorized targets.
+REM Prerequisites on Cardputer:
+REM   1) WiFi -> WiFi Dead Drop (SoftAP up)
+REM   2) Note AP SSID + IP shown on screen (often 192.168.4.1)
+REM   3) Optional: copy loot into /support_files/wifi/deaddrop/
+REM This script only types HID on the host PC (join AP / open drop URL).
+REM It cannot start SoftAP or WebUI from Ducky alone.
+DELAY 500
+GUI r
+DELAY 400
+STRING cmd
+ENTER
+DELAY 800
+REM Adjust SSID/IP to match the Dead Drop screen.
+STRING netsh wlan connect name="kvx-drop"
+ENTER
+DELAY 4000
+STRING start http://192.168.4.1/
+ENTER
+DELAY 500
+REM ESC on Cardputer stops Dead Drop when done.

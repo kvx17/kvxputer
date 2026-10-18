@@ -152,6 +152,9 @@
 #include "menu/wifi/csi_radar/csi_radar.h"
 #include "menu/wifi/dead_drop/dead_drop.h"
 #include "menu/wifi/handshake_master/handshake_master.h"
+#if !defined(LITE_VERSION)
+#include "menu/wifi/pmkid/pmkid.h"
+#endif
 #include "menu/wifi/open_wifi/open_wifi.h"
 #include "menu/wifi/probe/probe.h"
 #include "menu/wifi/wall_of_flipper/wall_of_flipper.h"
@@ -220,6 +223,9 @@ static void launchKarma() { karma_setup(); }
 #if defined(EVIL_EXTENSIONS)
 static void launchProbe() { probeMenu(); }
 static void launchHandshakes() { handshakeMasterMenu(); }
+#if !defined(LITE_VERSION)
+static void launchPmkid() { pmkidMenu(); }
+#endif
 static void launchWallFlipper() { wallOfFlipperMenu(); }
 static void launchDeadDrop() { deadDropMenu(); }
 static void launchOpenWifi() { openWifiMenu(); }
@@ -258,6 +264,9 @@ static void launchRfConfig() { mainMenu.rfMenu.configMenu(); }
 #ifndef LITE_VERSION
 static void launchRfRawRecord() { rf_raw_record(); }
 static void launchCustomSubghz() { sendCustomRF(); }
+#if !defined(LITE_VERSION)
+static void launchRfLibrary() { rfProtocolLibrary(); }
+#endif
 static void launchRssiSpectrum() { rf_CC1101_rssi(); }
 static void launchSpectogram() { rf_waterfall(); }
 static void launchSquareWave() { rf_SquareWave(); }
@@ -513,6 +522,9 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #if defined(EVIL_EXTENSIONS)
         {"probes", "Probes", "WiFi", false, evilOn, launchProbe},
         {"handshakes", "Handshakes", "WiFi", false, evilOn, launchHandshakes},
+#if !defined(LITE_VERSION)
+        {"pmkid", "PMKID", "WiFi", true, evilOn, launchPmkid},
+#endif
         {"wall_of_flipper", "Wall Of Flipper", "WiFi", true, evilOn, launchWallFlipper},
         {"dead_drop", "WiFi Dead Drop", "WiFi", false, evilOn, launchDeadDrop},
         {"open_wifi", "Open Wifi Checker", "WiFi", true, evilOn, launchOpenWifi},
@@ -551,6 +563,9 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 #ifndef LITE_VERSION
         {"rf_raw_record", "Record RAW", "RF", false, notLite, launchRfRawRecord},
         {"custom_subghz", "Custom SubGhz", "RF", false, notLite, launchCustomSubghz},
+#if !defined(LITE_VERSION)
+        {"rf_library", "Protocol Library", "RF", false, notLite, launchRfLibrary},
+#endif
         {"rssi_spectrum", "RSSI Spectrum", "RF", true, notLite, launchRssiSpectrum},
         {"spectogram", "Spectogram", "RF", true, notLite, launchSpectogram},
         {"squarewave_spec", "SquareWave Spec", "RF", false, notLite, launchSquareWave},

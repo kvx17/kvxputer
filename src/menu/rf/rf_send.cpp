@@ -2,6 +2,10 @@
 #include "rf_send.h"
 #include "root/hal/led_control.h"
 #include "root/app/type_convertion.h"
+#include "root/app/utils.h"
+#include "root/input/mykeyboard.h"
+#include "root/storage/sd_functions.h"
+#include "root/ui/display.h"
 #include "protocols/rf_config.h"
 #include "protocols/rf_encoder.h"
 #include "protocols/rf_legacy_migrate.h"
@@ -550,3 +554,106 @@ void rfTransmitRawTimings(int *ptrtransmittimings) {
     if (!ptrtransmittimings) return;
     rf_tx_raw_timings(ptrtransmittimings);
 }
+
+#if !defined(LITE_VERSION)
+static void collectSubFiles(FS &fs, const String &dirPath, std::vector<String> &paths, size_t maxN) {
+    File dir = fs.open(dirPath);
+    if (!dir || !dir.isDirectory()) {
+        if (dir) dir.close();
+        return;
+    }
+    File f;
+    while ((f = dir.openNextFile()) && paths.size() < maxN) {
+        String n = f.name();
+        bool isDir = f.isDirectory();
+        f.close();
+        if (isDir) continue;
+        String full = n;
+        if (!n.startsWith("/")) full = dirPath + "/" + n;
+        int slash = full.lastIndexOf('/');
+        String base = slash >= 0 ? full.substring(slash + 1) : full;
+        base.toLowerCase();
+        if (base.endsWith(".sub")) paths.push_back(full.startsWith("/") ? full : (dirPath + "/" + base));
+    }
+    dir.close();
+}
+
+static void rfLibraryHelp() {
+    showAppHelp(
+        {
+            "Browse known .sub presets",
+            "under support_files/rf/library",
+            "and user rf/presets.",
+            "",
+            "Type a substring to filter,",
+            "Enter transmits via the same",
+            "txSubFile path as Custom SubGhz.",
+            "",
+            "Does not invent a new TX motor.",
+            "ESC back. Lab / personal remotes.",
+        }
+    );
+}
+
+void rfProtocolLibrary() {
+    options = {
+        {"Help", rfLibraryHelp},
+        {"Browse / TX",
+         []() {
+             FS *fs = nullptr;
+             if (!getFsStorage(fs) || !fs) {
+                 displayError("No storage", true);
+                 return;
+             }
+             kvx::paths::ensureDir(*fs, kvx::paths::RF_LIBRARY);
+             kvx::paths::ensureDir(*fs, kvx::paths::RF_PRESETS);
+             std::vector<String> all;
+             collectSubFiles(*fs, kvx::paths::RF_LIBRARY, all, 80);
+             collectSubFiles(*fs, kvx::paths::RF_PRESETS, all, 120);
+             if (all.empty() && fs->exists(kvx::paths::RF_PRESETS_LEGACY2))
+                 collectSubFiles(*fs, kvx::paths::RF_PRESETS_LEGACY2, all, 120);
+             if (all.empty()) {
+                 displayInfo("No .sub files\nPut samples in\nrf/library", true);
+                 return;
+             }
+             String filter = keyboard("", 24, "Filter (empty=all)");
+             if (filter == "\x1B") return;
+             filter.trim();
+             filter.toLowerCase();
+             std::vector<String> shown;
+             std::vector<String> labels;
+             for (const auto &p : all) {
+                 String base = p.substring(p.lastIndexOf('/') + 1);
+                 String bl = base;
+                 bl.toLowerCase();
+                 if (filter.length() && bl.indexOf(filter) < 0) continue;
+                 shown.push_back(p);
+                 labels.push_back(base);
+             }
+             if (shown.empty()) {
+                 displayInfo("No match", true);
+                 return;
+             }
+             options.clear();
+             for (size_t i = 0; i < shown.size(); i++) {
+                 size_t idx = i;
+                 options.push_back({labels[i].c_str(), [fs, &shown, idx]() {
+                                        RfCodes data{};
+                                        bitList.clear();
+                                        bitRawList.clear();
+                                        keyList.clear();
+                                        rawDataList.clear();
+                                        if (!readSubFile(fs, shown[idx], data)) return;
+                                        if (data.protocol == "RcSwitch") loopEmulate(data);
+                                        else txSubFile(data);
+                                    }});
+             }
+             loopOptions(options, MENU_TYPE_SUBMENU, "RF Library");
+             options.clear();
+         }},
+    };
+    addOptionToMainMenu();
+    loopOptions(options, MENU_TYPE_SUBMENU, "Protocol Library");
+    options.clear();
+}
+#endif

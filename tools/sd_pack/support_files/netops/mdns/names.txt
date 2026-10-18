@@ -1,0 +1,4 @@
+# One label per line (without .local). Lab mDNS poison list.
+kvxputer
+printer
+airport

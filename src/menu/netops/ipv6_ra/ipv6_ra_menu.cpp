@@ -97,7 +97,8 @@ void ipv6RaHelp() {
             "Raw ICMPv6 may fail on some",
             "builds — check send count.",
             "",
-            "Not a full DHCPv6 server.",
+            "RA only — not DHCPv6.",
+            "No advertise / NA stack here.",
         }
     );
 }

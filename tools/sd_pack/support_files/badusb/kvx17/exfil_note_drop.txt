@@ -1,0 +1,15 @@
+REM Lab only — authorized targets.
+REM Creates a marker note on the host Desktop for the operator to copy
+REM onto the Cardputer Dead Drop folder (/support_files/wifi/deaddrop/).
+REM Start WiFi Dead Drop on the device before or after this script.
+DELAY 500
+GUI r
+DELAY 400
+STRING powershell
+ENTER
+DELAY 800
+STRING $p="$env:USERPROFILE\Desktop\kvx_drop_marker.txt"; Set-Content -Path $p -Value ("kvxputer dead-drop marker " + (Get-Date -Format o)); notepad $p
+ENTER
+DELAY 500
+REM Copy that file to the Dead Drop share folder on the SD card, then
+REM open http://<AP-IP>/ from a client joined to the SoftAP.

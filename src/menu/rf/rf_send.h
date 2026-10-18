@@ -7,6 +7,9 @@
 #define REPEAT 2
 
 void sendCustomRF();
+#if !defined(LITE_VERSION)
+void rfProtocolLibrary();
+#endif
 bool txSubFile(RfCodes &selected_code, bool hideDefaultUI = false);
 bool readSubFile(FS *fs, const String &filepath, RfCodes &data);
 
