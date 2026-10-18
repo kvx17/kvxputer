@@ -7,6 +7,9 @@
 #include "root/app/utils.h"
 #include "root/hal/led_control.h"
 #include "root/app/app_catalog.h"
+#ifdef HAS_KEYBOARD
+#include "root/ui/quick_search.h"
+#endif
 #ifndef LITE_VERSION
 #include "menu/others/pda/pda_alarms.h"
 #endif
@@ -302,6 +305,29 @@ int kvxMainMenuLoop(std::vector<MenuItemInterface *> &items, int startIndex) {
             invalidateKvxGridCache();
             redraw = true;
             continue;
+        }
+
+        // Space (no FN, no shortcut chord) → fullscreen app/file quick search.
+        if (KeyStroke.pressed && !isFnKeyHeld() && !KeyStroke.fn && !isSystemShortcutChordHeld()) {
+            bool space = false;
+            for (char c : KeyStroke.word) {
+                if (c == ' ') {
+                    space = true;
+                    break;
+                }
+            }
+            if (space) {
+                KeyStroke.Clear();
+                EscPress = false;
+                SelPress = false;
+                quickSearchLoop();
+                // Wait for Space release so a held key does not re-open search.
+                while (isCardputerKeyHeld(' ') && !returnToMenu && !forceHome) delay(10);
+                KeyStroke.Clear();
+                invalidateKvxGridCache();
+                redraw = true;
+                continue;
+            }
         }
 #endif
 

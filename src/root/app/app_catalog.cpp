@@ -833,6 +833,7 @@ std::vector<AppShortcutTarget> appCatalogShortcutTargets() {
 bool appCatalogKeyReserved(char c) {
     const uint8_t u = (uint8_t)c;
     switch (u) {
+        case ' ': // main-grid quick search
         case ';':
         case ',':
         case '.':

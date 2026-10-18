@@ -1,6 +1,6 @@
 # kvxputer — a firmware focused on flexibility
 
-<img src="docs/boot.gif" alt="kvxputer boot animation" width="360" />
+![kvxputer boot animation](docs/boot.gif)
 
 **kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. Secondary PlatformIO environments also build for **M5StickS3** (button-only) and **M5Stack Tab5** (keyboard + touch; same app catalog, hosted C6 WiFi/BLE).
 
@@ -8,8 +8,9 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 
 **Use responsibly:** only on networks and devices you own or have explicit permission to test.
 
-
 ---
+
+
 
 ## Highlights
 
@@ -22,12 +23,15 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - **Grove ecosystem** — Scroll, Joystick, PaHub, RFID, RF, IR, GPS, and more on PORT.A
 - **Lite / StickS3 / Tab5 builds** — smaller flash, button-only, or Tab5 keyboard+touch when needed
 
-
-<img src="docs/menu.gif" alt="kvxputer channel menu" width="360" />
+![kvxputer channel menu](docs/menu.gif)
 
 ---
 
+
+
 ## Getting started
+
+
 
 ### Requirements
 
@@ -35,6 +39,8 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - M5Stack Cardputer or Cardputer ADV (primary); M5StickS3 or M5Stack Tab5 (+ Tab5 Keyboard) secondary
 - USB data cable
 - Linux: membership in `uucp` / `dialout` for serial upload
+
+
 
 ### Build
 
@@ -77,6 +83,8 @@ Optional LittleFS factory seed:
 pio run -e m5stack-cardputer -t uploadfs
 ```
 
+
+
 ### Flash
 
 ```bash
@@ -111,9 +119,11 @@ If upload fails, hold the shoulder button (GPIO0) while plugging USB, then retry
 pio device monitor -e m5stack-cardputer
 ```
 
+
+
 ### SD card
 
-Copy the **contents** of [`tools/sd_pack/`](tools/sd_pack/README.md) to the microSD **root** so the card has `/support_files/`, `/root/themes/`, `/menu/scripts/`. Firmware checks SD first, then LittleFS.
+Copy the **contents** of `[tools/sd_pack/](tools/sd_pack/README.md)` to the microSD **root** so the card has `/support_files/`, `/root/themes/`, `/menu/scripts/`. Firmware checks SD first, then LittleFS.
 
 ```text
 /support_files/
@@ -127,30 +137,38 @@ Copy the **contents** of [`tools/sd_pack/`](tools/sd_pack/README.md) to the micr
 /menu/scripts/         BadUSB / interpreter samples
 ```
 
-| Source | Goes where |
-|--------|------------|
-| `tools/sd_pack/` contents | SD card root |
-| Companion `.bin` | SD → `/support_files/companions/` |
-| `tools/build/data/support_files/` | LittleFS via `uploadfs` |
-| `kvxputer-*.bin` | Flash over USB |
+
+| Source                            | Goes where                        |
+| --------------------------------- | --------------------------------- |
+| `tools/sd_pack/` contents         | SD card root                      |
+| Companion `.bin`                  | SD → `/support_files/companions/` |
+| `tools/build/data/support_files/` | LittleFS via `uploadfs`           |
+| `kvxputer-*.bin`                  | Flash over USB                    |
+
 
 Details: [SD pack](tools/sd_pack/README.md), [Reference / storage](docs/REFERENCE.md).
 
 ---
 
+
+
 ## Using the device
+
+
 
 ### Main menu
 
 The home screen is a **2×3 channel grid**. The green footer shows the selected app.
 
-| Key | Action |
-|-----|--------|
-| `;` / `,` | Move up / left |
-| `.` / `/` | Move down / right |
-| Enter | Open selected app |
-| `` ` `` / Backspace | Back |
-| Unit Scroll | Rotate = select, press = open |
+
+| Key             | Action                        |
+| --------------- | ----------------------------- |
+| `;` / `,`       | Move up / left                |
+| `.` / `/`       | Move down / right             |
+| Enter           | Open selected app             |
+| ``` / Backspace | Back                          |
+| Unit Scroll     | Rotate = select, press = open |
+
 
 Tiles map to WiFi, Discovery, NetOps, BLE, RF, Infrared, RFID, Files, and the other apps below. Some appear only when the hardware or build flag is present (LoRa Cap, FM Si4713, Ethernet, `EVIL_EXTENSIONS`, non-lite).
 
@@ -158,10 +176,12 @@ Tiles map to WiFi, Discovery, NetOps, BLE, RF, Infrared, RFID, Files, and the ot
 
 On Cardputer / Adv, the side **G0** button (GPIO0 — same as the download/boot button) is a global shortcut. Behavior depends on **tap** vs **hold**:
 
-| Action | What happens |
-|--------|----------------|
+
+| Action                        | What happens                                                                                                                                                                                                                                                                           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Tap** (release before ~3 s) | **Fake-off** — blanks the display and turns the status LED off. The device stays awake; Wi‑Fi/BLE/apps keep running. Tap **G0** again to wake the screen (restores brightness). In **Charge**, tap blanks the panel but keeps a dim (~20%) battery-colored LED on (purple at 95–100%). |
-| **Hold** (≥ 3 s) | **Force home** — escapes the current app/submenu and returns to the main channel grid (fires once per hold; keep holding does not spam). If the screen was fake-off, it wakes first. |
+| **Hold** (≥ 3 s)              | **Force home** — escapes the current app/submenu and returns to the main channel grid (fires once per hold; keep holding does not spam). If the screen was fake-off, it wakes first.                                                                                                   |
+
 
 Notes:
 
@@ -169,22 +189,31 @@ Notes:
 - G0 is also used for flashing: hold G0 while plugging USB if upload fails (bootloader mode).
 - StickS3 does not use this Cardputer G0 fake-off / force-home path; see [M5StickS3](#m5sticks3) for its tap/hold button map.
 
+
+
 ### Home grid keyboard
 
 On the main channel grid (Cardputer / Adv):
 
-| Keys | What happens |
-|------|----------------|
-| **FN + `;`** | Brightness up 5% (5–100%) |
-| **FN + `.`** | Brightness down 5% (5–100%) |
-| **FN + `,`** | Volume down 5% (0–100) |
-| **FN + `/`** | Volume up 5% (beep at the new level) |
-| **FN + Space** | Mute (volume 0%) |
-| **backtick + Ctrl + Backspace + Space** (all four held) | Open **Mainscreen Shortcuts** |
+
+| Keys                                                    | What happens                         |
+| ------------------------------------------------------- | ------------------------------------ |
+| **Space**                                               | Quick search (apps; Tab toggles files) |
+| **FN +** `;`                                            | Brightness up 5% (5–100%)            |
+| **FN +** `.`                                            | Brightness down 5% (5–100%)          |
+| **FN +** `,`                                            | Volume down 5% (0–100)               |
+| **FN +** `/`                                            | Volume up 5% (beep at the new level) |
+| **FN + Space**                                          | Mute (volume 0%)                     |
+| **backtick + Ctrl + Backspace + Space** (all four held) | Open **Mainscreen Shortcuts**        |
+
 
 `;` `.` `,` `/` without FN still move the tile cursor. App letter shortcuts are unchanged.
 
+**Quick search:** type to filter the app catalog; empty shows the last 4 launches. **FN+↑↓** moves the list, **FN+1–4** opens that ranked result, **Enter** launches the selection, **Esc** closes. **Tab** switches to file name search under LittleFS `/` and SD `/kvxputer/` (progressive, capped).
+
 ---
+
+
 
 ## Modules & Add-ons
 
@@ -196,28 +225,32 @@ On-device setup lives under **Modules**. Domain-specific pin/module picks live u
 
 ### Quick map
 
-| Add-on | Interface | Serves | Setup |
-|--------|-----------|--------|-------|
-| [Unit Scroll](https://docs.m5stack.com/en/unit/UNIT-Scroll) | I2C `0x40` | Global navigation | **Modules → Unit Scroll** |
-| [Unit Joystick2](https://docs.m5stack.com/en/unit/Unit%20Joystick2) | I2C `0x63` | Global navigation | **Modules → Unit Joystick** |
-| [Unit PaHub v2.1](https://docs.m5stack.com/en/unit/Unit-PaHub%20v2.1) | I2C mux `0x70`–`0x77` | Multiplexes Grove units | **Modules → PaHub** |
-| [Unit RFID2](https://docs.m5stack.com/en/unit/rfid2) | I2C `0x28` | **RFID** read/write/clone | **RFID → Config → Module** |
-| PN532 (Elechouse / ITEAD) | I2C or SPI | **RFID** + NDEF emulate | **RFID → Config → Module** + Wiring help |
-| RC522 | SPI | **RFID** read/write | **RFID → Config → Module** |
-| ST25R3916 | SPI or I2C | **RFID** + emulate | **RFID → Config → Module** |
-| M5 RF433T / RF433R | Grove GPIO | **RF** TX/RX (simple) | **RF → Config** |
-| CC1101 | SPI (+ GDO on Grove) | **RF** full toolkit | **RF → Config → RF Module** |
-| NRF24L01(+) | SPI (+ CE on Grove) | **NRF24** | Auto / pin config on some boards |
-| M5 IR Mod / Grove IR | Grove GPIO | **Infrared** | **Infrared → Config** |
-| GPS module | UART on Grove | **GPS** wardriving / tracker | **GPS → Config** |
-| Adafruit Si4713 | I2C | **FM** broadcast | Board flag `FM_SI4713` |
-| W5500 Ethernet | SPI | **Ethernet** | SPI CS shared with Grove SPI stack |
-| Cardputer Adv LoRa Cap | Onboard SX1262 | **LoRa** chat | Present when `HAS_LORA_CAP` |
-| Mic (SPM1423 / INMP441) | Onboard / board pins | **Tools → Microphone** | Board mic flags |
-| Chameleon Ultra | BLE | **RFID → Chameleon** | Power on companion, then open app |
-| Amiibolink | BLE | **RFID → Amiibolink** | Power on companion, then open app |
-| PN532 BLE / PN532Killer | BLE or UART | **RFID → PN532 BLE / UART** | Pair / wire UART |
-| Companion ESP sketches | Separate MCU | CSI Radar, FindMy, ChatMesh, C5 Serial | Flash from PC; bins on SD |
+
+| Add-on                                                                | Interface             | Serves                                 | Setup                                    |
+| --------------------------------------------------------------------- | --------------------- | -------------------------------------- | ---------------------------------------- |
+| [Unit Scroll](https://docs.m5stack.com/en/unit/UNIT-Scroll)           | I2C `0x40`            | Global navigation                      | **Modules → Unit Scroll**                |
+| [Unit Joystick2](https://docs.m5stack.com/en/unit/Unit%20Joystick2)   | I2C `0x63`            | Global navigation                      | **Modules → Unit Joystick**              |
+| [Unit PaHub v2.1](https://docs.m5stack.com/en/unit/Unit-PaHub%20v2.1) | I2C mux `0x70`–`0x77` | Multiplexes Grove units                | **Modules → PaHub**                      |
+| [Unit RFID2](https://docs.m5stack.com/en/unit/rfid2)                  | I2C `0x28`            | **RFID** read/write/clone              | **RFID → Config → Module**               |
+| PN532 (Elechouse / ITEAD)                                             | I2C or SPI            | **RFID** + NDEF emulate                | **RFID → Config → Module** + Wiring help |
+| RC522                                                                 | SPI                   | **RFID** read/write                    | **RFID → Config → Module**               |
+| ST25R3916                                                             | SPI or I2C            | **RFID** + emulate                     | **RFID → Config → Module**               |
+| M5 RF433T / RF433R                                                    | Grove GPIO            | **RF** TX/RX (simple)                  | **RF → Config**                          |
+| CC1101                                                                | SPI (+ GDO on Grove)  | **RF** full toolkit                    | **RF → Config → RF Module**              |
+| NRF24L01(+)                                                           | SPI (+ CE on Grove)   | **NRF24**                              | Auto / pin config on some boards         |
+| M5 IR Mod / Grove IR                                                  | Grove GPIO            | **Infrared**                           | **Infrared → Config**                    |
+| GPS module                                                            | UART on Grove         | **GPS** wardriving / tracker           | **GPS → Config**                         |
+| Adafruit Si4713                                                       | I2C                   | **FM** broadcast                       | Board flag `FM_SI4713`                   |
+| W5500 Ethernet                                                        | SPI                   | **Ethernet**                           | SPI CS shared with Grove SPI stack       |
+| Cardputer Adv LoRa Cap                                                | Onboard SX1262        | **LoRa** chat                          | Present when `HAS_LORA_CAP`              |
+| Mic (SPM1423 / INMP441)                                               | Onboard / board pins  | **Tools → Microphone**                 | Board mic flags                          |
+| Chameleon Ultra                                                       | BLE                   | **RFID → Chameleon**                   | Power on companion, then open app        |
+| Amiibolink                                                            | BLE                   | **RFID → Amiibolink**                  | Power on companion, then open app        |
+| PN532 BLE / PN532Killer                                               | BLE or UART           | **RFID → PN532 BLE / UART**            | Pair / wire UART                         |
+| Companion ESP sketches                                                | Separate MCU          | CSI Radar, FindMy, ChatMesh, C5 Serial | Flash from PC; bins on SD                |
+
+
+
 
 ### Input: Unit Scroll
 
@@ -228,12 +261,16 @@ Rotary encoder + press for menu navigation.
 3. **Modules → Unit Scroll** — status, reconnect, invert direction, test screen.
 4. Rotate to move selection; press to open / confirm.
 
+
+
 ### Input: Unit Joystick2
 
 Analog stick for navigation on supported builds (`UNIT_JOYSTICK2`).
 
 1. Plug into PORT.A or a PaHub channel.
 2. **Modules → Unit Joystick** — status / reconnect.
+
+
 
 ### Hub: Unit PaHub v2.1
 
@@ -244,30 +281,38 @@ PCA9548A mux that splits one PORT.A into **six** Grove channels. Off by default.
 3. Supported channel assignments: **RFID2**, **NFC (PN532 I2C)**, **Unit Scroll**, **Joystick2**, **RF433R**.
 4. When RFID2/NFC channels are assigned, **RFID → Config → Module** can select **M5 RFID2 (chN)** / **M5 NFC (chN)**.
 
+
+
 ### RFID / NFC readers
 
 Select the active reader under **RFID → Config → RFID Module**. On-device pinouts: **RFID → Config → Wiring help**.
 
-| Module | Chip | Choice | Emulate | Apps |
-|--------|------|--------|---------|------|
-| M5 Unit RFID2 | WS1850S | M5 RFID2 | No | Read, Scan, Load, Erase, Write NDEF, clone workflows |
-| Elechouse PN532 V3 / ITEAD PN532 | PN532 | PN532 on I2C or SPI | Yes (NDEF / T4T limits) | Full Tag-O-Matic + Emulate |
-| RC522 | MFRC522 | RC522 on SPI | No | Read / write / clone |
-| ST25R3916 | ST25R3916 | ST25R SPI/I2C | Yes | Read / write / emulate (non-lite) |
+
+| Module                           | Chip      | Choice              | Emulate                 | Apps                                                 |
+| -------------------------------- | --------- | ------------------- | ----------------------- | ---------------------------------------------------- |
+| M5 Unit RFID2                    | WS1850S   | M5 RFID2            | No                      | Read, Scan, Load, Erase, Write NDEF, clone workflows |
+| Elechouse PN532 V3 / ITEAD PN532 | PN532     | PN532 on I2C or SPI | Yes (NDEF / T4T limits) | Full Tag-O-Matic + Emulate                           |
+| RC522                            | MFRC522   | RC522 on SPI        | No                      | Read / write / clone                                 |
+| ST25R3916                        | ST25R3916 | ST25R SPI/I2C       | Yes                     | Read / write / emulate (non-lite)                    |
+
 
 **PN532 I2C on Cardputer Adv (recommended)**
 
-| PN532 | Cardputer Adv | Grove |
-|-------|---------------|-------|
-| VCC | 5V | red |
-| GND | GND | black |
-| SDA | G2 | yellow |
-| SCL | G1 | white |
 
-| Board | Switches | Module |
-|-------|----------|--------|
-| Elechouse V3 | CH1 ON, CH2 OFF | PN532 on I2C |
-| ITEAD / Katranji | SET0 H, SET1 L | PN532 on I2C |
+| PN532 | Cardputer Adv | Grove  |
+| ----- | ------------- | ------ |
+| VCC   | 5V            | red    |
+| GND   | GND           | black  |
+| SDA   | G2            | yellow |
+| SCL   | G1            | white  |
+
+
+
+| Board            | Switches        | Module       |
+| ---------------- | --------------- | ------------ |
+| Elechouse V3     | CH1 ON, CH2 OFF | PN532 on I2C |
+| ITEAD / Katranji | SET0 H, SET1 L  | PN532 on I2C |
+
 
 **PN532 SPI (advanced):** shared SPI with SD; CS on G1 (`GROVE_SCL`). Do not run I2C RFID on PORT.A at the same time. Then **RFID Module → PN532 on SPI**.
 
@@ -275,10 +320,12 @@ Select the active reader under **RFID → Config → RFID Module**. On-device pi
 
 ### Sub-GHz RF: RF433 and CC1101
 
-| Module | How | Apps |
-|--------|-----|------|
-| M5 RF433T / RF433R | Single-wire Grove TX/RX | **RF** scan/copy, basic send |
-| CC1101 | SPI bus + GDO0 (often Grove SDA); CS on shared SPI | **RF** spectrum, RAW record, Sub-GHz presets, jammer, bruteforce, waterfall |
+
+| Module             | How                                                | Apps                                                                        |
+| ------------------ | -------------------------------------------------- | --------------------------------------------------------------------------- |
+| M5 RF433T / RF433R | Single-wire Grove TX/RX                            | **RF** scan/copy, basic send                                                |
+| CC1101             | SPI bus + GDO0 (often Grove SDA); CS on shared SPI | **RF** spectrum, RAW record, Sub-GHz presets, jammer, bruteforce, waterfall |
+
 
 1. Wire the module (CC1101 commonly via microSD SPI sniffer + Grove GDO).
 2. **RF → Config** — RF Module, frequency, TX/RX pins.
@@ -290,18 +337,22 @@ PaHub can host **RF433R** on a channel; do not combine that with a CC1101 occupy
 
 NRF24L01(+) on the shared SPI stack (CE often on Grove SDA, CS on SPI SS).
 
-| Serves | Apps |
-|--------|------|
+
+| Serves    | Apps                                         |
+| --------- | -------------------------------------------- |
 | **NRF24** | Information, Spectrum, MouseJack, NRF Jammer |
+
 
 Some boards expose **NRF24 → Config pins** (legacy vs shared SPI).
 
 ### Infrared
 
-| Module | How | Apps |
-|--------|-----|------|
-| Built-in IR LED | Board TX pin | kremote, TV-B-Gone, Custom IR, IR Read, jammer |
+
+| Module                                            | How                        | Apps                                                                                |
+| ------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
+| Built-in IR LED                                   | Board TX pin               | kremote, TV-B-Gone, Custom IR, IR Read, jammer                                      |
 | [M5 Unit IR](https://docs.m5stack.com/en/unit/ir) | Grove yellow TX / white RX | kremote Settings (Cardputer / Unit / Both); other IR apps via **Infrared → Config** |
+
 
 StickS3 enables EXT 5V while the Infrared menu is open for Grove IR power.
 
@@ -309,9 +360,11 @@ StickS3 enables EXT 5V while the Infrared menu is open for Grove IR power.
 
 UART GPS on Grove (TX/RX selectable under **GPS → Config**).
 
-| Serves | Apps |
-|--------|------|
+
+| Serves  | Apps                                                                   |
+| ------- | ---------------------------------------------------------------------- |
 | **GPS** | Wardriving (WiFi / BLE / both), GPS Tracker, Wardriving Master *(ext)* |
+
 
 Set baud rate to match the module (common: 9600 / 115200).
 
@@ -319,25 +372,35 @@ Set baud rate to match the module (common: 9600 / 115200).
 
 Adafruit Si4713 FM transmitter when the board build defines `FM_SI4713` (Cardputer does).
 
-| Serves | Apps |
-|--------|------|
+
+| Serves | Apps                                                  |
+| ------ | ----------------------------------------------------- |
 | **FM** | Broadcast live/reserved, stop, FM spectrum, Hijack TA |
+
+
+
 
 ### Ethernet (W5500)
 
 SPI Ethernet module on the shared SPI CS line.
 
-| Serves | Apps |
-|--------|------|
+
+| Serves       | Apps                                      |
+| ------------ | ----------------------------------------- |
 | **Ethernet** | Scan Hosts, DHCP Starvation, MAC Flooding |
+
+
+
 
 ### LoRa Cap (Cardputer Adv)
 
 Bundled SX1262 LoRa when `HAS_LORA_CAP` is set.
 
-| Serves | Apps |
-|--------|------|
+
+| Serves   | Apps                                |
+| -------- | ----------------------------------- |
 | **LoRa** | Chat, settings, username, frequency |
+
 
 GPS Config can also expose LoRa Cap options on Adv.
 
@@ -345,31 +408,41 @@ GPS Config can also expose LoRa Cap options on Adv.
 
 Onboard SPM1423 (Cardputer) or INMP441 on boards that define the mic pins.
 
-| Serves | Apps |
-|--------|------|
+
+| Serves                 | Apps                                             |
+| ---------------------- | ------------------------------------------------ |
 | **Tools → Microphone** | Spectrum, Record (WAV to `support_files/media/`) |
+
+
+
 
 ### Wireless RFID companions
 
 No Grove required — BLE/UART companions:
 
-| Device | Open | Role |
-|--------|------|------|
-| Chameleon Ultra | **RFID → Chameleon** | Dump / emulate via Chameleon BLE |
-| Amiibolink | **RFID → Amiibolink** | Amiibo upload / UID modes |
-| PN532 over BLE | **RFID → PN532 BLE** | HF/LF tools without wiring PORT.A |
-| PN532Killer (UART) | **RFID → PN532 UART** | UART-attached PN532Killer |
+
+| Device             | Open                  | Role                              |
+| ------------------ | --------------------- | --------------------------------- |
+| Chameleon Ultra    | **RFID → Chameleon**  | Dump / emulate via Chameleon BLE  |
+| Amiibolink         | **RFID → Amiibolink** | Amiibo upload / UID modes         |
+| PN532 over BLE     | **RFID → PN532 BLE**  | HF/LF tools without wiring PORT.A |
+| PN532Killer (UART) | **RFID → PN532 UART** | UART-attached PN532Killer         |
+
+
+
 
 ### Companion ESP firmwares
 
-Separate sketches in [`tools/companions/`](tools/companions/README.md). **Not** part of Cardputer flash. Build/upload from a PC, copy `.bin` to SD `/support_files/companions/`, list under **Modules → Companion bins**.
+Separate sketches in `[tools/companions/](tools/companions/README.md)`. **Not** part of Cardputer flash. Build/upload from a PC, copy `.bin` to SD `/support_files/companions/`, list under **Modules → Companion bins**.
 
-| Env | Hardware | Serves |
-|-----|----------|--------|
-| `companion-csi-beacon` | ESP32-S3 | **WiFi → CSI Radar** |
-| `companion-findmy` | ESP32-S3 | **BLE → FindMyEvil** |
-| `companion-chatmesh-relay` | ESP32 | **NetOps → EvilChatMesh** |
-| `companion-c5-unified` | ESP32-C5 | **WiFi → ESP32C5 Serial** |
+
+| Env                        | Hardware | Serves                    |
+| -------------------------- | -------- | ------------------------- |
+| `companion-csi-beacon`     | ESP32-S3 | **WiFi → CSI Radar**      |
+| `companion-findmy`         | ESP32-S3 | **BLE → FindMyEvil**      |
+| `companion-chatmesh-relay` | ESP32    | **NetOps → EvilChatMesh** |
+| `companion-c5-unified`     | ESP32-C5 | **WiFi → ESP32C5 Serial** |
+
 
 ```bash
 pio run -e companion-csi-beacon
@@ -378,6 +451,8 @@ pio run -e companion-c5-unified -t upload
 
 ---
 
+
+
 ## Menus & tools
 
 **(ext)** = needs `-DEVIL_EXTENSIONS=1` (on for Cardputer full, off for lite).
@@ -385,39 +460,41 @@ pio run -e companion-c5-unified -t upload
 
 ### WiFi
 
-| Tool | Purpose |
-|------|---------|
-| **Connect to Wifi** | Join an AP as STA. |
-| **Start WiFi AP** | SoftAP for portals and labs. |
-| **Turn Off WiFi** | Tear down STA/AP. |
-| **AP info** | Connected-network details (STA). |
-| **Wifi Atks** | Target AP, Karma, Beacon SPAM, Deauth Flood, Enhanced Deauth. Target mode: Information, Deauth, Handshake capture, Clone Portal, Deauth+Clone (± verify). |
-| **Evil Portal** | Captive portal from SD/LittleFS HTML; logs credentials. |
-| **NetCut** | Disrupt/select clients on the local segment. |
-| **Listen TCP / Client TCP** *(lite off)* | Raw TCP listen or outbound client. |
-| **SOCKS4 Proxy** *(lite off)* | SOCKS4 proxy (default port 1080). |
-| **TelNET / SSH** *(lite off)* | Telnet / SSH clients. |
-| **Sniffer** *(lite off)* | 802.11 capture / PCAP-style dumps. |
-| **Channel Analyzer** *(lite off)* | Channel occupancy view. |
-| **Jam Detect** *(lite off)* | Heuristic jamming / noise detection. |
-| **Deauth IDS** *(lite off)* | Per-BSSID deauth/disassoc counts + SD log. |
-| **PineAP / Rogue AP Hunter** *(lite off)* | Multi-SSID BSSIDs + same-SSID twin APs (`t` toggles). |
-| **LAN Watch** *(lite off)* | Gateway MAC/IP/DNS change alerts while STA. |
-| **Scan Hosts** *(lite off)* | ARP host discovery on the Wi‑Fi LAN. |
-| **Wireguard** *(lite off)* | WireGuard tunnel. |
-| **Responder** *(lite off)* | LLMNR/NBT-NS style responder for hash labs. |
-| **Net Toolkit** *(lite off)* | Port scan + banners, ping, dig, curl-lite (STA). |
-| **Kvxgotchi** *(lite off)* | Pwnagotchi-inspired grid companion UI. |
-| **WiFi Pass Recovery** *(lite off)* | Offline helpers against captured material. |
-| **Probes** *(ext)* | Probe SSID lists / spear content. |
-| **Handshakes** *(ext)* | Handshake Master — collect/manage PCAPs. |
-| **Wall Of Flipper** *(ext)* | Flipper-oriented Wi‑Fi wall. |
-| **WiFi Dead Drop** *(ext)* | Covert file drop (`wifi/deaddrop/`). |
-| **Open Wifi Checker** *(ext)* | Find open / weak networks. |
-| **Aircrack** *(ext)* | On-device helpers against stored captures. |
-| **CSI Radar** *(ext)* | CSI sensing (pair with CSI companion). |
-| **ESP32C5 Serial** *(ext)* | Dual-radio link to ESP32-C5 companion. |
-| **Config** | MAC, AP creds, hidden SSID scan, etc. |
+
+| Tool                                      | Purpose                                                                                                                                                   |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Connect to Wifi**                       | Join an AP as STA.                                                                                                                                        |
+| **Start WiFi AP**                         | SoftAP for portals and labs.                                                                                                                              |
+| **Turn Off WiFi**                         | Tear down STA/AP.                                                                                                                                         |
+| **AP info**                               | Connected-network details (STA).                                                                                                                          |
+| **Wifi Atks**                             | Target AP, Karma, Beacon SPAM, Deauth Flood, Enhanced Deauth. Target mode: Information, Deauth, Handshake capture, Clone Portal, Deauth+Clone (± verify). |
+| **Evil Portal**                           | Captive portal from SD/LittleFS HTML; logs credentials.                                                                                                   |
+| **NetCut**                                | Disrupt/select clients on the local segment.                                                                                                              |
+| **Listen TCP / Client TCP** *(lite off)*  | Raw TCP listen or outbound client.                                                                                                                        |
+| **SOCKS4 Proxy** *(lite off)*             | SOCKS4 proxy (default port 1080).                                                                                                                         |
+| **TelNET / SSH** *(lite off)*             | Telnet / SSH clients.                                                                                                                                     |
+| **Sniffer** *(lite off)*                  | 802.11 capture / PCAP-style dumps.                                                                                                                        |
+| **Channel Analyzer** *(lite off)*         | Channel occupancy view.                                                                                                                                   |
+| **Jam Detect** *(lite off)*               | Heuristic jamming / noise detection.                                                                                                                      |
+| **Deauth IDS** *(lite off)*               | Per-BSSID deauth/disassoc counts + SD log.                                                                                                                |
+| **PineAP / Rogue AP Hunter** *(lite off)* | Multi-SSID BSSIDs + same-SSID twin APs (`t` toggles).                                                                                                     |
+| **LAN Watch** *(lite off)*                | Gateway MAC/IP/DNS change alerts while STA.                                                                                                               |
+| **Scan Hosts** *(lite off)*               | ARP host discovery on the Wi‑Fi LAN.                                                                                                                      |
+| **Wireguard** *(lite off)*                | WireGuard tunnel.                                                                                                                                         |
+| **Responder** *(lite off)*                | LLMNR/NBT-NS style responder for hash labs.                                                                                                               |
+| **Net Toolkit** *(lite off)*              | Port scan + banners, ping, dig, curl-lite (STA).                                                                                                          |
+| **Kvxgotchi** *(lite off)*                | Pwnagotchi-inspired grid companion UI.                                                                                                                    |
+| **WiFi Pass Recovery** *(lite off)*       | Offline helpers against captured material.                                                                                                                |
+| **Probes** *(ext)*                        | Probe SSID lists / spear content.                                                                                                                         |
+| **Handshakes** *(ext)*                    | Handshake Master — collect/manage PCAPs.                                                                                                                  |
+| **Wall Of Flipper** *(ext)*               | Flipper-oriented Wi‑Fi wall.                                                                                                                              |
+| **WiFi Dead Drop** *(ext)*                | Covert file drop (`wifi/deaddrop/`).                                                                                                                      |
+| **Open Wifi Checker** *(ext)*             | Find open / weak networks.                                                                                                                                |
+| **Aircrack** *(ext)*                      | On-device helpers against stored captures.                                                                                                                |
+| **CSI Radar** *(ext)*                     | CSI sensing (pair with CSI companion).                                                                                                                    |
+| **ESP32C5 Serial** *(ext)*                | Dual-radio link to ESP32-C5 companion.                                                                                                                    |
+| **Config**                                | MAC, AP creds, hidden SSID scan, etc.                                                                                                                     |
+
 
 See [WiFi / raw frames](docs/WIFI_P0_AND_RAW_FRAMES.md).
 
@@ -427,138 +504,174 @@ Shortcuts to tools tagged as discovery in the app catalog (sniffer, analyzers, w
 
 ### NetOps
 
-| Tool | Purpose |
-|------|---------|
-| **SSH** *(lite off)* | SSH client. |
-| **Scan Hosts** *(lite off)* | ARP discovery. |
-| **Listen TCP / Client TCP** *(lite off)* | Raw TCP. |
-| **Responder** *(lite off)* | Name-service poisoning / hash collection. |
-| **Net Toolkit** *(lite off)* | Port scan + banners, ping, dig, curl-lite (STA). |
-| **Loot Console** *(lite off)* | Unified portal / responder / EAP loot browser + export. |
-| **Reverse Shell** *(lite off)* | Reverse shell / web-shell helper. |
-| **mDNS Poison** *(ext)* | Spoof Bonjour/mDNS answers (lab). |
-| **SMB Enum** *(ext)* | SMB/NetBIOS port probe + share-name helpers. |
-| **IPv6 RA** *(ext)* | ICMPv6 Router Advertisement lab helper. |
-| **Web Crawler** *(ext)* | HTTP crawl with SD wordlists. |
-| **Reverse TCP Tunnel** *(ext)* | Reverse tunnel for a local service. |
-| **DHCP Starvation** *(ext)* | Exhaust DHCP pools. |
-| **Rogue DHCP** *(ext)* | Rogue DHCP (STA/AP variants). |
-| **Switch DNS** *(ext)* | DNS redirect for MITM/portal labs. |
-| **Network Hijacking** *(ext)* | Gateway/route hijack helpers. |
-| **WPAD Abuse** *(ext)* | WPAD / proxy autodiscovery abuse. |
-| **NTLMv2** *(ext)* | Crack/clean NTLMv2 hashes. |
-| **UART Shell** *(ext)* | Serial shell bridge. |
-| **Printer Tools** *(ext)* | Network printer discovery/abuse. |
-| **HoneyPot** *(ext)* | Lightweight honeypot listeners. |
-| **EvilChatMesh** *(ext)* | Mesh chat (optional relay companion). |
-| **SIP Toolkit** *(ext)* | VoIP/SIP lab tools. |
-| **CCTV Toolkit** *(ext)* | CCTV stream / credential helpers. |
-| **SSDP Poisoner** *(ext)* | SSDP/UPnP discovery poisoning. |
-| **SkyJack** *(ext)* | Wi‑Fi drone control experiments. |
-| **UPnP Tools** *(ext)* | UPnP/IGD enumeration. |
-| **LDAP Dump** *(ext)* | LDAP enumeration. |
-| **Autodiscover Abuse** *(ext)* | Exchange Autodiscover lab. |
-| **CIW Zeroclick** *(ext)* | CIW helpers (assets on SD). |
-| **EAP Identity Sniff** *(ext)* | Capture EAP Identity on Wi‑Fi. |
+
+| Tool                                     | Purpose                                                 |
+| ---------------------------------------- | ------------------------------------------------------- |
+| **SSH** *(lite off)*                     | SSH client.                                             |
+| **Scan Hosts** *(lite off)*              | ARP discovery.                                          |
+| **Listen TCP / Client TCP** *(lite off)* | Raw TCP.                                                |
+| **Responder** *(lite off)*               | Name-service poisoning / hash collection.               |
+| **Net Toolkit** *(lite off)*             | Port scan + banners, ping, dig, curl-lite (STA).        |
+| **Loot Console** *(lite off)*            | Unified portal / responder / EAP loot browser + export. |
+| **Reverse Shell** *(lite off)*           | Reverse shell / web-shell helper.                       |
+| **mDNS Poison** *(ext)*                  | Spoof Bonjour/mDNS answers (lab).                       |
+| **SMB Enum** *(ext)*                     | SMB/NetBIOS port probe + share-name helpers.            |
+| **IPv6 RA** *(ext)*                      | ICMPv6 Router Advertisement lab helper.                 |
+| **Web Crawler** *(ext)*                  | HTTP crawl with SD wordlists.                           |
+| **Reverse TCP Tunnel** *(ext)*           | Reverse tunnel for a local service.                     |
+| **DHCP Starvation** *(ext)*              | Exhaust DHCP pools.                                     |
+| **Rogue DHCP** *(ext)*                   | Rogue DHCP (STA/AP variants).                           |
+| **Switch DNS** *(ext)*                   | DNS redirect for MITM/portal labs.                      |
+| **Network Hijacking** *(ext)*            | Gateway/route hijack helpers.                           |
+| **WPAD Abuse** *(ext)*                   | WPAD / proxy autodiscovery abuse.                       |
+| **NTLMv2** *(ext)*                       | Crack/clean NTLMv2 hashes.                              |
+| **UART Shell** *(ext)*                   | Serial shell bridge.                                    |
+| **Printer Tools** *(ext)*                | Network printer discovery/abuse.                        |
+| **HoneyPot** *(ext)*                     | Lightweight honeypot listeners.                         |
+| **EvilChatMesh** *(ext)*                 | Mesh chat (optional relay companion).                   |
+| **SIP Toolkit** *(ext)*                  | VoIP/SIP lab tools.                                     |
+| **CCTV Toolkit** *(ext)*                 | CCTV stream / credential helpers.                       |
+| **SSDP Poisoner** *(ext)*                | SSDP/UPnP discovery poisoning.                          |
+| **SkyJack** *(ext)*                      | Wi‑Fi drone control experiments.                        |
+| **UPnP Tools** *(ext)*                   | UPnP/IGD enumeration.                                   |
+| **LDAP Dump** *(ext)*                    | LDAP enumeration.                                       |
+| **Autodiscover Abuse** *(ext)*           | Exchange Autodiscover lab.                              |
+| **CIW Zeroclick** *(ext)*                | CIW helpers (assets on SD).                             |
+| **EAP Identity Sniff** *(ext)*           | Capture EAP Identity on Wi‑Fi.                          |
+
+
+
 
 ### BLE
 
-| Tool | Purpose |
-|------|---------|
-| **kvxkeyboard HID** *(lite off)* | Bluetooth HID remote (keyboard, media, mouse, presenter, jiggler, PTT). [Docs](docs/HID_REMOTE.md). |
-| **Media / Keyboard / Presenter (legacy)** *(lite off)* | Older single-purpose HID entry points. |
-| **BLE Scan** *(lite off)* | Scan advertisers. |
-| **iBeacon** *(lite off)* | Advertise as iBeacon. |
-| **Bad BLE** *(lite off)* | DuckyScript over BLE. [Docs](docs/HID_BADUSB.md). |
-| **BLE Spam** | Spoofed/noisy BLE advertisements. |
-| **BLE Suite** *(lite off)* | Multi-tool BLE utilities. |
-| **Ninebot** *(lite off)* | Scooter BLE experiments. |
-| **BLE Sniffer** *(lite only)* | Lite-build sniffer. |
-| **BLE Name Flood** *(ext)* | Flood name advertisements. |
-| **Wall Of Airtag** *(ext)* | AirTag / Find My wall. |
-| **FindMyEvil** *(ext)* | Find My experiments (keys on SD; optional companion). |
-| **Skimmer Detector** *(ext)* | Suspicious BLE skimmer heuristics. |
+
+| Tool                                                   | Purpose                                                                                             |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| **kvxkeyboard HID** *(lite off)*                       | Bluetooth HID remote (keyboard, media, mouse, presenter, jiggler, PTT). [Docs](docs/HID_REMOTE.md). |
+| **Media / Keyboard / Presenter (legacy)** *(lite off)* | Older single-purpose HID entry points.                                                              |
+| **BLE Scan** *(lite off)*                              | Scan advertisers.                                                                                   |
+| **iBeacon** *(lite off)*                               | Advertise as iBeacon.                                                                               |
+| **Bad BLE** *(lite off)*                               | DuckyScript over BLE. [Docs](docs/HID_BADUSB.md).                                                   |
+| **BLE Spam**                                           | Spoofed/noisy BLE advertisements.                                                                   |
+| **BLE Suite** *(lite off)*                             | Multi-tool BLE utilities.                                                                           |
+| **Ninebot** *(lite off)*                               | Scooter BLE experiments.                                                                            |
+| **BLE Sniffer** *(lite only)*                          | Lite-build sniffer.                                                                                 |
+| **BLE Name Flood** *(ext)*                             | Flood name advertisements.                                                                          |
+| **Wall Of Airtag** *(ext)*                             | AirTag / Find My wall.                                                                              |
+| **FindMyEvil** *(ext)*                                 | Find My experiments (keys on SD; optional companion).                                               |
+| **Skimmer Detector** *(ext)*                           | Suspicious BLE skimmer heuristics.                                                                  |
+
+
+
 
 ### RF (Sub-GHz)
 
 Needs RF433 and/or CC1101 — see [Modules & Add-ons](#modules--add-ons).
 
-| Tool | Purpose |
-|------|---------|
-| **Scan/copy** | Capture and replay remotes. |
-| **Record RAW** *(lite off)* | Raw Sub-GHz captures. |
-| **Custom SubGhz** *(lite off)* | Send presets from storage. |
-| **Spectrum** | Live spectrum. |
-| **RSSI / SquareWave / Spectogram** *(lite off)* | Alternate visualizations. |
-| **Listen** *(lite off)* | Audio listen path when speaker exists. |
-| **Bruteforce** *(lite off)* | Protocol brute helpers. |
-| **Jammer** *(lite off)* | Continuous TX jammer. |
-| **Config** | Module, frequency, pins. |
+
+| Tool                                            | Purpose                                |
+| ----------------------------------------------- | -------------------------------------- |
+| **Scan/copy**                                   | Capture and replay remotes.            |
+| **Record RAW** *(lite off)*                     | Raw Sub-GHz captures.                  |
+| **Custom SubGhz** *(lite off)*                  | Send presets from storage.             |
+| **Spectrum**                                    | Live spectrum.                         |
+| **RSSI / SquareWave / Spectogram** *(lite off)* | Alternate visualizations.              |
+| **Listen** *(lite off)*                         | Audio listen path when speaker exists. |
+| **Bruteforce** *(lite off)*                     | Protocol brute helpers.                |
+| **Jammer** *(lite off)*                         | Continuous TX jammer.                  |
+| **Config**                                      | Module, frequency, pins.               |
+
+
+
 
 ### NRF24
 
-| Tool | Purpose |
-|------|---------|
-| **Information** | Probe NRF24 status. |
-| **Spectrum** | 2.4 GHz channel view. |
+
+| Tool                       | Purpose                                          |
+| -------------------------- | ------------------------------------------------ |
+| **Information**            | Probe NRF24 status.                              |
+| **Spectrum**               | 2.4 GHz channel view.                            |
 | **MouseJack** *(lite off)* | Research against vulnerable 2.4 GHz HID dongles. |
-| **NRF Jammer** | Jam selected channels. |
+| **NRF Jammer**             | Jam selected channels.                           |
+
+
+
 
 ### Infrared
 
-| Tool | Purpose |
-|------|---------|
+
+| Tool                          | Purpose                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
 | **kvxputer universal remote** | **kremote** — learn/save/replay `.ir` profiles. [Docs](docs/KREMOTE.md). |
-| **TV-B-Gone** | Common TV power-off blasts. |
-| **Custom IR** | Play codes from SD `infrared/profiles/`. |
-| **IR Read** | Capture unknown remotes. |
-| **IR Jammer** *(lite off)* | Frequency-adjustable jammer. |
-| **TagTinker ESL** *(ext)* | Electronic shelf-label tools. |
-| **Config** | TX/RX pins and repeats. |
+| **TV-B-Gone**                 | Common TV power-off blasts.                                              |
+| **Custom IR**                 | Play codes from SD `infrared/profiles/`.                                 |
+| **IR Read**                   | Capture unknown remotes.                                                 |
+| **IR Jammer** *(lite off)*    | Frequency-adjustable jammer.                                             |
+| **TagTinker ESL** *(ext)*     | Electronic shelf-label tools.                                            |
+| **Config**                    | TX/RX pins and repeats.                                                  |
+
+
+
 
 ### RFID
 
 Wired readers and companions — see [Modules & Add-ons](#modules--add-ons).
 
-| Tool | Purpose |
-|------|---------|
-| **Read / Scan / Load / Erase** | Tag-O-Matic dump and file workflows. |
-| **Write NDEF / Emulate NDEF** | NDEF write/emulate (PN532/ST25 for emulate). |
-| **Chameleon** | Chameleon Ultra companion. |
-| **Read EMV** *(lite off)* | EMV reader helpers. |
-| **Read 125kHz** *(lite off)* | LF RFID125 path. |
-| **Amiibolink** *(lite off)* | Amiibo BLE companion. |
-| **PN532 BLE / UART** *(lite off)* | Wireless/UART PN532 paths. |
-| **Config** | Module selection and wiring help. |
+
+| Tool                              | Purpose                                      |
+| --------------------------------- | -------------------------------------------- |
+| **Read / Scan / Load / Erase**    | Tag-O-Matic dump and file workflows.         |
+| **Write NDEF / Emulate NDEF**     | NDEF write/emulate (PN532/ST25 for emulate). |
+| **Chameleon**                     | Chameleon Ultra companion.                   |
+| **Read EMV** *(lite off)*         | EMV reader helpers.                          |
+| **Read 125kHz** *(lite off)*      | LF RFID125 path.                             |
+| **Amiibolink** *(lite off)*       | Amiibo BLE companion.                        |
+| **PN532 BLE / UART** *(lite off)* | Wireless/UART PN532 paths.                   |
+| **Config**                        | Module selection and wiring help.            |
+
+
+
 
 ### GPS
 
-| Tool | Purpose |
-|------|---------|
-| **Wardriving** | Log WiFi and/or BLE with GPS to CSV. |
-| **Site Survey** *(lite off)* | Channel airtime × GPS CSV under `/kvxputer/app/WdBoth/survey_*.csv`. |
-| **Wardriving Master** *(ext)* | Multi-device collector mode. |
-| **GPS Tracker** *(lite off)* | Tracks / simple map HTML. |
-| **Config** | Baud rate and UART pins. |
+
+| Tool                          | Purpose                                                              |
+| ----------------------------- | -------------------------------------------------------------------- |
+| **Wardriving**                | Log WiFi and/or BLE with GPS to CSV.                                 |
+| **Site Survey** *(lite off)*  | Channel airtime × GPS CSV under `/kvxputer/app/WdBoth/survey_*.csv`. |
+| **Wardriving Master** *(ext)* | Multi-device collector mode.                                         |
+| **GPS Tracker** *(lite off)*  | Tracks / simple map HTML.                                            |
+| **Config**                    | Baud rate and UART pins.                                             |
+
+
+
 
 ### USB
 
-| Tool | Purpose |
-|------|---------|
-| **kvxkeyboard HID** *(lite off)* | USB HID remote. |
-| **BadUSB** *(lite off)* | DuckyScript over USB. |
-| **USB Keyboard / Clicker (legacy)** *(lite off)* | Older HID helpers. |
-| **USB U2F** *(when USB_as_HID)* | U2F gadget experiments. |
-| **Mass Storage** *(OTG)* | Expose SD/FS as USB disk. |
+
+| Tool                                             | Purpose                   |
+| ------------------------------------------------ | ------------------------- |
+| **kvxkeyboard HID** *(lite off)*                 | USB HID remote.           |
+| **BadUSB** *(lite off)*                          | DuckyScript over USB.     |
+| **USB Keyboard / Clicker (legacy)** *(lite off)* | Older HID helpers.        |
+| **USB U2F** *(when USB_as_HID)*                  | U2F gadget experiments.   |
+| **Mass Storage** *(OTG)*                         | Expose SD/FS as USB disk. |
+
+
+
 
 ### Files
 
-| Tool | Purpose |
-|------|---------|
-| **SD Card / LittleFS** | Browse and manage files. |
-| **WebUI** | HTTP file manager over Wi‑Fi. |
+
+| Tool                     | Purpose                                |
+| ------------------------ | -------------------------------------- |
+| **SD Card / LittleFS**   | Browse and manage files.               |
+| **WebUI**                | HTTP file manager over Wi‑Fi.          |
 | **Connect** *(lite off)* | Peer file/command sharing over serial. |
-| **Mass Storage** | Same MSC expose as USB. |
+| **Mass Storage**         | Same MSC expose as USB.                |
+
+
+
 
 ### Scripts *(lite off)*
 
@@ -566,64 +679,80 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 
 ### Tools
 
-| Tool | Purpose |
-|------|---------|
-| **Calculator** | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD; letter shortcuts (`s`/`c`/`t`…), Fn overlay; Esc/` clear, fn+Ok exit; `*` multiplies (drawn as green `x`), `x` solves linear equations (`2x=4`). |
-| **Media Player** *(speaker)* | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL). |
-| **PDA** *(lite off)* | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
-| **QRCodes** | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll. |
-| **TOTP** *(lite off, keyboard)* | Authenticator codes; device-bound store under `/kvxputer/totp/`. |
-| **Codec / Hash** *(lite off)* | Base64/hex/URL + MD5/SHA1/SHA256 of text or SD file. |
-| **MQTT** *(lite off)* | Connect / subscribe / publish (ESP-IDF mqtt client). |
-| **Bus Scanner** | Grove I2C scan (+ PaHub) and SPI pin map (Modules). |
-| **Microphone** | Spectrum and WAV record. |
-| **iButton** *(lite off)* | 1-Wire iButton read/write. |
-| **LLM Chat** *(ext)* | Stream chat to a configured LLM endpoint. |
+
+| Tool                            | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Calculator**                  | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD; letter shortcuts (`s`/`c`/`t`…), Fn overlay; Esc/`clear, fn+Ok exit;`*`multiplies (drawn as green`x`),` x `solves linear equations (`2x=4`).                                                                                                                                                                                                                            |
+| **Media Player** *(speaker)*    | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL).                                                                                                                                                                                                                                                                                                                        |
+| **PDA** *(lite off)*            | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
+| **QRCodes**                     | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll.                                                                                                                                                                                                                                                                                          |
+| **TOTP** *(lite off, keyboard)* | Authenticator codes; device-bound store under `/kvxputer/totp/`.                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Codec / Hash** *(lite off)*   | Base64/hex/URL + MD5/SHA1/SHA256 of text or SD file.                                                                                                                                                                                                                                                                                                                                                                                              |
+| **MQTT** *(lite off)*           | Connect / subscribe / publish (ESP-IDF mqtt client).                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Bus Scanner**                 | Grove I2C scan (+ PaHub) and SPI pin map (Modules).                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Microphone**                  | Spectrum and WAV record.                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **iButton** *(lite off)*        | 1-Wire iButton read/write.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **LLM Chat** *(ext)*            | Stream chat to a configured LLM endpoint.                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+
+
 
 ### Clock / Charge
 
-| Tool | Purpose |
-|------|---------|
-| **Clock** | Full-screen clock; submenu opens Timer. |
+
+| Tool       | Purpose                                                                                                                                                                                                                            |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Clock**  | Full-screen clock; submenu opens Timer.                                                                                                                                                                                            |
 | **Charge** | Charge-friendly UI. Up/Down steps panel brightness 0–100% (0% blanks the panel). LED stays a solid 20% battery color unless L toggles it off. S / G0 sleep the panel only. USB + charge switch off shows “Flip the charge switch”. |
+
+
+
 
 ### Config
 
-| Section | Purpose |
-|---------|---------|
-| **Display & UI** | Brightness, dim, orientation, colors, theme, shortcuts. |
-| **LED Config** | RGB color / effect / brightness. |
-| **Audio Config** *(lite off)* | Beeps / speaker options. |
-| **System Config** | Clock/NTP, language, network creds, startup app, sleep. |
-| **Power** | Sleep and power helpers. |
-| **Install App Store** *(lite off)* | Seed JS app-store script if missing. |
-| **Dev Mode** | Extra developer toggles. |
-| **About** | Device / build info. |
 
-<img src="docs/led.gif" alt="kvxputer RGB LED effects" width="360" />
+| Section                            | Purpose                                                 |
+| ---------------------------------- | ------------------------------------------------------- |
+| **Display & UI**                   | Brightness, dim, orientation, colors, theme, shortcuts. |
+| **LED Config**                     | RGB color / effect / brightness.                        |
+| **Audio Config** *(lite off)*      | Beeps / speaker options.                                |
+| **System Config**                  | Clock/NTP, language, network creds, startup app, sleep. |
+| **Power**                          | Sleep and power helpers.                                |
+| **Install App Store** *(lite off)* | Seed JS app-store script if missing.                    |
+| **Dev Mode**                       | Extra developer toggles.                                |
+| **About**                          | Device / build info.                                    |
+
+
+![kvxputer RGB LED effects](docs/led.gif)
 
 *RGB LED*
 
 ### Board-gated menus
 
-| Menu | Needs | Tools |
-|------|-------|-------|
-| **LoRa** | LoRa Cap / board LoRa | Chat, settings, username, frequency |
-| **FM** | Si4713 | Broadcast, spectrum, Hijack TA |
-| **Ethernet** | W5500 | Scan hosts, DHCP starvation, MAC flood |
+
+| Menu         | Needs                 | Tools                                  |
+| ------------ | --------------------- | -------------------------------------- |
+| **LoRa**     | LoRa Cap / board LoRa | Chat, settings, username, frequency    |
+| **FM**       | Si4713                | Broadcast, spectrum, Hijack TA         |
+| **Ethernet** | W5500                 | Scan hosts, DHCP starvation, MAC flood |
+
 
 ---
+
+
 
 ## M5StickS3
 
 Same `src/` tree; board HAL under `tools/porting/boards/m5stack-sticks3/`.
 
-| | Cardputer | StickS3 |
-|---|-----------|---------|
-| Input | Full keyboard (+ optional Unit Scroll) | Side: tap = next, hold = previous. Main: tap = OK, hold = back |
-| USB / BLE HID | Yes | Yes (button / on-screen entry) |
-| IR | TX + Grove | TX/RX onboard; EXT 5V in Infrared menu |
-| Artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-sticks3.bin` |
+
+|               | Cardputer                              | StickS3                                                        |
+| ------------- | -------------------------------------- | -------------------------------------------------------------- |
+| Input         | Full keyboard (+ optional Unit Scroll) | Side: tap = next, hold = previous. Main: tap = OK, hold = back |
+| USB / BLE HID | Yes                                    | Yes (button / on-screen entry)                                 |
+| IR            | TX + Grove                             | TX/RX onboard; EXT 5V in Infrared menu                         |
+| Artifact      | `kvxputer-m5stack-cardputer.bin`       | `kvxputer-m5stack-sticks3.bin`                                 |
+
 
 Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on StickS3.
 
@@ -631,34 +760,42 @@ Cardputer Adv extras (TCA8418 path, LoRa Cap, Scroll/PaHub defaults) stay off on
 
 Same `src/` tree; board HAL under `tools/porting/boards/m5stack-tab5/`. Boot, M5GFX 1280×720, Tab5 Keyboard, touch, Grove, and SD match milestone 1. The app catalog matches Cardputer. BLE is the hosted-C6 GAP backend; raw WiFi inject / promiscuous / CSI / GATT HID fail closed with a named message.
 
-| | Cardputer | Tab5 |
-|---|-----------|------|
-| Input | Onboard keyboard (+ optional Unit Scroll) | Tab5 Keyboard (Character mode) + touch (tap tile / swipe L/R / 3s hold Esc) |
-| Channel grid | 2×3 (6 per page) | 3×6 (18 per page) |
-| Display | 240×135 ST7789 | 1280×720 MIPI (ST7123 / ST7121 / ILI9881C via M5GFX) |
-| IR / RF / RFID | Onboard + Grove | Grove PORT.A (G53/G54); EXT 5V in Infrared menu |
-| WiFi / BLE | Full NimBLE-Arduino + raw TX | Same menus. Hosted C6 GAP scan/adv and STA/AP. Raw TX, promiscuous, CSI, GATT HID fail closed |
-| Artifact | `kvxputer-m5stack-cardputer.bin` | `kvxputer-m5stack-tab5.bin` |
 
-Pin matrix: [`tools/porting/boards/m5stack-tab5/connections.md`](tools/porting/boards/m5stack-tab5/connections.md).
+|                | Cardputer                                 | Tab5                                                                                          |
+| -------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Input          | Onboard keyboard (+ optional Unit Scroll) | Tab5 Keyboard (Character mode) + touch (tap tile / swipe L/R / 3s hold Esc)                   |
+| Channel grid   | 2×3 (6 per page)                          | 3×6 (18 per page)                                                                             |
+| Display        | 240×135 ST7789                            | 1280×720 MIPI (ST7123 / ST7121 / ILI9881C via M5GFX)                                          |
+| IR / RF / RFID | Onboard + Grove                           | Grove PORT.A (G53/G54); EXT 5V in Infrared menu                                               |
+| WiFi / BLE     | Full NimBLE-Arduino + raw TX              | Same menus. Hosted C6 GAP scan/adv and STA/AP. Raw TX, promiscuous, CSI, GATT HID fail closed |
+| Artifact       | `kvxputer-m5stack-cardputer.bin`          | `kvxputer-m5stack-tab5.bin`                                                                   |
+
+
+Pin matrix: `[tools/porting/boards/m5stack-tab5/connections.md](tools/porting/boards/m5stack-tab5/connections.md)`.
 
 ---
+
+
 
 ## Project layout
 
-| Path | Purpose |
-|------|---------|
-| `src/root/` | Core: UI, config, HAL, storage, net |
-| `src/menu/<domain>/` | One folder per main-menu app |
-| `tools/build/data/` | LittleFS factory seed |
-| `tools/build/embedded_resources/` | Assets compiled into firmware |
-| `platformio.ini`, `tools/porting/boards/`, `lib/` | Build and board porting |
-| `docs/` | Architecture, feature maps, HID/IR guides |
-| `tools/sd_pack/` | Copy-to-SD assets |
-| `tools/companions/` | Extra-ESP companion sketches |
-| `resources/` | Gitignored local reference only |
+
+| Path                                              | Purpose                                   |
+| ------------------------------------------------- | ----------------------------------------- |
+| `src/root/`                                       | Core: UI, config, HAL, storage, net       |
+| `src/menu/<domain>/`                              | One folder per main-menu app              |
+| `tools/build/data/`                               | LittleFS factory seed                     |
+| `tools/build/embedded_resources/`                 | Assets compiled into firmware             |
+| `platformio.ini`, `tools/porting/boards/`, `lib/` | Build and board porting                   |
+| `docs/`                                           | Architecture, feature maps, HID/IR guides |
+| `tools/sd_pack/`                                  | Copy-to-SD assets                         |
+| `tools/companions/`                               | Extra-ESP companion sketches              |
+| `resources/`                                      | Gitignored local reference only           |
+
 
 ---
+
+
 
 ## Docs
 
@@ -675,6 +812,8 @@ Pin matrix: [`tools/porting/boards/m5stack-tab5/connections.md`](tools/porting/b
 
 ---
 
+
+
 ## License & credits
 
 **AGPL-3.0-or-later.** See [LICENSE](LICENSE) and [NOTICE](NOTICE).
@@ -683,8 +822,7 @@ Maintained at [github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer).
 
 Do you like or enjoy this project? You can support me by [buying me a coffee!](https://buymeacoffee.com/kvx17)
 
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kvx17)
-
+!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)
 
 Early ideas came from Bruce (BruceDevices) and Evil-Cardputer (7h30th3r0n3); upstream notices remain where applicable, and the combined distribution is AGPL-3.0 because of the Bruce lineage. The project has since grown into its own codebase and direction.
 

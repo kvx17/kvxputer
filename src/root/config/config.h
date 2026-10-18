@@ -177,6 +177,9 @@ public:
     std::map<String, String> mainscreenShortcuts = {};
     // Optional hold binding per key (same key chars as mainscreenShortcuts).
     std::map<String, String> mainscreenShortcutHolds = {};
+    // Quick-search recents (newest first, max 4). App catalog ids / "sd:path"|"lfs:path".
+    std::vector<String> searchRecentApps = {};
+    std::vector<String> searchRecentFiles = {};
 
     std::vector<QrCodeEntry> qrCodes = {
         {"kvxputer GitHub", "https://github.com/kvx17/kvxputer"},

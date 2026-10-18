@@ -138,6 +138,12 @@ JsonDocument KvxputerConfig::toJson() const {
     JsonObject sch = setting["mainscreenShortcutHolds"].to<JsonObject>();
     for (const auto &pair : mainscreenShortcutHolds) { sch[pair.first] = pair.second; }
 
+    JsonArray sra = setting["searchRecentApps"].to<JsonArray>();
+    for (const String &id : searchRecentApps) sra.add(id);
+
+    JsonArray srf = setting["searchRecentFiles"].to<JsonArray>();
+    for (const String &path : searchRecentFiles) srf.add(path);
+
     JsonArray qrArray = setting["qrCodes"].to<JsonArray>();
     for (const auto &entry : qrCodes) {
         JsonObject qrEntry = qrArray.add<JsonObject>();
@@ -719,6 +725,22 @@ void KvxputerConfig::fromFile(bool checkFS) {
         JsonObject sch = setting["mainscreenShortcutHolds"].as<JsonObject>();
         for (JsonPair kv : sch) {
             mainscreenShortcutHolds[String(kv.key().c_str())] = kv.value().as<String>();
+        }
+    }
+
+    if (!setting["searchRecentApps"].isNull()) {
+        searchRecentApps.clear();
+        for (JsonVariant e : setting["searchRecentApps"].as<JsonArray>()) {
+            searchRecentApps.push_back(e.as<String>());
+            if (searchRecentApps.size() >= 4) break;
+        }
+    }
+
+    if (!setting["searchRecentFiles"].isNull()) {
+        searchRecentFiles.clear();
+        for (JsonVariant e : setting["searchRecentFiles"].as<JsonArray>()) {
+            searchRecentFiles.push_back(e.as<String>());
+            if (searchRecentFiles.size() >= 4) break;
         }
     }
 
