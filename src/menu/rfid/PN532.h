@@ -57,6 +57,7 @@ public:
                         uint16_t *rxLen) override;
     int load();
     int save(const String &filename);
+    int saveFlipper(const String &filename) override;
     String emulationCaveat() const override;
 
 private:

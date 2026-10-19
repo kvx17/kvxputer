@@ -1371,7 +1371,8 @@ int ST25R3916::emulate() {
 
     _listenStop();
     ST25R_LOG("emulate: encerrado — readers detectados=%d", readers);
-    return SUCCESS;
+    // TAG_NOT_PRESENT keeps Tag-O-Matic re-arming; SUCCESS means a reader interacted.
+    return (readers > 0) ? SUCCESS : TAG_NOT_PRESENT;
 }
 
 int ST25R3916::load() {
@@ -3420,6 +3421,119 @@ int ST25R3916::transceive_apdu(const uint8_t *tx, uint16_t txLen, uint8_t *rx, u
         _nfc->rfalNfcDeactivate(false);
         return FAILURE;
     }
+    _nfc->rfalNfcDeactivate(false);
+    return SUCCESS;
+}
+
+int ST25R3916::harvest_nonces(const String &filepath, uint32_t timeoutMs) {
+    // Full Crypto1 nonce logging needs listen-mode hooks; until then, run emulate
+    // briefly and write a marker so MFKey UI has a file to open.
+    FS *fs = nullptr;
+    if (!getFsStorage(fs) || !fs) return FAILURE;
+    File f = fs->open(filepath, FILE_WRITE);
+    if (!f) return FAILURE;
+    f.println("# kvxputer nonce harvest placeholder");
+    f.println("# Unit NFC I2C has no IRQ — full mfkey32 harvest TBD");
+    f.println("UID: " + printableUID.uid);
+    uint32_t start = millis();
+    int emuRc = TAG_NOT_PRESENT;
+    while (millis() - start < timeoutMs) {
+        if (check(EscPress) || returnToMenu) break;
+        emuRc = emulate();
+        if (emuRc == SUCCESS) {
+            f.println("EVENT: reader_ok");
+            break;
+        }
+        delay(20);
+        yield();
+    }
+    f.close();
+    if (emuRc == SUCCESS) return SUCCESS;
+    if (emuRc == NOT_IMPLEMENTED) return NOT_IMPLEMENTED;
+    return TAG_NOT_PRESENT;
+}
+
+RFIDInterface::MagicType ST25R3916::magic_probe() {
+    if (!_nfc || !_hw) return MAGIC_NONE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev = nullptr;
+    if (!_pollForTag(&dev)) return MAGIC_NONE;
+    if (dev->type != RFAL_NFC_LISTEN_TYPE_NFCA) {
+        _nfc->rfalNfcDeactivate(false);
+        return MAGIC_NONE;
+    }
+    uint8_t sak = dev->dev.nfca.selRes.sak;
+    // Gen1 backdoor probe (0x40, 7 bits) — same framing as _writeMagicGen1UID.
+    uint8_t cmd40 = 0x40;
+    uint8_t rxBuf[4] = {0};
+    uint16_t actLen = 0;
+    rfalTransceiveContext ctx;
+    ctx.txBuf = &cmd40;
+    ctx.txBufLen = 7;
+    ctx.rxBuf = rxBuf;
+    ctx.rxBufLen = 32;
+    ctx.rxRcvdLen = &actLen;
+    ctx.flags = (uint32_t)RFAL_TXRX_FLAGS_CRC_TX_MANUAL | (uint32_t)RFAL_TXRX_FLAGS_PAR_TX_NONE |
+                (uint32_t)RFAL_TXRX_FLAGS_CRC_RX_KEEP | (uint32_t)RFAL_TXRX_FLAGS_PAR_RX_KEEP;
+    ctx.fwt = rfalConv64fcTo1fc(5000);
+    MagicType result = MAGIC_NONE;
+    if (_hw->rfalStartTransceive(&ctx) == ST_ERR_NONE) {
+        uint32_t t0 = millis();
+        while (millis() - t0 < 50) {
+            _hw->rfalWorker();
+            if (_hw->rfalGetTransceiveState() == RFAL_TXRX_STATE_IDLE) break;
+        }
+        if (_hw->rfalGetTransceiveStatus() == ST_ERR_NONE && rxBuf[0] == 0x0A) result = MAGIC_GEN1;
+        else if (sak == 0x00) result = MAGIC_UNKNOWN; // possible Gen2 UL-style
+    }
+    _nfc->rfalNfcDeactivate(false);
+    return result;
+}
+
+int ST25R3916::magic_write_uid() {
+    // clone() already tries Gen2 then Gen1 UID write paths.
+    return clone();
+}
+
+int ST25R3916::magic_write_dump() {
+    if (mfcLoaded) return clone();
+    return clone();
+}
+
+int ST25R3916::iso15693_inventory(String &uidOut) {
+    preferredReadAs = READ_AS_ISO15693;
+    int rc = read(0);
+    if (rc != SUCCESS) return rc;
+    if (printableUID.picc_type.indexOf("15693") < 0 && printableUID.picc_type.indexOf("ISO15693") < 0) {
+        // Still return UID if we got something from NFC-V path stored as picc_type
+        if (printableUID.uid.length() == 0) return TAG_NOT_MATCH;
+    }
+    uidOut = printableUID.uid;
+    return SUCCESS;
+}
+
+int ST25R3916::desfire_list() {
+    preferredReadAs = READ_AS_ISODEP;
+    int rc = read(0);
+    if (rc != SUCCESS) return rc;
+    if (printableUID.picc_type.indexOf("DESFire") < 0 && strAllPages.indexOf("DESFire") < 0) {
+        return TAG_NOT_MATCH;
+    }
+    return SUCCESS;
+}
+
+int ST25R3916::dict_read_classic(bool knownKeysOnly) {
+    (void)knownKeysOnly; // auth loop already tries builtin + user keys
+    preferredReadAs = READ_AS_CLASSIC;
+    return read(0);
+}
+
+int ST25R3916::field_poll() {
+    if (!_nfc) return FAILURE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev = nullptr;
+    if (!_pollForTag(&dev, 400)) return TAG_NOT_PRESENT;
+    _parseDevice(dev);
     _nfc->rfalNfcDeactivate(false);
     return SUCCESS;
 }

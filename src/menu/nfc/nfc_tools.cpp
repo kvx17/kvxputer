@@ -23,7 +23,7 @@ static bool withLiveTag(RFIDInterface **outRfid, PahubChannelGuard **outGuard, b
         return false;
     }
     if (needRead) {
-        displayInfo("Hold tag near reader...");
+        displayInfo("Hold tag near reader,\nthen press any key.", true);
         int result = RFIDInterface::TAG_NOT_PRESENT;
         uint32_t start = millis();
         while (millis() - start < 15000 && !returnToMenu) {
@@ -64,36 +64,31 @@ void nfcReadRecords() {
     }
 
     while (!returnToMenu) {
+        int pick = -1;
         options.clear();
         for (size_t i = 0; i < records.size(); i++) {
             String label = String(i + 1) + ". " + records[i].typeLabel + ": " + records[i].summary;
             if (label.length() > 40) label = label.substring(0, 37) + "...";
-            size_t idx = i;
-            options.push_back({label, [idx, &records]() {
-                                   options = {
-                                       {"Details",
-                                        [idx, &records]() {
-                                            ScrollableTextArea area(records[idx].typeLabel);
-                                            area.addLine(records[idx].detail);
-                                            area.addLine("");
-                                            area.addLine("Esc = back");
-                                            area.show();
-                                        }},
-                                   };
-                                   if (records[idx].qrPayload.length()) {
-                                       options.push_back(
-                                           {"Show QR", [idx, &records]() {
-                                                qrcode_display(records[idx].qrPayload);
-                                            }}
-                                       );
-                                   }
-                                   options.push_back({"Back", []() {}});
-                                   loopOptions(options, MENU_TYPE_SUBMENU, "Record");
-                               }});
+            options.emplace_back(label, [&, i]() { pick = (int)i; });
         }
-        options.push_back({"Back", []() {}});
-        int sel = loopOptions(options, MENU_TYPE_SUBMENU, "NDEF records");
-        if (sel < 0 || sel == (int)options.size() - 1) break;
+        options.emplace_back("Back", [&]() { pick = -2; });
+        if (loopOptions(options, MENU_TYPE_SUBMENU, "NDEF records") < 0 || pick < 0) break;
+        if (pick == -2) break;
+
+        int act = -1;
+        options = {{"Details", [&]() { act = 0; }}};
+        if (records[pick].qrPayload.length()) options.emplace_back("Show QR", [&]() { act = 1; });
+        options.emplace_back("Back", [&]() { act = 2; });
+        if (loopOptions(options, MENU_TYPE_SUBMENU, "Record") < 0 || act < 0 || act == 2) continue;
+        if (act == 0) {
+            ScrollableTextArea area(records[pick].typeLabel);
+            area.addLine(records[pick].detail);
+            area.addLine("");
+            area.addLine("Esc = back");
+            area.show();
+        } else if (act == 1) {
+            qrcode_display(records[pick].qrPayload);
+        }
     }
     releaseLive(rfid, guard);
 #endif
@@ -182,7 +177,7 @@ void nfcLockTag() {
              RFIDInterface *rfid = nullptr;
              PahubChannelGuard *guard = nullptr;
              if (!withLiveTag(&rfid, &guard, true)) return;
-             displayInfo("Locking NTAG...");
+             displayInfo("Locking NTAG...", true);
              int rc = rfid->lock_ntag();
              if (rc == RFIDInterface::SUCCESS) displaySuccess("Tag locked permanently.", true);
              else if (rc == RFIDInterface::NOT_IMPLEMENTED)
@@ -262,7 +257,7 @@ void nfcFormatMemory() {
              RFIDInterface *rfid = nullptr;
              PahubChannelGuard *guard = nullptr;
              if (!withLiveTag(&rfid, &guard, false)) return;
-             displayInfo("Hold tag to format...");
+             displayInfo("Hold tag to format,\nthen press any key.", true);
              int rc = RFIDInterface::TAG_NOT_PRESENT;
              uint32_t start = millis();
              while (millis() - start < 15000 && !returnToMenu) {
@@ -303,7 +298,7 @@ void nfcSendApdu() {
     RFIDInterface *rfid = nullptr;
     PahubChannelGuard *guard = nullptr;
     if (!withLiveTag(&rfid, &guard, false)) return;
-    displayInfo("Hold ISO-DEP tag...");
+    displayInfo("Hold ISO-DEP tag,\nthen press any key.", true);
     uint8_t rx[256];
     uint16_t rxLen = 0;
     int rc = RFIDInterface::TAG_NOT_PRESENT;

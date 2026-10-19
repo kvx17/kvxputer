@@ -639,23 +639,23 @@ RFID2 / RC522 (13.56 MHz basics) and 125 kHz. NFC tools live under **NFC** with 
 
 ### NFC
 
-13.56 MHz PN532 / ST25 tools and companions — see [Modules & Add-ons](#modules--add-ons). Separate from RFID Config.
+13.56 MHz PN532 / **M5 Unit NFC (ST25R3916)** tools — see [Modules & Add-ons](#modules--add-ons). Separate from **RFID** (RFID2/RC522/125 kHz). Behavior inspired by Flipper NFC / mfkey / NFC Maker; reimplemented on kvxputer drivers (no Flipper source).
+
+Top menu stays short: **Read / Scan / Load / Erase**, then **Classic…**, **Tags…**, **NDEF tools…**, **Lab…**, **Parsers…**, **Companions…**, **Config**.
 
 
-| Tool                              | Purpose                                                        |
+| Tool / submenu                    | Purpose                                                        |
 | --------------------------------- | -------------------------------------------------------------- |
 | **Read / Scan / Load / Erase**    | Tag-O-Matic dump and file workflows (NFC module).              |
-| **Write NDEF**                    | Write NDEF to a blank Ultralight/NTAG.                         |
-| **Emulate NDEF**                  | On-the-fly: type URL/text/Wi-Fi/… and arm radio (PN532/ST25).  |
-| **Read records / Memory / Chip**  | NDEF list, ASCII dump, chip info.                              |
-| **Lock / Password / Format**      | NTAG21x lock, PWD, zero user memory (where supported).         |
-| **NFC command**                   | Single raw APDU (PN532/ST25).                                  |
-| **Save as file**                  | Compose NDEF → card type → save `.rfid` / `.nfc`.              |
-| **Chameleon**                     | Chameleon Ultra companion.                                     |
-| **Read EMV** *(lite off)*         | EMV reader helpers.                                            |
-| **Amiibolink** *(lite off)*       | Amiibo BLE companion.                                          |
-| **PN532 BLE / UART** *(lite off)* | Wireless/UART PN532 paths.                                     |
-| **Config**                        | NFC Module (PN532 / ST25) and wiring help.                     |
+| **Classic…**                      | Detect Reader *(lite off)*, MFKey *(lite off)*, dict attack, Magic wizard, dump editor. Nonces under `/support_files/rfid/nonces/`. Unit NFC I2C has no IRQ — harvest can be slow or empty. |
+| **Tags…**                         | ISO15693 inventory/blocks, DESFire browser, Ultralight-C auth (`ulc_keys.txt`), FeliCa services, forced-type read. |
+| **NDEF tools…**                   | Write/emulate NDEF, records (+ Show QR), memory/chip, lock/PWD/format, single APDU, save dump. Compose includes Android App record and multi-record URI append. |
+| **Lab…**                          | APDU scripts (`/support_files/rfid/apdu/`), compare file vs live tag, field presence poll. |
+| **Parsers…**                      | Amiibo dump write/emulate *(lite off)*, transit heuristics *(lite off)*, ePassport BAC probe *(lite off, own documents only)*, Picopass/e-ink honest stubs. |
+| **Companions…**                   | EMV, SRIX, Amiibolink, PN532 BLE/UART *(lite off)*, Chameleon. |
+| **Config**                        | NFC Module (PN532 / Unit NFC ST25) and wiring help.            |
+
+Post-read Tag-O-Matic actions (NFC domain) also offer Compare, Magic write, Detect Reader, and Dict retry. Flipper `.nfc` save/load works on ST25 and PN532.
 
 
 

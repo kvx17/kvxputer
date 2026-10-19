@@ -23,6 +23,8 @@
 #include "RFID2.h"
 #include "ndef_compose.h"
 #include "rfid_shared.h"
+#include "menu/nfc/nfc_classic.h"
+#include "menu/nfc/nfc_lab.h"
 
 #define NDEF_DATA_SIZE 100
 #define SCAN_DUMP_SIZE 5
@@ -111,11 +113,20 @@ void TagOMatic::loop() {
     while (1) {
         if (returnToMenu) break;
         if (check(EscPress)) {
+            // During NDEF/card emulate, Esc stops emulation and returns to read —
+            // do not tear down the whole Tag-O-Matic session.
+            if (current_state == EMULATE_NDEF_MODE || current_state == EMULATE_MODE) {
+                _ndef_created = false;
+                set_state(READ_MODE);
+                continue;
+            }
             returnToMenu = true;
             break;
         }
 
-        if (check(SelPress)) {
+        // While armed for emulate, Sel must not open the state picker — leftover
+        // OK from the NDEF keyboard used to abort emulation immediately.
+        if (check(SelPress) && current_state != EMULATE_NDEF_MODE && current_state != EMULATE_MODE) {
             if (current_state == SCAN_MODE && !_scanned_tags.empty()) {
                 {
                     TftFrame frame;
@@ -182,6 +193,10 @@ void TagOMatic::tag_actions_menu() {
         ActErase,
         ActView,
         ActReadAgain,
+        ActCompare,
+        ActMagic,
+        ActDetect,
+        ActDict,
     };
 
     for (;;) {
@@ -201,6 +216,14 @@ void TagOMatic::tag_actions_menu() {
         options.emplace_back("Check tag", [&]() { act = ActCheck; });
         options.emplace_back("Erase tag", [&]() { act = ActErase; });
         options.emplace_back("View dump", [&]() { act = ActView; });
+        if (_domain == DOMAIN_NFC) {
+            options.emplace_back("Compare dump", [&]() { act = ActCompare; });
+            options.emplace_back("Magic write", [&]() { act = ActMagic; });
+#ifndef LITE_VERSION
+            options.emplace_back("Detect Reader", [&]() { act = ActDetect; });
+#endif
+            options.emplace_back("Dict retry", [&]() { act = ActDict; });
+        }
         options.emplace_back("Read again", [&]() { act = ActReadAgain; });
 
         if (loopOptions(options, MENU_TYPE_SUBMENU, (_domain == DOMAIN_NFC) ? "Tag" : "RFID tag") < 0 ||
@@ -227,6 +250,20 @@ void TagOMatic::tag_actions_menu() {
                 display_banner();
                 padprintln("Waiting for tag...");
                 return;
+            case ActCompare:
+                nfcCompareDumps();
+                continue;
+            case ActMagic:
+                nfcMagicWizard();
+                continue;
+#ifndef LITE_VERSION
+            case ActDetect:
+                nfcDetectReader();
+                continue;
+#endif
+            case ActDict:
+                nfcDictAttack();
+                continue;
             default: return;
         }
     }
@@ -294,6 +331,9 @@ void TagOMatic::set_state(RFID_State state) {
             // ST25R3916 needs an explicit T4T request to synthesize a UID; PN532
             // ignores emuMode and always serves NDEF over ISO-DEP regardless.
             _rfid->emuMode = "t4t";
+            SelPress = false;
+            EscPress = false;
+            AnyKeyPress = false;
             padprintln("Choose NDEF content, then wait for a reader.");
             padprintln("Press [BACK] to stop.");
             padprintln("");
@@ -581,26 +621,43 @@ void TagOMatic::emulate_ndef_data() {
             set_state(READ_MODE);
             return; // user backed out of the content picker
         }
+        // Drop leftover OK/Esc from the content picker so we actually arm target mode.
+        SelPress = false;
+        EscPress = false;
+        AnyKeyPress = false;
+        NextPress = false;
+        PrevPress = false;
+        returnToMenu = false;
         display_banner();
         dump_ndef_details();
         String caveat = _rfid->emulationCaveat();
         if (caveat.length() > 0) padprintln("[!] " + caveat);
-        padprintln("Waiting for an NFC reader...");
+        padprintln("Emulating NDEF — tap a phone/reader.");
         padprintln("Press [BACK] to stop.");
         padprintln("");
     }
 
     int result = _rfid->emulate();
-    if (returnToMenu) return;
+    // PN532 used to set returnToMenu on Esc; treat that as stop-emulate only.
+    if (returnToMenu) {
+        returnToMenu = false;
+        _ndef_created = false;
+        set_state(READ_MODE);
+        return;
+    }
 
     switch (result) {
         case RFIDInterface::SUCCESS:
-            displaySuccess("Reader interaction complete.");
-            delay(400);
-            _ndef_created = false;
-            set_state(READ_MODE);
+            displaySuccess("Reader read the NDEF.", true);
+            // Stay armed with the same content so another tap still works.
+            display_banner();
+            dump_ndef_details();
+            padprintln("Still emulating — tap again or [BACK].");
+            padprintln("");
             break;
-        case RFIDInterface::TAG_NOT_PRESENT: return; // keep waiting, same content
+        case RFIDInterface::TAG_NOT_PRESENT:
+            // Timeout / no reader yet — keep same content and re-arm.
+            return;
         case RFIDInterface::NOT_IMPLEMENTED:
             displayError("Card emulation not supported.", true);
             _ndef_created = false;

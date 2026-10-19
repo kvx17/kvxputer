@@ -279,14 +279,23 @@ static bool composeCustom(RFIDInterface *rfid) {
 }
 
 static bool composeHttpsUrl(RFIDInterface *rfid) {
-    String prefix = "https://";
+    int pick = -1;
     options = {
-        {"https://",     [&]() { prefix = "https://"; }    },
-        {"https://www.", [&]() { prefix = "https://www."; }},
-        {"http://",      [&]() { prefix = "http://"; }     },
-        {"None",         [&]() { prefix = ""; }            },
+        {"kvxputer GitHub", [&]() { pick = 0; }},
+        {"https://",        [&]() { pick = 1; }},
+        {"https://www.",    [&]() { pick = 2; }},
+        {"http://",         [&]() { pick = 3; }},
+        {"None",            [&]() { pick = 4; }},
     };
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "URL prefix") < 0) return false;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "URL prefix") < 0 || pick < 0) return false;
+    if (pick == 0) {
+        ndefBuildUri(rfid, "https://github.com/kvx17/kvxputer");
+        return true;
+    }
+    const char *prefix = "";
+    if (pick == 1) prefix = "https://";
+    else if (pick == 2) prefix = "https://www.";
+    else if (pick == 3) prefix = "http://";
     return promptUri(rfid, prefix, "URL:");
 }
 
@@ -358,6 +367,8 @@ bool ndefComposeInteractive(RFIDInterface *rfid) {
         PickCustom,
         PickEmpty,
         PickSaved,
+        PickAndroidApp,
+        PickAppendUri,
     };
 
     int pick = -1;
@@ -377,6 +388,8 @@ bool ndefComposeInteractive(RFIDInterface *rfid) {
         {"Unit.Link",   [&]() { pick = PickUnitLink; } },
         {"Social",      [&]() { pick = PickSocial; }   },
         {"Search",      [&]() { pick = PickSearch; }   },
+        {"Android App", [&]() { pick = PickAndroidApp; }},
+        {"+ Append URI",[&]() { pick = PickAppendUri; } },
         {"Custom",      [&]() { pick = PickCustom; }   },
         {"Empty",       [&]() { pick = PickEmpty; }    },
         {"Saved links", [&]() { pick = PickSaved; }    },
@@ -411,6 +424,50 @@ bool ndefComposeInteractive(RFIDInterface *rfid) {
         case PickSocial: return composeSocial(rfid);
         case PickSearch: return composeSearch(rfid);
         case PickCustom: return composeCustom(rfid);
+        case PickAndroidApp: {
+            String pkg = keyboard("", 80, "Package name:");
+            if (pkg == "\x1B") return false;
+            // External type "android.com:pkg" with package payload.
+            clearMsg(rfid);
+            const char *type = "android.com:pkg";
+            std::vector<uint8_t> rec;
+            rec.push_back(0xD4); // MB ME SR TNF=external
+            rec.push_back((uint8_t)strlen(type));
+            rec.push_back((uint8_t)pkg.length());
+            for (const char *p = type; *p; p++) rec.push_back((uint8_t)*p);
+            for (size_t i = 0; i < pkg.length(); i++) rec.push_back((uint8_t)pkg.charAt(i));
+            rfid->rawNdefRecord = rec;
+            return true;
+        }
+        case PickAppendUri: {
+            String u = keyboard("https://", 120, "Extra URI:");
+            if (u == "\x1B") return false;
+            // Build a short URI record and append to existing raw or convert current msg.
+            std::vector<uint8_t> existing = rfid->rawNdefRecord;
+            if (existing.empty() && rfid->ndefMessage.payloadSize > 0) {
+                existing.push_back(0xD1);
+                existing.push_back(0x01);
+                existing.push_back(rfid->ndefMessage.payloadSize);
+                existing.push_back(rfid->ndefMessage.payloadType);
+                for (uint8_t i = 0; i < rfid->ndefMessage.payloadSize; i++)
+                    existing.push_back(rfid->ndefMessage.payload[i]);
+            }
+            ndefBuildUri(rfid, u);
+            std::vector<uint8_t> second;
+            second.push_back(0x11); // ME SR TNF=well-known (not MB — middle/end)
+            second.push_back(0x01);
+            second.push_back(rfid->ndefMessage.payloadSize);
+            second.push_back(rfid->ndefMessage.payloadType);
+            for (uint8_t i = 0; i < rfid->ndefMessage.payloadSize; i++)
+                second.push_back(rfid->ndefMessage.payload[i]);
+            if (!existing.empty()) {
+                if (existing[0] & 0x40) existing[0] = (uint8_t)(existing[0] & ~0x40); // clear ME on first
+                existing.insert(existing.end(), second.begin(), second.end());
+                clearMsg(rfid);
+                rfid->rawNdefRecord = existing;
+            }
+            return true;
+        }
         case PickEmpty:
             ndefBuildEmpty(rfid);
             return true;

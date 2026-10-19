@@ -51,6 +51,26 @@ public:
 
     enum NDEF_Payload_Type { NDEF_TEXT = 0x54, NDEF_URI = 0x55 };
 
+    /** Forced / preferred HF family for hybrid tags (read_as). */
+    enum ReadAsType {
+        READ_AS_AUTO = 0,
+        READ_AS_CLASSIC = 1,
+        READ_AS_UL_NTAG = 2,
+        READ_AS_ISO15693 = 3,
+        READ_AS_FELICA = 4,
+        READ_AS_ISODEP = 5,
+    };
+
+    enum MagicType {
+        MAGIC_NONE = 0,
+        MAGIC_GEN1 = 1,
+        MAGIC_GEN2 = 2,
+        MAGIC_GEN4 = 3,
+        MAGIC_UNKNOWN = 4,
+    };
+
+    ReadAsType preferredReadAs = READ_AS_AUTO;
+
     uint8_t keys[15][6] = {
         {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
         {0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5},
@@ -124,6 +144,51 @@ public:
     virtual int loadFromFile(const String &filepath);
     virtual int save(const String &filename) = 0;
     virtual int saveFlipper(const String &filename) { return NOT_IMPLEMENTED; }
+
+    // --- NFC toolkit expansion (defaults NOT_IMPLEMENTED; refuse in UI) ---
+    virtual int read_as(ReadAsType type) {
+        preferredReadAs = type;
+        return read(type == READ_AS_FELICA ? 1 : 0);
+    }
+    /** Emulate loaded Classic dump and harvest Crypto1 nonces into filepath. */
+    virtual int harvest_nonces(const String &filepath, uint32_t timeoutMs = 30000) {
+        (void)filepath;
+        (void)timeoutMs;
+        return NOT_IMPLEMENTED;
+    }
+    virtual MagicType magic_probe() { return MAGIC_NONE; }
+    virtual int magic_write_uid() { return NOT_IMPLEMENTED; }
+    virtual int magic_write_dump() { return NOT_IMPLEMENTED; }
+    virtual int iso15693_inventory(String &uidOut) {
+        (void)uidOut;
+        return NOT_IMPLEMENTED;
+    }
+    virtual int iso15693_read_block(uint8_t block, uint8_t *data, uint8_t dataLen) {
+        (void)block;
+        (void)data;
+        (void)dataLen;
+        return NOT_IMPLEMENTED;
+    }
+    virtual int iso15693_write_block(uint8_t block, const uint8_t *data, uint8_t dataLen) {
+        (void)block;
+        (void)data;
+        (void)dataLen;
+        return NOT_IMPLEMENTED;
+    }
+    /** Append human-readable DESFire app/file listing into strAllPages. */
+    virtual int desfire_list() { return NOT_IMPLEMENTED; }
+    virtual int ulc_auth(const uint8_t key[16]) {
+        (void)key;
+        return NOT_IMPLEMENTED;
+    }
+    virtual int felica_services() { return NOT_IMPLEMENTED; }
+    /** One presence poll; SUCCESS if a tag is in field. */
+    virtual int field_poll() { return read(0) == SUCCESS ? SUCCESS : TAG_NOT_PRESENT; }
+    /** Dict-attack style Classic read with progress callback (sector, ok). */
+    virtual int dict_read_classic(bool knownKeysOnly) {
+        (void)knownKeysOnly;
+        return read(0);
+    }
 
     // One-line warning shown before emulation starts if the driver can't
     // fully reproduce the loaded tag. Empty = nothing to warn about.

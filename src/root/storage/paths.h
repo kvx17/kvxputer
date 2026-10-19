@@ -72,6 +72,9 @@ constexpr const char *RFID_LF              = "/support_files/rfid/lf";
 constexpr const char *RFID_SCANS           = "/support_files/rfid/scans";
 constexpr const char *RFID_SRIX            = "/support_files/rfid/srix";
 constexpr const char *RFID_AMIIBO          = "/support_files/rfid/amiibo";
+constexpr const char *RFID_NONCES          = "/support_files/rfid/nonces";
+constexpr const char *RFID_APDU            = "/support_files/rfid/apdu";
+constexpr const char *RFID_ULC_KEYS        = "/support_files/rfid/ulc_keys.txt";
 constexpr const char *RFID_LEGACY          = "/BruceRFID";
 constexpr const char *RFID2                = "/support_files/rfid2";
 

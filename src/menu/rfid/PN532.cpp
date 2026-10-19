@@ -640,7 +640,7 @@ int PN532::emulate() {
     while (millis() - start < 60000) {
         if (check(EscPress) || returnToMenu) {
             PN532_DBG("[PN532] emulate: exiting loop (EscPress/returnToMenu)\n");
-            returnToMenu = true;
+            // Do not set returnToMenu — Tag-O-Matic treats Esc as stop-emulate only.
             break;
         }
         yield();
@@ -927,6 +927,28 @@ int PN532::save(const String &filename) {
     }
     file.print(strAllPages);
 
+    file.close();
+    delay(100);
+    return SUCCESS;
+}
+
+int PN532::saveFlipper(const String &filename) {
+    FS *fs;
+    if (!getFsStorage(fs)) return FAILURE;
+    File file = createNewFile(fs, kvx::paths::RFID, filename + ".nfc");
+    if (!file) return FAILURE;
+
+    file.println("Filetype: Flipper NFC device");
+    file.println("Version: 4");
+    file.println("Device type: " + printableUID.picc_type);
+    file.println("UID: " + printableUID.uid);
+    file.println("ATQA: " + printableUID.atqa);
+    file.println("SAK: " + printableUID.sak);
+    file.println("Data format version: 2");
+    file.println("Pages total: " + String(totalPages > 0 ? totalPages : dataPages));
+    file.println("Pages read: " + String(dataPages));
+    file.print(strAllPages);
+    file.println("Failed authentication attempts: 0");
     file.close();
     delay(100);
     return SUCCESS;

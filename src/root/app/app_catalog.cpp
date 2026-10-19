@@ -47,6 +47,10 @@
 #include "menu/infrared/ir_read.h"
 #include "menu/infrared/kremote/kremote.h"
 #include "menu/nfc/nfc_tools.h"
+#include "menu/nfc/nfc_classic.h"
+#include "menu/nfc/nfc_lab.h"
+#include "menu/nfc/nfc_niche.h"
+#include "menu/nfc/nfc_protocols.h"
 #include "menu/rfid/chameleon.h"
 #include "menu/rfid/tag_o_matic.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
@@ -325,6 +329,28 @@ static void launchNfcPassword() { nfcPasswordMenu(); }
 static void launchNfcFormat() { nfcFormatMemory(); }
 static void launchNfcApdu() { nfcSendApdu(); }
 static void launchNfcSaveDump() { nfcSaveAsFile(); }
+static void launchNfcClassic() { nfcClassicMenu(); }
+static void launchNfcTags() { nfcTagsMenu(); }
+static void launchNfcLab() { nfcLabMenu(); }
+static void launchNfcParsers() { nfcParsersMenu(); }
+static void launchNfcDetectReader() { nfcDetectReader(); }
+static void launchNfcMfkey() { nfcMfkey(); }
+static void launchNfcDict() { nfcDictAttack(); }
+static void launchNfcMagic() { nfcMagicWizard(); }
+static void launchNfcDumpEdit() { nfcDumpEditor(); }
+static void launchNfcIso15693() { nfcIso15693Tool(); }
+static void launchNfcDesfire() { nfcDesfireBrowser(); }
+static void launchNfcUlc() { nfcUlcAuth(); }
+static void launchNfcFelica() { nfcFelicaServices(); }
+static void launchNfcForcedType() { nfcForcedTypeRead(); }
+static void launchNfcApduScript() { nfcApduScript(); }
+static void launchNfcCompare() { nfcCompareDumps(); }
+static void launchNfcFieldPoll() { nfcFieldPoll(); }
+static void launchNfcAmiiboToolkit() { nfcAmiiboToolkit(); }
+static void launchNfcTransit() { nfcTransitParsers(); }
+static void launchNfcPicopass() { nfcPicopassStub(); }
+static void launchNfcEpassport() { nfcEpassport(); }
+static void launchNfcEink() { nfcEinkStub(); }
 #endif
 
 // --- GPS ---
@@ -639,6 +665,23 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"nfc_format", "Format memory", "NFC", false, alwaysOn, launchNfcFormat},
         {"nfc_apdu", "NFC command", "NFC", false, alwaysOn, launchNfcApdu},
         {"nfc_save_dump", "Save as file", "NFC", false, alwaysOn, launchNfcSaveDump},
+        {"nfc_classic", "Classic tools", "NFC", false, alwaysOn, launchNfcClassic},
+        {"nfc_tags", "Tag protocols", "NFC", false, alwaysOn, launchNfcTags},
+        {"nfc_lab", "NFC Lab", "NFC", false, alwaysOn, launchNfcLab},
+        {"nfc_parsers", "Parsers", "NFC", false, alwaysOn, launchNfcParsers},
+        {"nfc_dict", "Dict attack", "NFC", false, alwaysOn, launchNfcDict},
+        {"nfc_magic", "NFC Magic", "NFC", false, alwaysOn, launchNfcMagic},
+        {"nfc_dump_edit", "Dump editor", "NFC", false, alwaysOn, launchNfcDumpEdit},
+        {"nfc_iso15693", "ISO15693", "NFC", false, alwaysOn, launchNfcIso15693},
+        {"nfc_desfire", "DESFire browser", "NFC", false, alwaysOn, launchNfcDesfire},
+        {"nfc_ulc", "Ultralight-C", "NFC", false, alwaysOn, launchNfcUlc},
+        {"nfc_felica", "FeliCa services", "NFC", false, alwaysOn, launchNfcFelica},
+        {"nfc_forced_type", "Forced type read", "NFC", false, alwaysOn, launchNfcForcedType},
+        {"nfc_apdu_script", "APDU script", "NFC", false, alwaysOn, launchNfcApduScript},
+        {"nfc_compare", "Compare dump", "NFC", false, alwaysOn, launchNfcCompare},
+        {"nfc_field_poll", "Field poll", "NFC", false, alwaysOn, launchNfcFieldPoll},
+        {"nfc_picopass", "Picopass / iCLASS", "NFC", false, alwaysOn, launchNfcPicopass},
+        {"nfc_eink", "NFC e-ink", "NFC", false, alwaysOn, launchNfcEink},
 #endif
         {"chameleon", "Chameleon", "NFC", false, alwaysOn, launchChameleon},
         {"nfc_config", "NFC Config", "NFC", false, alwaysOn, launchNfcConfig},
@@ -647,6 +690,11 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"amiibo", "Amiibolink", "NFC", false, notLite, launchAmiibo},
         {"pn532_ble", "PN532 BLE", "NFC", false, notLite, launchPn532Ble},
 #if !defined(REMOVE_RFID_HW_INTERFACE)
+        {"nfc_amiibo_toolkit", "Amiibo toolkit", "NFC", false, notLite, launchNfcAmiiboToolkit},
+        {"nfc_detect_reader", "Detect Reader", "NFC", false, notLite, launchNfcDetectReader},
+        {"nfc_mfkey", "MFKey", "NFC", false, notLite, launchNfcMfkey},
+        {"nfc_transit", "Transit parse", "NFC", false, notLite, launchNfcTransit},
+        {"nfc_epassport", "ePassport", "NFC", false, notLite, launchNfcEpassport},
         {"pn532_uart", "PN532 UART", "NFC", false, notLite, launchPn532Killer},
 #endif
 #endif

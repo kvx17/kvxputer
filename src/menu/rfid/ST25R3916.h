@@ -36,6 +36,15 @@ public:
     int save(const String &filename) override;
     int saveFlipper(const String &filename) override;
 
+    int harvest_nonces(const String &filepath, uint32_t timeoutMs = 30000) override;
+    MagicType magic_probe() override;
+    int magic_write_uid() override;
+    int magic_write_dump() override;
+    int iso15693_inventory(String &uidOut) override;
+    int desfire_list() override;
+    int dict_read_classic(bool knownKeysOnly) override;
+    int field_poll() override;
+
     void stopDiscovery();
 
     // Milestone 1 — advanced NFC-A info (NTAG / Ultralight)
