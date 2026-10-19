@@ -6,7 +6,7 @@ from typing import Dict, List
 
 from protocol import PcConnectSession
 
-from apps._common import DirtyRedraw, KeyReader, UiSession, bell, term_size
+from apps._common import request_stop, DirtyRedraw, KeyReader, UiSession, bell, term_size
 
 
 def run(session: PcConnectSession) -> str:
@@ -89,6 +89,7 @@ def run(session: PcConnectSession) -> str:
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

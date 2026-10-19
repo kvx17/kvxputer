@@ -56,6 +56,12 @@ void pcConnectRfidStop();
 void pcConnectRfidTick();
 bool pcConnectRfidActive();
 
+bool pcConnectNfcStart();
+void pcConnectNfcStop();
+void pcConnectNfcTick();
+bool pcConnectNfcActive();
+void pcConnectNfcHandle(const String &line);
+
 bool pcConnectJamStart(uint32_t thresholdPerSec);
 void pcConnectJamStop();
 void pcConnectJamTick();

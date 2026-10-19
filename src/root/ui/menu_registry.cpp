@@ -19,6 +19,9 @@ const MenuDescriptor kMenus[] = {
     {"ethernet",  "Ethernet",  &mainMenu.ethernetMenu, MENU_FLAG_LITE_EXCLUDED | MENU_FLAG_BOARD_ETHERNET},
 #endif
     {"usb",       "USB",       &mainMenu.usbMenu,      MENU_FLAG_LITE_EXCLUDED},
+#if !defined(LITE_VERSION)
+    {"pcconnect", "PC Connect", &mainMenu.pcConnectMenu, MENU_FLAG_LITE_EXCLUDED},
+#endif
     {"gps",       "GPS",       &mainMenu.gpsMenu,      MENU_FLAG_NONE},
     {"rfid",      "RFID",      &mainMenu.rfidMenu,     MENU_FLAG_NONE},
     {"nfc",       "NFC",       &mainMenu.nfcMenu,      MENU_FLAG_NONE},

@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple
 
 from protocol import PcConnectSession
 
-from apps._common import DirtyRedraw, KeyReader, LOG_DIR, UiSession, ensure_log_dir, term_size
+from apps._common import request_stop, DirtyRedraw, KeyReader, LOG_DIR, UiSession, ensure_log_dir, term_size
 
 
 def _bar(pct: int, width: int = 20) -> str:
@@ -194,6 +194,7 @@ def run(session: PcConnectSession) -> str:
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

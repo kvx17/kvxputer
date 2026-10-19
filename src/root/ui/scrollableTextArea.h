@@ -22,6 +22,8 @@ public:
     size_t getMaxLines();
 
     void addLine(const String &text);
+    void addLine(const String &text, uint16_t color);
+    void addLine(const String &text, uint16_t color, uint8_t fontSize);
 
     void clear();
 
@@ -30,6 +32,15 @@ public:
     void fromFile(File file);
 
     void draw(bool force = false);
+
+    /** Handle scroll keys / encoder and redraw when needed. */
+    void update(bool force = false);
+
+    /**
+     * Scroll via Prev/Next/Up/Down flags without check()'s debounce delay.
+     * Use while a background RF task must keep running (e.g. NFC emulate).
+     */
+    void updateSoft(bool force = false);
 
     /** Scroll until OK (returns true) or Esc/home (returns false). */
     bool show(bool force = false);
@@ -40,6 +51,8 @@ public:
     size_t lastVisibleLine;
     /// TODO: Change to std::vector<char *> and alloc to PSRAM if possible
     std::vector<String> linesBuffer;
+    std::vector<uint16_t> lineColors;
+    std::vector<uint8_t> lineFontSizes;
 
 private:
     bool _redraw;
@@ -53,6 +66,7 @@ private:
     bool _indentWrappedLines;
 
     void setup();
-
-    void update(bool force = false);
+    int32_t linePixels(size_t idx) const;
+    uint16_t maxCharsForFont(uint8_t fontSize) const;
+    bool viewShowsLastLine() const;
 };

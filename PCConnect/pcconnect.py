@@ -25,6 +25,7 @@ from apps import (  # noqa: E402
     gpio_console,
     ir,
     jam_detect,
+    nfc_toolkit,
     rfid_read,
     rf_scan,
     skimmer,
@@ -44,6 +45,7 @@ TOOL_RUNNERS = {
     "rf.rx": rf_scan.run_rx,
     "rf.rssi": rf_scan.run_rssi,
     "rfid.read": rfid_read.run,
+    "nfc.manage": nfc_toolkit.run,
     "jam.detect": jam_detect.run,
 }
 

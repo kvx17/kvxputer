@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from protocol import PcConnectSession
 
-from apps._common import KeyReader, one_shot
+from apps._common import request_stop, KeyReader, one_shot
 
 
 def run(session: PcConnectSession) -> str:
@@ -63,6 +63,7 @@ def run(session: PcConnectSession) -> str:
                 reason = "bye"
                 break
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

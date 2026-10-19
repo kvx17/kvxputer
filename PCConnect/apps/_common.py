@@ -237,6 +237,76 @@ class KeyReader:
             sys.stdout.flush()
 
 
+def is_quit_key(ch: Optional[str]) -> bool:
+    return ch in ("q", "Q", "\x1b")
+
+
+def request_stop(session: PcConnectSession) -> None:
+    """Ask device to leave the current radio mode (works during async NFC emulate)."""
+    if not session.alive:
+        return
+    try:
+        session.write_line("nfc.emulate stop")
+    except Exception:
+        pass
+    try:
+        session.write_line("stop")
+    except Exception:
+        pass
+
+
+def drain_events(
+    session: PcConnectSession,
+    timeout: float = 8.0,
+    want: Optional[set] = None,
+    allow_quit: bool = True,
+    help_once: str = "",
+) -> Tuple[str, List[dict]]:
+    """Collect NDJSON events; q/Esc sends stop and returns reason 'quit'."""
+    want = want or set()
+    events: List[dict] = []
+    deadline = time.time() + timeout
+    saw_ack = False
+    keys = KeyReader() if allow_quit else None
+    if help_once and allow_quit:
+        print(help_once)
+    try:
+        while time.time() < deadline and session.alive:
+            if keys is not None:
+                ch = keys.poll()
+                if is_quit_key(ch):
+                    request_stop(session)
+                    return "quit", events
+            ev = session.read_event(timeout=0.15)
+            if ev is None:
+                if saw_ack and not want:
+                    break
+                continue
+            evt = ev.get("evt")
+            if evt == "bye":
+                return "bye", events
+            if evt == "err":
+                events.append(ev)
+                return "err", events
+            if evt == "ack":
+                saw_ack = True
+                events.append(ev)
+                if not ev.get("ok", True):
+                    return "err", events
+                continue
+            events.append(ev)
+            if want and evt in want:
+                if ev.get("done") is True or "done" not in ev:
+                    break
+        return "ok", events
+    except KeyboardInterrupt:
+        request_stop(session)
+        return "quit", events
+    finally:
+        if keys is not None:
+            keys.close()
+
+
 def run_until_quit(
     session: PcConnectSession,
     command: str,
@@ -266,6 +336,7 @@ def run_until_quit(
                 if on_key is not None:
                     action = on_key(ch)
                     if action == "quit":
+                        request_stop(session)
                         reason = "quit"
                         break
                     if action == "bye":
@@ -275,7 +346,8 @@ def run_until_quit(
                         current_cmd = action[len("restart:") :]
                         session.write_line(current_cmd)
                         continue
-                elif ch in ("q", "Q", "\x1b"):
+                elif is_quit_key(ch):
+                    request_stop(session)
                     reason = "quit"
                     break
             ev = session.read_event(timeout=0.2)
@@ -295,6 +367,7 @@ def run_until_quit(
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()
@@ -616,6 +689,7 @@ def run_live_table(
                 return action
         action = table.handle_key(ch, keys_holder.get("keys"))
         if action == "quit":
+            request_stop(session)
             return "quit"
         if table._dirty:
             table.redraw(force=True)
@@ -634,6 +708,7 @@ def run_live_table(
             if ch is not None:
                 action = on_key(ch)
                 if action == "quit":
+                    request_stop(session)
                     reason = "quit"
                     break
                 if action == "bye":
@@ -664,6 +739,7 @@ def run_live_table(
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

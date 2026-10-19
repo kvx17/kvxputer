@@ -133,8 +133,8 @@ void handleHello() {
     out += mac;
     out += "\",\"ready\":true,\"apps\":[";
 #if !defined(LITE_VERSION)
-    out += "\"wifi.analyzer\",\"ble.scan\",\"gpio\",\"ir.rx\",\"rf.rx\",\"rf.rssi\",\"rfid.read\",\"jam."
-           "detect\"";
+    out += "\"wifi.analyzer\",\"ble.scan\",\"gpio\",\"ir.rx\",\"rf.rx\",\"rf.rssi\",\"rfid.read\",\"nfc."
+           "manage\",\"jam.detect\"";
 #if defined(EVIL_EXTENSIONS)
     out += ",";
 #endif
@@ -244,6 +244,11 @@ void handleLine(String line) {
     cmd.toLowerCase();
 
 #if !defined(LITE_VERSION)
+    if (cmd.startsWith("nfc.")) {
+        pcConnectNfcHandle(line);
+        return;
+    }
+
     if (cmd == "gpio") {
         handleGpio(rest);
         return;
@@ -505,6 +510,7 @@ void tickRadio() {
     if (pcConnectRfRxActive()) pcConnectRfRxTick();
     if (pcConnectRfRssiActive()) pcConnectRfRssiTick();
     if (pcConnectRfidActive()) pcConnectRfidTick();
+    if (pcConnectNfcActive()) pcConnectNfcTick();
     if (pcConnectJamActive()) pcConnectJamTick();
 #endif
 #if defined(EVIL_EXTENSIONS)
@@ -559,6 +565,7 @@ void pcConnectStopRadio() {
     pcConnectRfRxStop();
     pcConnectRfRssiStop();
     pcConnectRfidStop();
+    pcConnectNfcStop();
     pcConnectJamStop();
 #endif
     if (g_radio != PcRadio::Idle || g_mode != "idle" || g_channel != 0) g_uiDirty = true;

@@ -15,6 +15,8 @@
 #include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #if !defined(LITE_VERSION)
 #include "ST25R3916.h"
@@ -30,6 +32,54 @@
 #define SCAN_DUMP_SIZE 5
 
 namespace {
+volatile bool s_emuRunning = false;
+volatile bool s_emuFinished = false;
+volatile int s_emuResult = RFIDInterface::FAILURE;
+TaskHandle_t s_emuTask = nullptr;
+RFIDInterface *s_emuRfid = nullptr;
+
+void emuTaskFn(void * /*arg*/) {
+    int rc = RFIDInterface::FAILURE;
+    if (s_emuRfid) {
+        returnToMenu = false;
+        rc = s_emuRfid->emulate();
+    }
+    s_emuResult = rc;
+    s_emuFinished = true;
+    s_emuRunning = false;
+    s_emuTask = nullptr;
+    vTaskDelete(nullptr);
+}
+
+bool startEmuTask(RFIDInterface *rfid) {
+    if (!rfid || s_emuRunning) return false;
+    s_emuRfid = rfid;
+    s_emuFinished = false;
+    s_emuRunning = true;
+    returnToMenu = false;
+    EscPress = false;
+    // Core 0 + higher priority so UI scrolling on the Arduino loop (core 1)
+    // cannot starve listen-mode timing and drop emulation.
+    BaseType_t ok = xTaskCreatePinnedToCore(emuTaskFn, "nfc_emu", 12288, nullptr, 5, &s_emuTask, 0);
+    if (ok != pdPASS) {
+        s_emuRunning = false;
+        s_emuTask = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void stopEmuTask() {
+    if (!s_emuRunning && !s_emuTask) return;
+    EscPress = true;
+    uint32_t t0 = millis();
+    while (s_emuRunning && (millis() - t0) < 10000) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+        yield();
+    }
+    EscPress = false;
+}
+
 void displaySmallErrorToast(const String &txt) {
     constexpr int textSize = FP;
     int boxWidth = txt.length() * LW * textSize + 18;
@@ -61,6 +111,7 @@ TagOMatic::TagOMatic(RFID_State initial_state, Domain domain) {
 }
 
 TagOMatic::~TagOMatic() {
+    stopEmuTask();
     if (_scanned_set.size() > 0) {
         save_scan_result();
         _scanned_set.clear();
@@ -68,6 +119,7 @@ TagOMatic::~TagOMatic() {
     }
     delete _rfid; // Deallocate memory for _rfid object
     _rfid = nullptr;
+    s_emuRfid = nullptr;
     delete _pahub;
     _pahub = nullptr;
     releaseI2CBusHold();
@@ -334,25 +386,11 @@ void TagOMatic::set_state(RFID_State state) {
             SelPress = false;
             EscPress = false;
             AnyKeyPress = false;
-            padprintln("Choose NDEF content, then wait for a reader.");
-            padprintln("Press [BACK] to stop.");
-            padprintln("");
             break;
         case EMULATE_MODE:
-            if (_rfid->printableUID.uid.length() > 0) {
-                padprintln("UID: " + _rfid->printableUID.uid);
-                padprintln("Type: " + _rfid->printableUID.picc_type);
-            } else {
-                padprintln("Using loaded/read NDEF");
-                padprintln("(fallback: test URL)");
-            }
-            {
-                String caveat = _rfid->emulationCaveat();
-                if (caveat.length() > 0) padprintln("[!] " + caveat);
-            }
-            padprintln("Waiting for an NFC reader...");
-            padprintln("Press [BACK] to stop.");
-            padprintln("");
+            SelPress = false;
+            EscPress = false;
+            AnyKeyPress = false;
             break;
         case SAVE_MODE:
         case ERASE_MODE:
@@ -396,18 +434,18 @@ void TagOMatic::display_banner() {
 
 String TagOMatic::format_card_details() const {
     String out;
-    out += "Device type: " + _rfid->printableUID.picc_type + "\n";
+    out += "Device type:\n" + _rfid->printableUID.picc_type + "\n";
     if (_rfid->printableUID.picc_type != "FeliCa") {
-        out += "UID: " + _rfid->printableUID.uid + "\n";
-        out += "ATQA: " + _rfid->printableUID.atqa + "\n";
-        out += "SAK: " + _rfid->printableUID.sak + "\n";
+        out += "UID:\n" + _rfid->printableUID.uid + "\n";
+        out += "ATQA:\n" + _rfid->printableUID.atqa + "\n";
+        out += "SAK:\n" + _rfid->printableUID.sak + "\n";
         if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
-            out += "Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages) + "\n";
+            out += "Pages read:\n" + String(_rfid->dataPages) + "/" + String(_rfid->totalPages) + "\n";
         }
     } else {
-        out += "IDm: " + _rfid->printableUID.uid + "\n";
-        out += "PMm: " + _rfid->printableUID.sak + "\n";
-        out += "Sys code: " + _rfid->printableUID.atqa + "\n";
+        out += "IDm:\n" + _rfid->printableUID.uid + "\n";
+        out += "PMm:\n" + _rfid->printableUID.sak + "\n";
+        out += "Sys code:\n" + _rfid->printableUID.atqa + "\n";
     }
     if (_rfid->pageReadStatus != RFIDInterface::SUCCESS) {
         out += "[!] " + _rfid->statusMessage(_rfid->pageReadStatus) + "\n";
@@ -431,6 +469,108 @@ void TagOMatic::dump_card_details() {
     }
 }
 
+void TagOMatic::fill_tag_detail_area(ScrollableTextArea &area) const {
+    const uint16_t valueColor = kvxConfig.secColor;
+    const uint8_t labelFont = uiDenseFont();
+    const uint8_t valueFont = uiBodyFont();
+    auto addField = [&](const String &label, const String &value) {
+        area.addLine(label, kvxConfig.priColor, labelFont);
+        area.addLine(value, valueColor, valueFont);
+    };
+
+    addField("Device type:", _rfid->printableUID.picc_type);
+    if (_rfid->printableUID.picc_type != "FeliCa") {
+        addField("UID:", _rfid->printableUID.uid);
+        addField("ATQA:", _rfid->printableUID.atqa);
+        addField("SAK:", _rfid->printableUID.sak);
+        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
+            addField(
+                "Pages read:",
+                String(_rfid->dataPages) + "/" + String(_rfid->totalPages)
+            );
+        }
+    } else {
+        addField("IDm:", _rfid->printableUID.uid);
+        addField("PMm:", _rfid->printableUID.sak);
+        addField("Sys code:", _rfid->printableUID.atqa);
+    }
+    if (_rfid->pageReadStatus != RFIDInterface::SUCCESS) {
+        area.addLine(
+            "[!] " + _rfid->statusMessage(_rfid->pageReadStatus), kvxConfig.priColor, labelFont
+        );
+    }
+    if (_rfid->strAllPages.length()) {
+        area.addLine("");
+        int start = 0;
+        const String &dump = _rfid->strAllPages;
+        while (start < dump.length()) {
+            int nl = dump.indexOf('\n', start);
+            if (nl < 0) nl = dump.length();
+            area.addLine(dump.substring(start, nl), valueColor, valueFont);
+            start = nl + 1;
+        }
+    }
+}
+
+void TagOMatic::fill_ndef_detail_area(ScrollableTextArea &area) const {
+    const uint16_t valueColor = kvxConfig.secColor;
+    const uint8_t labelFont = uiDenseFont();
+    const uint8_t valueFont = uiBodyFont();
+    auto addField = [&](const String &label, const String &value) {
+        area.addLine(label, kvxConfig.priColor, labelFont);
+        area.addLine(value, valueColor, valueFont);
+    };
+
+    if (!_rfid->rawNdefRecord.empty()) {
+        addField("Payload type:", "MIME / raw");
+        addField("Payload size:", String(_rfid->rawNdefRecord.size()) + " bytes");
+        return;
+    }
+
+    String payloadType = "Unknown";
+    String payloadText;
+    switch (_rfid->ndefMessage.payloadType) {
+        case RFIDInterface::NDEF_URI: {
+            payloadType = "URI";
+            static const char *kUriPrefix[] = {
+                "",
+                "http://www.",
+                "https://www.",
+                "http://",
+                "https://",
+                "tel:",
+                "mailto:",
+            };
+            uint8_t uic = _rfid->ndefMessage.payloadSize > 0 ? _rfid->ndefMessage.payload[0] : 0;
+            if (uic < sizeof(kUriPrefix) / sizeof(kUriPrefix[0])) payloadText = kUriPrefix[uic];
+            for (byte i = 1; i < _rfid->ndefMessage.payloadSize; i++) {
+                payloadText += (char)_rfid->ndefMessage.payload[i];
+            }
+            break;
+        }
+        case RFIDInterface::NDEF_TEXT: {
+            payloadType = "Text";
+            byte langLen =
+                (_rfid->ndefMessage.payloadSize > 0) ? (_rfid->ndefMessage.payload[0] & 0x3F) : 0;
+            for (byte i = 1 + langLen; i < _rfid->ndefMessage.payloadSize; i++) {
+                payloadText += (char)_rfid->ndefMessage.payload[i];
+            }
+            break;
+        }
+        default: break;
+    }
+
+    addField("Payload type:", payloadType);
+    addField("Payload size:", String(_rfid->ndefMessage.payloadSize) + " bytes");
+    if (payloadText.length()) addField("Payload:", payloadText);
+
+    // Identity when a captured/loaded tag is also being served.
+    if (_rfid->printableUID.uid.length()) {
+        area.addLine("");
+        fill_tag_detail_area(area);
+    }
+}
+
 bool TagOMatic::show_tag_results() {
     {
         TftFrame frame;
@@ -447,10 +587,128 @@ bool TagOMatic::show_tag_results() {
         false,
         false
     );
-    area.fromString(format_card_details());
+
+    fill_tag_detail_area(area);
     area.addLine("");
     area.addLine("OK=actions  Esc=back");
     return area.show();
+}
+
+void TagOMatic::emulate_with_details(bool ndefContent) {
+    auto paintUi = [&](ScrollableTextArea &area, const char *status) {
+        {
+            TftFrame frame;
+            tft.fillScreen(kvxConfig.bgColor);
+            drawKvxTopBar((_domain == DOMAIN_NFC) ? "NFC" : "RFID", ndefContent ? "EmuNDEF" : "Emu");
+        }
+        area.clear();
+        if (ndefContent) fill_ndef_detail_area(area);
+        else fill_tag_detail_area(area);
+
+        String caveat = _rfid->emulationCaveat();
+        if (caveat.length()) {
+            area.addLine("");
+            area.addLine("[!] " + caveat);
+        }
+        area.addLine("");
+        area.addLine(status, kvxConfig.secColor);
+        area.addLine("Esc=stop");
+        area.draw(true);
+    };
+
+    ScrollableTextArea area(
+        FP,
+        BORDER_PAD_X,
+        KVX_TOPBAR_H + 2,
+        tftWidth - 2 * BORDER_PAD_X,
+        tftHeight - KVX_TOPBAR_H - BORDER_PAD_X - 2,
+        false,
+        false
+    );
+    paintUi(area, "Emulating — waiting for reader...");
+
+    SelPress = false;
+    EscPress = false;
+    AnyKeyPress = false;
+    returnToMenu = false;
+
+    for (;;) {
+        if (returnToMenu || forceHome) {
+            stopEmuTask();
+            return;
+        }
+
+        const bool scrolling = PrevPress || NextPress || UpPress || DownPress;
+        // While scrolling, drop sticky Esc (ST25 sets LongPress which can keep
+        // Esc latched on some keyboards). Only backtick should stop emulate.
+        if (scrolling && EscPress && !isCardputerKeyHeld('`')) EscPress = false;
+
+        // Read EscPress without clearing so the RF task can still consume it.
+        if (EscPress && !scrolling) {
+            stopEmuTask();
+            _ndef_created = false;
+            set_state(READ_MODE);
+            return;
+        }
+
+        // Discard OK without check() debounce (same starvation risk).
+        if (SelPress) SelPress = false;
+
+        if (!s_emuRunning && !s_emuFinished) {
+            if (!startEmuTask(_rfid)) {
+                displayError("Emulate task failed.", true);
+                _ndef_created = false;
+                set_state(READ_MODE);
+                return;
+            }
+        }
+
+        if (s_emuFinished) {
+            s_emuFinished = false;
+            int rc = s_emuResult;
+            if ((EscPress && !scrolling) || returnToMenu || forceHome) {
+                stopEmuTask();
+                _ndef_created = false;
+                if (!returnToMenu && !forceHome) set_state(READ_MODE);
+                return;
+            }
+            switch (rc) {
+                case RFIDInterface::SUCCESS:
+                    displaySuccess(
+                        ndefContent ? "Reader read the NDEF." : "Reader interaction complete.", true
+                    );
+                    EscPress = false;
+                    SelPress = false;
+                    paintUi(area, "Still emulating — tap again or Esc.");
+                    break;
+                case RFIDInterface::NOT_IMPLEMENTED:
+                    displayError("Card emulation not supported.", true);
+                    _ndef_created = false;
+                    set_state(READ_MODE);
+                    return;
+                case RFIDInterface::FAILURE:
+                    displayError("Target mode start failed.", true);
+                    delayWithReturn(800);
+                    if (returnToMenu || forceHome || (EscPress && !scrolling)) {
+                        stopEmuTask();
+                        _ndef_created = false;
+                        if (!returnToMenu && !forceHome) set_state(READ_MODE);
+                        return;
+                    }
+                    EscPress = false;
+                    SelPress = false;
+                    paintUi(area, "Emulating — waiting for reader...");
+                    break;
+                case RFIDInterface::TAG_NOT_PRESENT:
+                default:
+                    // Timeout / no reader — re-arm quietly; keep scroll position.
+                    break;
+            }
+        }
+
+        area.updateSoft(false);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
 void TagOMatic::dump_check_details() {
@@ -586,33 +844,7 @@ void TagOMatic::clone_card() {
     set_state(READ_MODE);
 }
 
-void TagOMatic::emulate_card() {
-    int result = _rfid->emulate();
-    if (returnToMenu) return;
-
-    switch (result) {
-        case RFIDInterface::SUCCESS:
-            displaySuccess("Reader interaction complete.");
-            delay(400);
-            break;
-        case RFIDInterface::TAG_NOT_PRESENT:
-            displayError("No NFC reader detected.", true);
-            set_state(EMULATE_MODE);
-            break;
-        case RFIDInterface::NOT_IMPLEMENTED:
-            displayError("Card emulation not supported.", true);
-            set_state(READ_MODE);
-            break;
-        case RFIDInterface::FAILURE:
-            displayError("Target mode start failed.", true);
-            set_state(EMULATE_MODE);
-            break;
-        default:
-            displayError("Emulation failed. Re-try.", true);
-            set_state(EMULATE_MODE);
-            break;
-    }
-}
+void TagOMatic::emulate_card() { emulate_with_details(false); }
 
 void TagOMatic::emulate_ndef_data() {
     if (!_ndef_created) {
@@ -628,50 +860,9 @@ void TagOMatic::emulate_ndef_data() {
         NextPress = false;
         PrevPress = false;
         returnToMenu = false;
-        display_banner();
-        dump_ndef_details();
-        String caveat = _rfid->emulationCaveat();
-        if (caveat.length() > 0) padprintln("[!] " + caveat);
-        padprintln("Emulating NDEF — tap a phone/reader.");
-        padprintln("Press [BACK] to stop.");
-        padprintln("");
     }
 
-    int result = _rfid->emulate();
-    // PN532 used to set returnToMenu on Esc; treat that as stop-emulate only.
-    if (returnToMenu) {
-        returnToMenu = false;
-        _ndef_created = false;
-        set_state(READ_MODE);
-        return;
-    }
-
-    switch (result) {
-        case RFIDInterface::SUCCESS:
-            displaySuccess("Reader read the NDEF.", true);
-            // Stay armed with the same content so another tap still works.
-            display_banner();
-            dump_ndef_details();
-            padprintln("Still emulating — tap again or [BACK].");
-            padprintln("");
-            break;
-        case RFIDInterface::TAG_NOT_PRESENT:
-            // Timeout / no reader yet — keep same content and re-arm.
-            return;
-        case RFIDInterface::NOT_IMPLEMENTED:
-            displayError("Card emulation not supported.", true);
-            _ndef_created = false;
-            set_state(READ_MODE);
-            break;
-        case RFIDInterface::FAILURE:
-            displayError("Target mode start failed.", true);
-            delayWithReturn(800);
-            break; // retry with the same content
-        default:
-            displayError("Emulation failed. Re-try.", true);
-            delayWithReturn(800);
-            break; // retry with the same content
-    }
+    emulate_with_details(true);
 }
 
 void TagOMatic::write_custom_uid() {

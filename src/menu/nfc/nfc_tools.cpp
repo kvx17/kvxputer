@@ -142,11 +142,18 @@ void nfcChipInfo() {
     PahubChannelGuard *guard = nullptr;
     if (!withLiveTag(&rfid, &guard, true)) return;
     ScrollableTextArea area("Chip info");
-    area.addLine("Type: " + rfid->printableUID.picc_type);
-    area.addLine("UID:  " + rfid->printableUID.uid);
-    area.addLine("ATQA: " + rfid->printableUID.atqa);
-    area.addLine("SAK:  " + rfid->printableUID.sak);
-    area.addLine("Pages: " + String(rfid->dataPages) + "/" + String(rfid->totalPages));
+    const uint16_t valueColor = kvxConfig.secColor;
+    const uint8_t labelFont = uiDenseFont();
+    const uint8_t valueFont = uiBodyFont();
+    auto addField = [&](const String &label, const String &value) {
+        area.addLine(label, kvxConfig.priColor, labelFont);
+        area.addLine(value, valueColor, valueFont);
+    };
+    addField("Type:", rfid->printableUID.picc_type);
+    addField("UID:", rfid->printableUID.uid);
+    addField("ATQA:", rfid->printableUID.atqa);
+    addField("SAK:", rfid->printableUID.sak);
+    addField("Pages:", String(rfid->dataPages) + "/" + String(rfid->totalPages));
 #if !defined(LITE_VERSION)
     // ST25 extras when active
     // dynamic_cast not RTTI-safe on Arduino — use picc_type / ntag fields via printable only
@@ -157,7 +164,7 @@ void nfcChipInfo() {
     int freeHint = 0;
     if (rfid->totalPages > 4 && rfid->dataPages >= 0) {
         freeHint = (rfid->totalPages - 4) * 4; // rough user bytes
-        area.addLine("User bytes ~" + String(freeHint));
+        addField("User bytes:", "~" + String(freeHint));
     }
     area.addLine("");
     area.addLine("Esc = back");

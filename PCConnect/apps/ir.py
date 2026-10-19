@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from protocol import APP_COMMANDS, PcConnectSession
 
-from apps._common import KeyReader, LiveTable, one_shot, run_live_table
+from apps._common import request_stop, KeyReader, LiveTable, one_shot, run_live_table
 
 
 def parse_ir_file(path: Path) -> List[dict]:
@@ -174,6 +174,7 @@ def run_rx(session: PcConnectSession) -> str:
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

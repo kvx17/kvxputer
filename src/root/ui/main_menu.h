@@ -21,6 +21,7 @@
 #include "menu/modules/modules_menu.h"
 #include "menu/ethernet/ethernet_menu.h"
 #include "menu/usb/usb_menu.h"
+#include "menu/usb/pc_connect/pc_connect_menu.h"
 #include "menu/fm/fm_menu.h"
 #include "menu/nrf24/nrf24_menu.h"
 #include "menu/connect/connect_menu.h"
@@ -47,6 +48,7 @@ public:
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     UsbMenu usbMenu;
+    PcConnectMenu pcConnectMenu;
     WifiMenu wifiMenu;
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;

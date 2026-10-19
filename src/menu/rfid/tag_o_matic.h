@@ -13,6 +13,7 @@
 #include <set>
 
 class PahubChannelGuard;
+class ScrollableTextArea;
 
 class TagOMatic {
 public:
@@ -87,6 +88,10 @@ private:
     String format_card_details() const;
     /** Scrollable dump. true = OK (open actions), false = Esc. */
     bool show_tag_results();
+    void fill_tag_detail_area(ScrollableTextArea &area) const;
+    void fill_ndef_detail_area(ScrollableTextArea &area) const;
+    /** Scrollable tag/NDEF details while RF emulate runs (Esc stops). */
+    void emulate_with_details(bool ndefContent);
 
     /////////////////////////////////////////////////////////////////////////////////////
     // State management

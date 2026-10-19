@@ -6,7 +6,7 @@ from typing import Dict
 
 from protocol import APP_COMMANDS, PcConnectSession
 
-from apps._common import DirtyRedraw, KeyReader, LiveTable, UiSession, one_shot, term_size
+from apps._common import request_stop, DirtyRedraw, KeyReader, LiveTable, UiSession, one_shot, term_size
 
 
 def run_rx(session: PcConnectSession) -> str:
@@ -108,6 +108,7 @@ def run_rx(session: PcConnectSession) -> str:
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()
@@ -190,6 +191,7 @@ def run_rssi(session: PcConnectSession) -> str:
         else:
             reason = "disconnect" if not session.alive else "quit"
     except KeyboardInterrupt:
+        request_stop(session)
         reason = "quit"
     finally:
         keys.close()

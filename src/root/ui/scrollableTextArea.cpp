@@ -29,17 +29,35 @@ ScrollableTextArea::~ScrollableTextArea() {
     // We don't use Sprites for big things, unfortunetly theres no much RAM in all devices
 }
 
+uint16_t ScrollableTextArea::maxCharsForFont(uint8_t fontSize) const {
+    int charW = LW * max(1, (int)fontSize);
+    int measured = _scrollBuffer.textWidth("W", fontSize);
+    if (measured > 0 && measured <= charW * 2) charW = measured;
+    return max(8, (int)(_width / charW));
+}
+
+int32_t ScrollableTextArea::linePixels(size_t idx) const {
+    uint8_t sz = (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
+    sz = max((uint8_t)1, sz);
+    return (int32_t)sz * LH + 2;
+}
+
+bool ScrollableTextArea::viewShowsLastLine() const {
+    if (linesBuffer.empty()) return true;
+    int32_t y = 0;
+    for (size_t idx = firstVisibleLine; idx < linesBuffer.size(); idx++) {
+        y += linePixels(idx);
+        if (y > _height) return false;
+    }
+    return true;
+}
+
 void ScrollableTextArea::setup() {
     _scrollBuffer.setTextColor(kvxConfig.priColor);
     _scrollBuffer.setTextSize(_fontSize);
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
 
-    // Prefer glyph-grid width (LW * size). textWidth("w") on some GFX backends
-    // returns an oversized advance and collapses wrap to ~3 chars/line.
-    int charW = LW * max(1, (int)_fontSize);
-    int measured = _scrollBuffer.textWidth("W", _fontSize);
-    if (measured > 0 && measured <= charW * 2) charW = measured;
-    _maxCharactersPerLine = max(8, (int)(_width / charW));
+    _maxCharactersPerLine = maxCharsForFont(_fontSize);
     _pixelsPerLine = max(LH * max(1, (int)_fontSize), (int)_scrollBuffer.fontHeight()) + 2;
     _maxVisibleLines = max(1, (int)(_height / _pixelsPerLine));
 }
@@ -52,8 +70,8 @@ void ScrollableTextArea::scrollUp() {
 }
 
 void ScrollableTextArea::scrollDown() {
-    if (linesBuffer.size() <= _maxVisibleLines) return;
-    if (firstVisibleLine + _maxVisibleLines < linesBuffer.size()) {
+    if (linesBuffer.empty() || viewShowsLastLine()) return;
+    if (firstVisibleLine + 1 < linesBuffer.size()) {
         firstVisibleLine++;
         _redraw = true;
     }
@@ -126,8 +144,42 @@ void ScrollableTextArea::update(bool force) {
     draw(force);
 }
 
+void ScrollableTextArea::updateSoft(bool force) {
+#ifdef HAS_ENCODER
+    int32_t rotarySteps = drainRotarySteps();
+    if (rotarySteps != 0) {
+        while (rotarySteps > 0) {
+            scrollUp();
+            rotarySteps--;
+        }
+        while (rotarySteps < 0) {
+            scrollDown();
+            rotarySteps++;
+        }
+        PrevPress = false;
+        NextPress = false;
+        UpPress = false;
+        DownPress = false;
+    }
+#endif
+
+    // Direct flag reads — avoid check()'s vTaskSuspend + delay(10), which
+    // starves a same-core NFC emulate task and can drop the RF session.
+    if (PrevPress || UpPress) {
+        PrevPress = false;
+        UpPress = false;
+        scrollUp();
+    } else if (NextPress || DownPress) {
+        NextPress = false;
+        DownPress = false;
+        scrollDown();
+    }
+
+    draw(force);
+}
+
 void ScrollableTextArea::fromFile(File file) {
-    linesBuffer.clear();
+    clear();
     while (file.available()) addLine(file.readStringUntil('\n'));
 
     draw(true);
@@ -138,6 +190,8 @@ void ScrollableTextArea::fromFile(File file) {
 void ScrollableTextArea::clear() {
     firstVisibleLine = 0;
     linesBuffer.clear();
+    lineColors.clear();
+    lineFontSizes.clear();
 }
 
 void ScrollableTextArea::fromString(const String &text) {
@@ -159,9 +213,21 @@ void ScrollableTextArea::fromString(const String &text) {
 }
 
 // for devices it will act as a scrollable text area
-void ScrollableTextArea::addLine(const String &text) {
+void ScrollableTextArea::addLine(const String &text) { addLine(text, kvxConfig.priColor, _fontSize); }
+
+void ScrollableTextArea::addLine(const String &text, uint16_t color) {
+    addLine(text, color, _fontSize);
+}
+
+void ScrollableTextArea::addLine(const String &text, uint16_t color, uint8_t fontSize) {
+    const uint8_t sz = fontSize ? fontSize : _fontSize;
+    const uint16_t maxChars = maxCharsForFont(sz);
+
     if (text.isEmpty()) {
         linesBuffer.emplace_back("");
+        lineColors.emplace_back(color);
+        lineFontSizes.emplace_back(sz);
+        _redraw = true;
         return;
     }
 
@@ -171,7 +237,7 @@ void ScrollableTextArea::addLine(const String &text) {
 
     // Automatically split into multiple lines
     while (start < text.length()) {
-        size_t len = _maxCharactersPerLine;
+        size_t len = maxChars;
 
         if (!firstLine && _indentWrappedLines) {
             buff = " " + text.substring(start, start + len - 1); // Reduce length for space
@@ -183,6 +249,8 @@ void ScrollableTextArea::addLine(const String &text) {
         if (buff.endsWith("\r")) buff.remove(buff.length() - 1);
 
         linesBuffer.emplace_back(buff);
+        lineColors.emplace_back(color);
+        lineFontSizes.emplace_back(sz);
         firstLine = false;
     }
 
@@ -193,18 +261,23 @@ void ScrollableTextArea::draw(bool force) {
     if (!_redraw && !force) return;
 
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
-    _scrollBuffer.setTextColor(kvxConfig.priColor);
-    // Must draw at the constructor font size — wrapping used that size's metrics.
-    // Forcing FP here made memo/note bodies look tiny with ~3 glyphs/line.
     const uint8_t prevSize = tft.getTextSize();
-    tft.setTextSize(_fontSize);
 
-    uint16_t yOffset = 0;
+    int32_t yOffset = 0;
     size_t lines = 0;
     size_t idx{firstVisibleLine};
-    while (yOffset + _pixelsPerLine <= _height && lines < _maxVisibleLines && idx < linesBuffer.size()) {
+    while (idx < linesBuffer.size()) {
+        const int32_t rowH = linePixels(idx);
+        if (yOffset + rowH > _height) break;
+
+        const uint16_t color =
+            (idx < lineColors.size()) ? lineColors[idx] : kvxConfig.priColor;
+        const uint8_t sz =
+            (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
+        tft.setTextSize(sz);
+        _scrollBuffer.setTextColor(color);
         _scrollBuffer.drawString(linesBuffer[idx], 0 + _startX, _startY + yOffset);
-        yOffset += _pixelsPerLine;
+        yOffset += rowH;
         lines++;
         idx++;
     }

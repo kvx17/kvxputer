@@ -389,6 +389,7 @@ APP_LABELS = {
     "rf.rx": "Sub-GHz RX",
     "rf.rssi": "Sub-GHz RSSI",
     "rfid.read": "RFID Read",
+    "nfc.manage": "NFC Toolkit",
     "jam.detect": "Jam Detect",
 }
 
@@ -403,5 +404,6 @@ APP_COMMANDS = {
     "rf.rx": "rf.rx start",
     "rf.rssi": "rf.rssi start",
     "rfid.read": "rfid.read start",
+    "nfc.manage": "nfc.manage start",
     "jam.detect": "jam.detect start",
 }
