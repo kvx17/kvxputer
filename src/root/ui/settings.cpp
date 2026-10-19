@@ -843,11 +843,10 @@ void setRFFreqMenu() {
 
 /*********************************************************************
 **  Function: setRFIDModuleMenu
-**  Handles Menu to set the RFID module in use
+**  Unit RFID2 / RC522 only (not PN532 / ST25 — those are NFC Config).
 **********************************************************************/
 void setRFIDModuleMenu() {
     int8_t rfid2Ch = pahubEnabled() ? pahubChannelFor(PahubDevRFID2) : (int8_t)-2;
-    int8_t nfcCh = pahubEnabled() ? pahubChannelFor(PahubDevNFC) : (int8_t)-2;
     bool mux = pahubEnabled();
 
     options.clear();
@@ -860,55 +859,72 @@ void setRFIDModuleMenu() {
              kvxConfigPins.rfidModule == M5_RFID2_MODULE}
         );
     }
-#ifdef M5STICK
-    if (!mux || nfcCh >= 0) {
-        options.push_back(
-            {"PN532 I2C G33",
-             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
-             kvxConfigPins.rfidModule == PN532_I2C_MODULE}
-        );
-        options.push_back(
-            {"PN532 I2C G36",
-             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_SPI_MODULE); },
-             kvxConfigPins.rfidModule == PN532_I2C_SPI_MODULE}
-        );
-    }
-#else
-    if (!mux || nfcCh >= 0) {
-        String lbl = mux ? "M5 NFC" : "PN532 on I2C";
-        if (nfcCh >= 0) lbl += " (ch" + String(nfcCh) + ")";
-        options.push_back(
-            {lbl,
-             [=]() { kvxConfigPins.setRfidModule(PN532_I2C_MODULE); },
-             kvxConfigPins.rfidModule == PN532_I2C_MODULE}
-        );
-    }
-#endif
-    options.push_back(
-        {"PN532 on SPI",
-         [=]() { kvxConfigPins.setRfidModule(PN532_SPI_MODULE); },
-         kvxConfigPins.rfidModule == PN532_SPI_MODULE}
-    );
     options.push_back(
         {"RC522 on SPI",
          [=]() { kvxConfigPins.setRfidModule(RC522_SPI_MODULE); },
          kvxConfigPins.rfidModule == RC522_SPI_MODULE}
     );
+    loopOptions(options, "RFID Module");
+}
+
+/*********************************************************************
+**  Function: setNFCModuleMenu
+**  PN532 / ST25 only (not Unit RFID2 / RC522 — those are RFID Config).
+**********************************************************************/
+void setNFCModuleMenu() {
+    int8_t nfcCh = pahubEnabled() ? pahubChannelFor(PahubDevNFC) : (int8_t)-2;
+    bool mux = pahubEnabled();
+
+    options.clear();
 #if !defined(LITE_VERSION)
-    options.push_back(
-        {"ST25R3916 SPI",
-         [=]() { kvxConfigPins.setRfidModule(ST25R3916_SPI_MODULE); },
-         kvxConfigPins.rfidModule == ST25R3916_SPI_MODULE}
-    );
-    if (!mux) {
+    // M5 Unit NFC (U216) is ST25R3916 I2C @ 0x50 — not PN532.
+    if (!mux || nfcCh >= 0) {
+        String lbl = "M5 Unit NFC";
+        if (nfcCh >= 0) lbl += " (ch" + String(nfcCh) + ")";
         options.push_back(
-            {"ST25R3916 I2C",
-             [=]() { kvxConfigPins.setRfidModule(ST25R3916_I2C_MODULE); },
-             kvxConfigPins.rfidModule == ST25R3916_I2C_MODULE}
+            {lbl,
+             [=]() { kvxConfigPins.setNfcModule(ST25R3916_I2C_MODULE); },
+             kvxConfigPins.nfcModule == ST25R3916_I2C_MODULE}
         );
     }
 #endif
-    loopOptions(options, "RFID Module");
+#ifdef M5STICK
+    if (!mux || nfcCh >= 0) {
+        options.push_back(
+            {"PN532 I2C G33",
+             [=]() { kvxConfigPins.setNfcModule(PN532_I2C_MODULE); },
+             kvxConfigPins.nfcModule == PN532_I2C_MODULE}
+        );
+        options.push_back(
+            {"PN532 I2C G36",
+             [=]() { kvxConfigPins.setNfcModule(PN532_I2C_SPI_MODULE); },
+             kvxConfigPins.nfcModule == PN532_I2C_SPI_MODULE}
+        );
+    }
+#else
+    if (!mux || nfcCh >= 0) {
+        String lbl = "PN532 on I2C";
+        if (nfcCh >= 0) lbl += " (ch" + String(nfcCh) + ")";
+        options.push_back(
+            {lbl,
+             [=]() { kvxConfigPins.setNfcModule(PN532_I2C_MODULE); },
+             kvxConfigPins.nfcModule == PN532_I2C_MODULE}
+        );
+    }
+#endif
+    options.push_back(
+        {"PN532 on SPI",
+         [=]() { kvxConfigPins.setNfcModule(PN532_SPI_MODULE); },
+         kvxConfigPins.nfcModule == PN532_SPI_MODULE}
+    );
+#if !defined(LITE_VERSION)
+    options.push_back(
+        {"ST25R3916 SPI",
+         [=]() { kvxConfigPins.setNfcModule(ST25R3916_SPI_MODULE); },
+         kvxConfigPins.nfcModule == ST25R3916_SPI_MODULE}
+    );
+#endif
+    loopOptions(options, "NFC Module");
 }
 
 /*********************************************************************

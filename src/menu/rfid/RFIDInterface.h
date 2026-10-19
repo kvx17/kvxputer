@@ -98,6 +98,24 @@ public:
     virtual int write(int cardBaudRate = 0) = 0;
     virtual int write_ndef() = 0;
     virtual int emulate() { return NOT_IMPLEMENTED; }
+    // Optional NFC Tools ops — default NOT_IMPLEMENTED; refuse on screen in UI.
+    virtual int lock_ntag() { return NOT_IMPLEMENTED; }
+    virtual int set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) {
+        (void)pwd;
+        (void)pack;
+        return NOT_IMPLEMENTED;
+    }
+    virtual int clear_ntag_password() { return NOT_IMPLEMENTED; }
+    virtual int format_memory() { return erase(); }
+    virtual int transceive_apdu(const uint8_t *tx, uint16_t txLen, uint8_t *rx, uint16_t rxCap,
+                                uint16_t *rxLen) {
+        (void)tx;
+        (void)txLen;
+        (void)rx;
+        (void)rxCap;
+        (void)rxLen;
+        return NOT_IMPLEMENTED;
+    }
     virtual int load() = 0;
     // Load + parse a dump file by path (shared by the GUI and the serial CLI so
     // their behavior never diverges). The base class provides a generic Bruce

@@ -76,7 +76,7 @@ String ScrollableTextArea::getLine(size_t lineNumber) {
 
 size_t ScrollableTextArea::getMaxLines() { return linesBuffer.size(); }
 
-void ScrollableTextArea::show(bool force) {
+bool ScrollableTextArea::show(bool force) {
     draw(force);
 
     // Only the first paint may be forced. Passing force into the idle loop
@@ -85,8 +85,10 @@ void ScrollableTextArea::show(bool force) {
         update(false);
         yield();
     }
-    while (!check(SelPress) && !check(EscPress)) {
-        if (returnToMenu || forceHome) break;
+    for (;;) {
+        if (returnToMenu || forceHome) return false;
+        if (check(SelPress)) return true;
+        if (check(EscPress)) return false;
         update(false);
         yield();
     }

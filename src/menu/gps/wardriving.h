@@ -51,6 +51,7 @@ private:
     uint32_t lastGeofenceBeepMs = 0;
     uint32_t sweepIndex = 0;
     bool sessionEnded = false;
+    bool exitRequested = false;
 
     void endSession();
     void loadAlertMACs();
@@ -63,6 +64,8 @@ private:
     void writeStatsRow(const char *event);
     void checkForAlert(const String &mac, const String &type, const String &name);
     void beep(unsigned freq, unsigned ms);
+    void clearInputFlags();
+    bool pollExitRequest(); // true if user asked to leave (consumes Esc once)
     static bool parseMacToU64(const String &mac, uint64_t &out);
 };
 

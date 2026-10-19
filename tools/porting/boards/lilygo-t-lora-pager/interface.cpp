@@ -206,7 +206,7 @@ void _setup_gpio() {
 
     // Start with default IR, RF, GPS and RFID Configs, replace old
     kvxConfigPins.rfModule = CC1101_SPI_MODULE;
-    kvxConfigPins.rfidModule = ST25R3916_SPI_MODULE;
+    kvxConfigPins.nfcModule = ST25R3916_SPI_MODULE;
     kvxConfigPins.irRx = 1;
     kvxConfigPins.gpsBaudrate = 38400;
 

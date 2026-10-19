@@ -235,8 +235,14 @@ public:
     // iButton Pin
     int iButton = 0;
 
-    // RFID
+    // RFID (LF-adjacent / Unit RFID2 / RC522) vs NFC (PN532 / ST25) — separate pickers
     int rfidModule = M5_RFID2_MODULE;
+#if !defined(LITE_VERSION)
+    // Default to M5 Unit NFC (ST25R3916 I2C @ 0x50); PN532 I2C is still selectable.
+    int nfcModule = ST25R3916_I2C_MODULE;
+#else
+    int nfcModule = PN532_I2C_MODULE;
+#endif
 
     // GPS
     int gpsBaudrate = 9600;
@@ -298,9 +304,13 @@ public:
     // iButton
     void setiButtonPin(int value);
 
-    // RFID
+    // RFID / NFC modules
     void setRfidModule(RFIDModules value);
     void validateRfidModuleValue();
+    void setNfcModule(RFIDModules value);
+    void validateNfcModuleValue();
+    static bool isNfcCapableModule(int module);
+    static bool isRfidCapableModule(int module);
 
     // GPS
     void setGpsBaudrate(int value);

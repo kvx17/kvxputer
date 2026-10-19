@@ -15,7 +15,7 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 ## Highlights
 
 - **Channel menu** — Wii-style 2×3 grid with purple/green theme
-- **Wireless toolkit** — WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa
+- **Wireless toolkit** — WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID, NFC, GPS, FM, LoRa
 - **Customization** — shortcuts, SD themes, RGB LED, UI colors/brightness, startup app (**Config**)
 - **NetOps** — scanning, rogue DHCP/DNS, NTLM, WPAD, SIP, CCTV, SSH, tunnels, and related lab tools
 - **HID & BadUSB** — USB/Bluetooth HID via [kvxkeyboard](docs/HID_REMOTE.md)
@@ -170,7 +170,7 @@ The home screen is a **2×3 channel grid**. The green footer shows the selected 
 | Unit Scroll     | Rotate = select, press = open |
 
 
-Tiles map to WiFi, Discovery, NetOps, BLE, RF, Infrared, RFID, Files, and the other apps below. Some appear only when the hardware or build flag is present (LoRa Cap, FM Si4713, Ethernet, `EVIL_EXTENSIONS`, non-lite).
+Tiles map to WiFi, Discovery, NetOps, BLE, RF, Infrared, RFID, NFC, Files, and the other apps below. Some appear only when the hardware or build flag is present (LoRa Cap, FM Si4713, Ethernet, `EVIL_EXTENSIONS`, non-lite).
 
 ### G0 (shoulder button)
 
@@ -279,24 +279,32 @@ PCA9548A mux that splits one PORT.A into **six** Grove channels. Off by default.
 1. Plug PaHub into PORT.A. Set DIP address (`0x70`–`0x77`, default `0x70`).
 2. **Modules → PaHub** — enable, set or auto-detect address, assign channels, scan.
 3. Supported channel assignments: **RFID2**, **NFC (PN532 I2C)**, **Unit Scroll**, **Joystick2**, **RF433R**.
-4. When RFID2/NFC channels are assigned, **RFID → Config → Module** can select **M5 RFID2 (chN)** / **M5 NFC (chN)**.
+4. When RFID2/NFC channels are assigned, **RFID → Config → RFID Module** can select **M5 RFID2 (chN)** and **NFC → Config → NFC Module** can select **M5 Unit NFC (chN)** / **PN532 on I2C (chN)**.
 
 
 
 ### RFID / NFC readers
 
-Select the active reader under **RFID → Config → RFID Module**. On-device pinouts: **RFID → Config → Wiring help**.
+RFID and NFC are separate menus (Flipper-style). Pick the reader under each channel’s own Config:
+
+- **RFID → Config → RFID Module** — Unit RFID2 / RC522 (`rfidModule`)
+- **NFC → Config → NFC Module** — PN532 / ST25 (`nfcModule`)
+
+On-device pinouts: **Wiring help** in the matching Config menu.
 
 
-| Module                           | Chip      | Choice              | Emulate                 | Apps                                                 |
-| -------------------------------- | --------- | ------------------- | ----------------------- | ---------------------------------------------------- |
-| M5 Unit RFID2                    | WS1850S   | M5 RFID2            | No                      | Read, Scan, Load, Erase, Write NDEF, clone workflows |
-| Elechouse PN532 V3 / ITEAD PN532 | PN532     | PN532 on I2C or SPI | Yes (NDEF / T4T limits) | Full Tag-O-Matic + Emulate                           |
-| RC522                            | MFRC522   | RC522 on SPI        | No                      | Read / write / clone                                 |
-| ST25R3916                        | ST25R3916 | ST25R SPI/I2C       | Yes                     | Read / write / emulate (non-lite)                    |
+| Module                           | Chip      | Menu | Choice              | Emulate                 | Apps                                                 |
+| -------------------------------- | --------- | ---- | ------------------- | ----------------------- | ---------------------------------------------------- |
+| M5 Unit RFID2                    | WS1850S   | RFID | M5 RFID2            | No                      | RFID read/write/clone; no emulate                    |
+| RC522                            | MFRC522   | RFID | RC522 on SPI        | No                      | RFID read / write / clone                            |
+| [M5 Unit NFC](https://docs.m5stack.com/en/unit/Unit_NFC) (U216) | ST25R3916 | NFC  | **M5 Unit NFC**     | Yes                     | Full NFC tools (I2C `0x50` on PORT.A)                |
+| Elechouse PN532 V3 / ITEAD PN532 | PN532     | NFC  | PN532 on I2C or SPI | Yes (NDEF / T4T limits) | Full NFC tools + on-the-fly Emulate NDEF             |
+| ST25R3916 (SPI boards)           | ST25R3916 | NFC  | ST25R3916 SPI       | Yes                     | NFC read / write / emulate (non-lite)                |
+
+**M5 Unit NFC on Cardputer (recommended for Unit NFC)** — select **NFC → Config → NFC Module → M5 Unit NFC** (not PN532). Grove PORT.A: VCC 5V, GND, SDA, SCL. I2C address `0x50`.
 
 
-**PN532 I2C on Cardputer Adv (recommended)**
+**PN532 I2C on Cardputer Adv**
 
 
 | PN532 | Cardputer Adv | Grove  |
@@ -314,9 +322,13 @@ Select the active reader under **RFID → Config → RFID Module**. On-device pi
 | ITEAD / Katranji | SET0 H, SET1 L  | PN532 on I2C |
 
 
-**PN532 SPI (advanced):** shared SPI with SD; CS on G1 (`GROVE_SCL`). Do not run I2C RFID on PORT.A at the same time. Then **RFID Module → PN532 on SPI**.
+**PN532 SPI (advanced):** shared SPI with SD; CS on G1 (`GROVE_SCL`). Do not run I2C NFC on PORT.A at the same time. Then **NFC → Config → NFC Module → PN532 on SPI**.
 
-**Typical workflow:** Module → Read tag → Save `.rfid` under `support_files/rfid/` → Emulate (PN532/ST25 only).
+**Typical workflows:**
+
+- **On-the-fly Emulate NDEF** (PN532/ST25): **NFC → Emulate NDEF** → pick content (URL, text, Wi-Fi, …) → arm radio. No blank tag required.
+- **Read / write:** Module → Read tag → Save `.rfid` under `support_files/rfid/` → Emulate or Write.
+- **Save as file:** compose NDEF → pick card type → save dump for later Load.
 
 ### Sub-GHz RF: RF433 and CC1101
 
@@ -615,19 +627,35 @@ Needs RF433 and/or CC1101 — see [Modules & Add-ons](#modules--add-ons).
 
 ### RFID
 
-Wired readers and companions — see [Modules & Add-ons](#modules--add-ons).
+RFID2 / RC522 (13.56 MHz basics) and 125 kHz. NFC tools live under **NFC** with a separate module picker.
 
 
-| Tool                              | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| **Read / Scan / Load / Erase**    | Tag-O-Matic dump and file workflows.         |
-| **Write NDEF / Emulate NDEF**     | NDEF write/emulate (PN532/ST25 for emulate). |
-| **Chameleon**                     | Chameleon Ultra companion.                   |
-| **Read EMV** *(lite off)*         | EMV reader helpers.                          |
-| **Read 125kHz** *(lite off)*      | LF RFID125 path.                             |
-| **Amiibolink** *(lite off)*       | Amiibo BLE companion.                        |
-| **PN532 BLE / UART** *(lite off)* | Wireless/UART PN532 paths.                   |
-| **Config**                        | Module selection and wiring help.            |
+| Tool                              | Purpose                                       |
+| --------------------------------- | --------------------------------------------- |
+| **Read / Scan / Load / Erase**    | Tag-O-Matic with RFID2 or RC522.              |
+| **Read 125kHz** *(lite off)*      | LF RFID125 path.                              |
+| **Config**                        | RFID Module (RFID2 / RC522) and wiring help.  |
+
+
+### NFC
+
+13.56 MHz PN532 / ST25 tools and companions — see [Modules & Add-ons](#modules--add-ons). Separate from RFID Config.
+
+
+| Tool                              | Purpose                                                        |
+| --------------------------------- | -------------------------------------------------------------- |
+| **Read / Scan / Load / Erase**    | Tag-O-Matic dump and file workflows (NFC module).              |
+| **Write NDEF**                    | Write NDEF to a blank Ultralight/NTAG.                         |
+| **Emulate NDEF**                  | On-the-fly: type URL/text/Wi-Fi/… and arm radio (PN532/ST25).  |
+| **Read records / Memory / Chip**  | NDEF list, ASCII dump, chip info.                              |
+| **Lock / Password / Format**      | NTAG21x lock, PWD, zero user memory (where supported).         |
+| **NFC command**                   | Single raw APDU (PN532/ST25).                                  |
+| **Save as file**                  | Compose NDEF → card type → save `.rfid` / `.nfc`.              |
+| **Chameleon**                     | Chameleon Ultra companion.                                     |
+| **Read EMV** *(lite off)*         | EMV reader helpers.                                            |
+| **Amiibolink** *(lite off)*       | Amiibo BLE companion.                                          |
+| **PN532 BLE / UART** *(lite off)* | Wireless/UART PN532 paths.                                     |
+| **Config**                        | NFC Module (PN532 / ST25) and wiring help.                     |
 
 
 

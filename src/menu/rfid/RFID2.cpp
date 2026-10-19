@@ -15,6 +15,7 @@
 #include <MFRC522DriverSPI.h>
 #include <MFRC522Hack.h>
 #include <algorithm>
+#include <cstring>
 
 #define RFID2_I2C_ADDRESS 0x28
 #define WS1850S_VERSION 0x15
@@ -723,4 +724,51 @@ int RFID2::write_ndef_blocks() {
     }
 
     return SUCCESS;
+}
+
+#include "ntag_ops.h"
+
+int RFID2::format_memory() { return erase(); }
+
+int RFID2::lock_ntag() {
+    if (!PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return TAG_NOT_PRESENT;
+    byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+    if (piccType != MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        byte buf[4] = {data[0], data[1], data[2], data[3]};
+        return mfrc522.MIFARE_Ultralight_Write(page, buf, 4) == MFRC522::StatusCode::STATUS_OK;
+    };
+    auto readPage = [this](uint8_t page, uint8_t data[4]) -> bool {
+        byte buf[18];
+        byte size = sizeof(buf);
+        if (mfrc522.MIFARE_Read(page, buf, &size) != MFRC522::StatusCode::STATUS_OK) return false;
+        memcpy(data, buf, 4);
+        return true;
+    };
+    return ntagLock(pages, writePage, readPage);
+}
+
+int RFID2::set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) {
+    if (!PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return TAG_NOT_PRESENT;
+    byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+    if (piccType != MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        byte buf[4] = {data[0], data[1], data[2], data[3]};
+        return mfrc522.MIFARE_Ultralight_Write(page, buf, 4) == MFRC522::StatusCode::STATUS_OK;
+    };
+    return ntagSetPassword(pages, pwd, pack, writePage);
+}
+
+int RFID2::clear_ntag_password() {
+    if (!PICC_IsNewCardPresent() || !mfrc522.PICC_ReadCardSerial()) return TAG_NOT_PRESENT;
+    byte piccType = mfrc522.PICC_GetType(mfrc522.uid.sak);
+    if (piccType != MFRC522::PICC_Type::PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        byte buf[4] = {data[0], data[1], data[2], data[3]};
+        return mfrc522.MIFARE_Ultralight_Write(page, buf, 4) == MFRC522::StatusCode::STATUS_OK;
+    };
+    return ntagClearPassword(pages, writePage);
 }

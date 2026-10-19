@@ -21,7 +21,7 @@ struct QsAlias {
 static const QsAlias kAliases[] = {
     {"ir", "ir"},
     {"infrared", "ir"},
-    {"nfc", "rfid"},
+    {"nfc", "nfc"},
     {"rfid", "rfid"},
     {"usb", "usb"},
     {"badusb", "bad_usb"},

@@ -21,6 +21,7 @@ const MenuDescriptor kMenus[] = {
     {"usb",       "USB",       &mainMenu.usbMenu,      MENU_FLAG_LITE_EXCLUDED},
     {"gps",       "GPS",       &mainMenu.gpsMenu,      MENU_FLAG_NONE},
     {"rfid",      "RFID",      &mainMenu.rfidMenu,     MENU_FLAG_NONE},
+    {"nfc",       "NFC",       &mainMenu.nfcMenu,      MENU_FLAG_NONE},
     {"files",     "Files",     &mainMenu.fileMenu,     MENU_FLAG_NONE},
     {"scripts",   "Scripts",   &mainMenu.scriptsMenu,  MENU_FLAG_LITE_EXCLUDED | MENU_FLAG_SCRIPTS},
     {"clock",     "Clock",     &mainMenu.clockMenu,    MENU_FLAG_NONE},

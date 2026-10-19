@@ -16,7 +16,8 @@ struct WdConfig {
     int min_sats = 4;
     float accuracy_threshold_m = 500.0f;
     int gmt_offset_hours = 0;
-    String gps_log_mode = "fix_only"; // fix_only | zero_gps | last_known
+    // zero_gps: always log (0,0 until fix). fix_only: wait for GPS (can yield empty CSV).
+    String gps_log_mode = "zero_gps"; // fix_only | zero_gps | last_known
 
     // scan
     String scan_mode = "active_all";

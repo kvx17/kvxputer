@@ -11,6 +11,8 @@
 #include "root/hal/bus_HAL.h"
 #include "root/hal/pahub.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "esp_task_wdt.h" //Include for Headless mode (long write trigger watchdog in JS)
 
@@ -19,6 +21,8 @@
 #endif
 #include "PN532.h"
 #include "RFID2.h"
+#include "ndef_compose.h"
+#include "rfid_shared.h"
 
 #define NDEF_DATA_SIZE 100
 #define SCAN_DUMP_SIZE 5
@@ -39,15 +43,17 @@ void displaySmallErrorToast(const String &txt) {
 }
 } // namespace
 
-TagOMatic::TagOMatic() {
+TagOMatic::TagOMatic(Domain domain) {
+    _domain = domain;
     _initial_state = READ_MODE;
     setup();
 }
 
-TagOMatic::TagOMatic(RFID_State initial_state) {
+TagOMatic::TagOMatic(RFID_State initial_state, Domain domain) {
     if (initial_state == CLONE_MODE || initial_state == WRITE_MODE || initial_state == SAVE_MODE) {
         initial_state = READ_MODE;
     }
+    _domain = domain;
     _initial_state = initial_state;
     setup();
 }
@@ -66,7 +72,8 @@ TagOMatic::~TagOMatic() {
 }
 
 void TagOMatic::set_rfid_module() {
-    switch (kvxConfigPins.rfidModule) {
+    int mod = (_domain == DOMAIN_NFC) ? kvxConfigPins.nfcModule : kvxConfigPins.rfidModule;
+    switch (mod) {
         case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
 #ifdef M5STICK
         case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C_SPI); break;
@@ -85,11 +92,14 @@ void TagOMatic::set_rfid_module() {
 void TagOMatic::setup() {
     returnToMenu = false;
     holdI2CBus();
-    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
+    _pahub = new PahubChannelGuard(
+        (_domain == DOMAIN_NFC) ? PahubChannelGuard::forNfc() : PahubChannelGuard::forRfid()
+    );
+    if (_domain == DOMAIN_NFC) resolveNfcModuleSelection();
     set_rfid_module();
 
     if (!_rfid->begin()) {
-        displayError("RFID module not found!", true);
+        displayError(_domain == DOMAIN_NFC ? "NFC module not found!" : "RFID module not found!", true);
         return;
     }
 
@@ -105,7 +115,40 @@ void TagOMatic::loop() {
             break;
         }
 
-        if (check(SelPress)) { select_state(); }
+        if (check(SelPress)) {
+            if (current_state == SCAN_MODE && !_scanned_tags.empty()) {
+                {
+                    TftFrame frame;
+                    tft.fillScreen(kvxConfig.bgColor);
+                    drawKvxTopBar((_domain == DOMAIN_NFC) ? "NFC" : "RFID", "Scan");
+                }
+                ScrollableTextArea area(
+                    FP,
+                    BORDER_PAD_X,
+                    KVX_TOPBAR_H + 2,
+                    tftWidth - 2 * BORDER_PAD_X,
+                    tftHeight - KVX_TOPBAR_H - BORDER_PAD_X - 2,
+                    false,
+                    false
+                );
+                area.addLine(String(_scanned_tags.size()) + " unique tag(s)");
+                area.addLine("");
+                for (int i = (int)_scanned_tags.size(); i > 0; i--) {
+                    area.addLine(String(i) + ": " + _scanned_tags[i - 1]);
+                }
+                area.addLine("");
+                area.addLine("OK=menu  Esc=scan");
+                if (area.show()) select_state();
+                else {
+                    display_banner();
+                    padprintln("Scanning...");
+                }
+            } else if (_read_uid && (current_state == READ_MODE || current_state == LOAD_MODE)) {
+                tag_actions_menu();
+            } else {
+                select_state();
+            }
+        }
 
         switch (current_state) {
             case READ_MODE: read_card(); break;
@@ -125,17 +168,74 @@ void TagOMatic::loop() {
     }
 }
 
+void TagOMatic::tag_actions_menu() {
+    // Two-phase pick → act so we never nest loopOptions (destroys live callbacks).
+    enum : int {
+        ActSave = 0,
+        ActEmu,
+        ActEmuNdef,
+        ActWrite,
+        ActWriteNdef,
+        ActClone,
+        ActCustomUid,
+        ActCheck,
+        ActErase,
+        ActView,
+        ActReadAgain,
+    };
+
+    for (;;) {
+        if (returnToMenu || forceHome) return;
+
+        int act = -1;
+        options.clear();
+        options.emplace_back("Save", [&]() { act = ActSave; });
+        if (ndefEmulationSupported()) {
+            options.emplace_back("Emulate", [&]() { act = ActEmu; });
+            options.emplace_back("Emulate NDEF", [&]() { act = ActEmuNdef; });
+        }
+        options.emplace_back("Write", [&]() { act = ActWrite; });
+        options.emplace_back("Write NDEF", [&]() { act = ActWriteNdef; });
+        options.emplace_back("Clone UID", [&]() { act = ActClone; });
+        options.emplace_back("Custom UID", [&]() { act = ActCustomUid; });
+        options.emplace_back("Check tag", [&]() { act = ActCheck; });
+        options.emplace_back("Erase tag", [&]() { act = ActErase; });
+        options.emplace_back("View dump", [&]() { act = ActView; });
+        options.emplace_back("Read again", [&]() { act = ActReadAgain; });
+
+        if (loopOptions(options, MENU_TYPE_SUBMENU, (_domain == DOMAIN_NFC) ? "Tag" : "RFID tag") < 0 ||
+            act < 0) {
+            display_banner();
+            if (_read_uid) dump_card_details();
+            else padprintln("Waiting for tag...");
+            return;
+        }
+
+        switch (act) {
+            case ActSave: set_state(SAVE_MODE); return;
+            case ActEmu: set_state(EMULATE_MODE); return;
+            case ActEmuNdef: set_state(EMULATE_NDEF_MODE); return;
+            case ActWrite: set_state(WRITE_MODE); return;
+            case ActWriteNdef: set_state(WRITE_NDEF_MODE); return;
+            case ActClone: set_state(CLONE_MODE); return;
+            case ActCustomUid: set_state(CUSTOM_UID_MODE); return;
+            case ActCheck: set_state(CHECK_MODE); return;
+            case ActErase: set_state(ERASE_MODE); return;
+            case ActReadAgain: set_state(READ_MODE); return;
+            case ActView:
+                if (show_tag_results()) continue; // re-open actions
+                display_banner();
+                padprintln("Waiting for tag...");
+                return;
+            default: return;
+        }
+    }
+}
+
 void TagOMatic::select_state() {
     options = {};
     if (_read_uid) {
-        options.emplace_back("Clone UID", [this]() { set_state(CLONE_MODE); });
-        options.emplace_back("Custom UID", [this]() { set_state(CUSTOM_UID_MODE); });
-        options.emplace_back("Check tag", [this]() { set_state(CHECK_MODE); });
-        options.emplace_back("Write data", [this]() { set_state(WRITE_MODE); });
-        if (ndefEmulationSupported()) {
-            options.emplace_back("Emulate tag", [this]() { set_state(EMULATE_MODE); });
-        }
-        options.emplace_back("Save file", [this]() { set_state(SAVE_MODE); });
+        options.emplace_back("Tag actions", [this]() { tag_actions_menu(); });
     }
     options.emplace_back("Read tag", [this]() { set_state(READ_MODE); });
     options.emplace_back("Scan tags", [this]() { set_state(SCAN_MODE); });
@@ -146,7 +246,7 @@ void TagOMatic::select_state() {
     options.emplace_back("Write NDEF", [this]() { set_state(WRITE_NDEF_MODE); });
     options.emplace_back("Erase tag", [this]() { set_state(ERASE_MODE); });
 
-    loopOptions(options);
+    loopOptions(options, MENU_TYPE_SUBMENU, (_domain == DOMAIN_NFC) ? "NFC" : "RFID");
 }
 
 void TagOMatic::set_state(RFID_State state) {
@@ -162,10 +262,14 @@ void TagOMatic::set_state(RFID_State state) {
 
     switch (state) {
         case READ_MODE:
+            _read_uid = false;
+            padprintln("Waiting for tag...");
+            break;
         case LOAD_MODE: _read_uid = false; break;
         case SCAN_MODE:
             _scanned_set.clear();
             _scanned_tags.clear();
+            padprintln("Scanning...");
             break;
         case CHECK_MODE:
             _sourceUID = _rfid->printableUID.uid;
@@ -218,47 +322,95 @@ void TagOMatic::set_state(RFID_State state) {
 }
 
 void TagOMatic::display_banner() {
-    drawMainBorderWithTitle("TAG-O-MATIC");
-
+    const char *app = (_domain == DOMAIN_NFC) ? "NFC" : "RFID";
+    const char *mode = "";
     switch (current_state) {
-        case READ_MODE: printSubtitle("READ MODE"); break;
-        case SCAN_MODE: printSubtitle("SCAN MODE"); break;
-        case CHECK_MODE: printSubtitle("CHECK MODE"); break;
-        case LOAD_MODE: printSubtitle("LOAD MODE"); break;
-        case CLONE_MODE: printSubtitle("CLONE MODE"); break;
-        case CUSTOM_UID_MODE: printSubtitle("CUSTOM UID MODE"); break;
-        case ERASE_MODE: printSubtitle("ERASE MODE"); break;
-        case WRITE_MODE: printSubtitle("WRITE DATA MODE"); break;
-        case WRITE_NDEF_MODE: printSubtitle("WRITE NDEF MODE"); break;
-        case EMULATE_MODE: printSubtitle("EMULATE MODE"); break;
-        case EMULATE_NDEF_MODE: printSubtitle("EMULATE NDEF MODE"); break;
-        case SAVE_MODE: printSubtitle("SAVE MODE"); break;
+        case READ_MODE: mode = "Read"; break;
+        case SCAN_MODE: mode = "Scan"; break;
+        case CHECK_MODE: mode = "Check"; break;
+        case LOAD_MODE: mode = "Load"; break;
+        case CLONE_MODE: mode = "Clone"; break;
+        case CUSTOM_UID_MODE: mode = "UID"; break;
+        case ERASE_MODE: mode = "Erase"; break;
+        case WRITE_MODE: mode = "Write"; break;
+        case WRITE_NDEF_MODE: mode = "NDEF"; break;
+        case EMULATE_MODE: mode = "Emu"; break;
+        case EMULATE_NDEF_MODE: mode = "EmuNDEF"; break;
+        case SAVE_MODE: mode = "Save"; break;
     }
 
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar(app, mode);
+    }
+
+    // Content starts immediately under the top bar (no TAG-O-MATIC / MODE titles).
     tft.setTextSize(FP);
-    padprintln("");
-    tft.setTextColor(getColorVariation(kvxConfig.priColor), kvxConfig.bgColor);
-    padprintln("Press [OK] to change mode.");
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    padprintln("");
+    tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
+    tft.setTextColor(getColorVariation(kvxConfig.priColor), kvxConfig.bgColor);
+    padprintln("OK=mode  Esc=back");
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+}
+
+String TagOMatic::format_card_details() const {
+    String out;
+    out += "Device type: " + _rfid->printableUID.picc_type + "\n";
+    if (_rfid->printableUID.picc_type != "FeliCa") {
+        out += "UID: " + _rfid->printableUID.uid + "\n";
+        out += "ATQA: " + _rfid->printableUID.atqa + "\n";
+        out += "SAK: " + _rfid->printableUID.sak + "\n";
+        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
+            out += "Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages) + "\n";
+        }
+    } else {
+        out += "IDm: " + _rfid->printableUID.uid + "\n";
+        out += "PMm: " + _rfid->printableUID.sak + "\n";
+        out += "Sys code: " + _rfid->printableUID.atqa + "\n";
+    }
+    if (_rfid->pageReadStatus != RFIDInterface::SUCCESS) {
+        out += "[!] " + _rfid->statusMessage(_rfid->pageReadStatus) + "\n";
+    }
+    if (_rfid->strAllPages.length()) {
+        out += "\n";
+        out += _rfid->strAllPages;
+        if (!_rfid->strAllPages.endsWith("\n")) out += "\n";
+    }
+    return out;
 }
 
 void TagOMatic::dump_card_details() {
-    padprintln("Device type: " + _rfid->printableUID.picc_type);
-    if (_rfid->printableUID.picc_type != "FeliCa") {
-        padprintln("UID: " + _rfid->printableUID.uid);
-        padprintln("ATQA: " + _rfid->printableUID.atqa);
-        padprintln("SAK: " + _rfid->printableUID.sak);
-        if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
-            padprintln("Pages read: " + String(_rfid->dataPages) + "/" + String(_rfid->totalPages));
-        }
-    } else {
-        padprintln("IDm: " + _rfid->printableUID.uid);
-        padprintln("PMm: " + _rfid->printableUID.sak);
-        padprintln("Sys code: " + _rfid->printableUID.atqa);
+    String dump = format_card_details();
+    int start = 0;
+    while (start < dump.length()) {
+        int nl = dump.indexOf('\n', start);
+        if (nl < 0) nl = dump.length();
+        padprintln(dump.substring(start, nl));
+        start = nl + 1;
     }
-    if (_rfid->pageReadStatus != RFIDInterface::SUCCESS)
-        padprintln("[!] " + _rfid->statusMessage(_rfid->pageReadStatus));
+}
+
+bool TagOMatic::show_tag_results() {
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar((_domain == DOMAIN_NFC) ? "NFC" : "RFID", "Tag");
+    }
+
+    ScrollableTextArea area(
+        FP,
+        BORDER_PAD_X,
+        KVX_TOPBAR_H + 2,
+        tftWidth - 2 * BORDER_PAD_X,
+        tftHeight - KVX_TOPBAR_H - BORDER_PAD_X - 2,
+        false,
+        false
+    );
+    area.fromString(format_card_details());
+    area.addLine("");
+    area.addLine("OK=actions  Esc=back");
+    return area.show();
 }
 
 void TagOMatic::dump_check_details() {
@@ -277,7 +429,7 @@ void TagOMatic::dump_ndef_details() {
     if (!_ndef_created) return;
 
     if (!_rfid->rawNdefRecord.empty()) {
-        padprintln("Payload type: Wi-Fi (WSC)");
+        padprintln("Payload type: MIME / raw");
         padprintln("Payload size: " + String(_rfid->rawNdefRecord.size()) + " bytes");
         return;
     }
@@ -325,7 +477,8 @@ void TagOMatic::read_card() {
             show_not_implemented_card();
             return;
         }
-        if (kvxConfigPins.rfidModule != M5_RFID2_MODULE) { // Read felica if module is PN532
+        int mod = (_domain == DOMAIN_NFC) ? kvxConfigPins.nfcModule : kvxConfigPins.rfidModule;
+        if (mod != M5_RFID2_MODULE && mod != RC522_SPI_MODULE) { // FeliCa on PN532/ST25
             readStatus = _rfid->read(1);
             if (readStatus == RFIDInterface::NOT_IMPLEMENTED) {
                 show_not_implemented_card();
@@ -340,26 +493,29 @@ void TagOMatic::read_card() {
     // Serial.print("Tag read status: ");
     // Serial.println(_rfid->statusMessage(_rfid->pageReadStatus));
 
-    display_banner();
-    dump_card_details();
-
     _read_uid = true;
     _lastReadTime = millis();
-    delayWithReturn(500);
+
+    if (show_tag_results()) {
+        tag_actions_menu();
+    } else if (!returnToMenu && !forceHome) {
+        display_banner();
+        padprintln("Waiting for tag...");
+    }
 }
 
 void TagOMatic::scan_cards() {
     if (_rfid->read() != RFIDInterface::SUCCESS) return;
 
     if (_scanned_set.find(_rfid->printableUID.uid) == _scanned_set.end()) {
-        // Serial.println("New tag found: " + _rfid->printableUID.uid);
         _scanned_set.insert(_rfid->printableUID.uid);
         _scanned_tags.push_back(_rfid->printableUID.uid);
     }
 
     display_banner();
+    padprintln(String(_scanned_tags.size()) + " unique — OK to scroll");
+    padprintln("");
     dump_scan_results();
-
     delayWithReturn(200);
 }
 
@@ -522,6 +678,10 @@ void TagOMatic::write_data() {
 void TagOMatic::write_ndef_data() {
     if (!_ndef_created) {
         create_ndef_message();
+        if (!_ndef_created) {
+            set_state(READ_MODE);
+            return;
+        }
         display_banner();
         dump_ndef_details();
     }
@@ -540,14 +700,10 @@ void TagOMatic::write_ndef_data() {
 }
 
 void TagOMatic::create_ndef_message() {
-    options = {
-        {"Text",         [this]() { create_ndef_text(); }},
-        {"URL",          [this]() { create_ndef_url(); } },
-        {"Wifi Network", [this]() { create_ndef_wifi(); }},
-        {"Saved links",  [this]() { create_ndef_link(); }},
-    };
-
-    loopOptions(options);
+    // Expanded content picker shared with NFC Write / Emulate.
+    if (ndefComposeInteractive(_rfid)) {
+        _ndef_created = true;
+    }
 }
 
 void TagOMatic::build_ndef_text_payload(const String &text) {
@@ -680,19 +836,10 @@ void TagOMatic::load_file() {
 
     if (result == RFIDInterface::SUCCESS) {
         displaySuccess("File loaded.");
-        delay(500);
+        delay(400);
         _read_uid = true;
-
-        options = {
-            {"Clone UID",  [this]() { set_state(CLONE_MODE); }},
-            {"Write data", [this]() { set_state(WRITE_MODE); }},
-            {"Check tag",  [this]() { set_state(CHECK_MODE); }},
-        };
-        if (ndefEmulationSupported()) {
-            options.emplace_back("Emulate tag", [this]() { set_state(EMULATE_MODE); });
-        }
-
-        loopOptions(options);
+        if (show_tag_results()) tag_actions_menu();
+        else set_state(READ_MODE);
     } else {
         displayError("Error loading file.", true);
         set_state(READ_MODE);
@@ -748,7 +895,17 @@ void TagOMatic::save_scan_result() {
 TagOMatic::TagOMatic(bool headless_mode) {
     // Constructor for headless mode (without UI)
     // Does NOT call setup() and does NOT launch loop()
+    // Prefer NFC module (PN532/ST25); fall back to RFID2/RC522 if NFC init fails.
+    (void)headless_mode;
     holdI2CBus();
+    _domain = DOMAIN_NFC;
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forNfc());
+    set_rfid_module();
+    if (_rfid && _rfid->begin()) return;
+    delete _rfid;
+    _rfid = nullptr;
+    delete _pahub;
+    _domain = DOMAIN_RFID;
     _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
     set_rfid_module();
     if (_rfid) { _rfid->begin(); }
@@ -960,7 +1117,8 @@ int TagOMatic::load_file_headless(const String &filename) {
 #endif
 
 bool TagOMatic::ndefEmulationSupported() {
-    switch (kvxConfigPins.rfidModule) {
+    if (_domain != DOMAIN_NFC) return false;
+    switch (kvxConfigPins.nfcModule) {
         case PN532_I2C_MODULE:
         case PN532_SPI_MODULE:
 #ifdef M5STICK

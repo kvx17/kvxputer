@@ -53,7 +53,7 @@ void _setup_gpio() {
     kvxConfigPins.rfModule = CC1101_SPI_MODULE;
     kvxConfigPins.irRx = RXLED;
     kvxConfigPins.irTx = TXLED;
-    kvxConfigPins.rfidModule = ST25R3916_SPI_MODULE;
+    kvxConfigPins.nfcModule = ST25R3916_SPI_MODULE;
 
     bool pmu_ret = false;
     pmu_ret = PPM.init(Wire, SYS_I2C_SDA, SYS_I2C_SCL, BQ25896_SLAVE_ADDRESS);

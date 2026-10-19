@@ -31,7 +31,8 @@ public:
 
     void draw(bool force = false);
 
-    void show(bool force = false);
+    /** Scroll until OK (returns true) or Esc/home (returns false). */
+    bool show(bool force = false);
 
     uint32_t getMaxVisibleTextLength();
 

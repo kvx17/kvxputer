@@ -46,6 +46,7 @@
 #include "menu/infrared/custom_ir.h"
 #include "menu/infrared/ir_read.h"
 #include "menu/infrared/kremote/kremote.h"
+#include "menu/nfc/nfc_tools.h"
 #include "menu/rfid/chameleon.h"
 #include "menu/rfid/tag_o_matic.h"
 #include "menu/others/badusb_ble/ducky_typer.h"
@@ -292,15 +293,20 @@ static void launchTagTinker() { tagTinkerMenu(); }
 
 // --- RFID ---
 #if !defined(REMOVE_RFID_HW_INTERFACE)
-static void launchTagRead() { TagOMatic(); }
-static void launchTagScan() { TagOMatic(TagOMatic::SCAN_MODE); }
-static void launchTagLoad() { TagOMatic(TagOMatic::LOAD_MODE); }
-static void launchTagErase() { TagOMatic(TagOMatic::ERASE_MODE); }
-static void launchTagWriteNdef() { TagOMatic(TagOMatic::WRITE_NDEF_MODE); }
-static void launchTagEmulateNdef() { TagOMatic(TagOMatic::EMULATE_NDEF_MODE); }
+static void launchTagRead() { TagOMatic(TagOMatic::DOMAIN_NFC); }
+static void launchTagScan() { TagOMatic(TagOMatic::SCAN_MODE, TagOMatic::DOMAIN_NFC); }
+static void launchTagLoad() { TagOMatic(TagOMatic::LOAD_MODE, TagOMatic::DOMAIN_NFC); }
+static void launchTagErase() { TagOMatic(TagOMatic::ERASE_MODE, TagOMatic::DOMAIN_NFC); }
+static void launchTagWriteNdef() { TagOMatic(TagOMatic::WRITE_NDEF_MODE, TagOMatic::DOMAIN_NFC); }
+static void launchTagEmulateNdef() { TagOMatic(TagOMatic::EMULATE_NDEF_MODE, TagOMatic::DOMAIN_NFC); }
+static void launchRfidTagRead() { TagOMatic(TagOMatic::DOMAIN_RFID); }
+static void launchRfidTagScan() { TagOMatic(TagOMatic::SCAN_MODE, TagOMatic::DOMAIN_RFID); }
+static void launchRfidTagLoad() { TagOMatic(TagOMatic::LOAD_MODE, TagOMatic::DOMAIN_RFID); }
+static void launchRfidTagErase() { TagOMatic(TagOMatic::ERASE_MODE, TagOMatic::DOMAIN_RFID); }
 #endif
 static void launchChameleon() { Chameleon(); }
 static void launchRfidConfig() { mainMenu.rfidMenu.configMenu(); }
+static void launchNfcConfig() { mainMenu.nfcMenu.configMenu(); }
 #ifndef LITE_VERSION
 static void launchEmv() { EMVReader(); }
 static void launchRfid125() { RFID125(); }
@@ -309,6 +315,16 @@ static void launchPn532Ble() { Pn532ble(); }
 #if !defined(REMOVE_RFID_HW_INTERFACE)
 static void launchPn532Killer() { PN532KillerTools(); }
 #endif
+#endif
+#if !defined(REMOVE_RFID_HW_INTERFACE)
+static void launchNfcReadRecords() { nfcReadRecords(); }
+static void launchNfcMemoryDump() { nfcMemoryDump(); }
+static void launchNfcChipInfo() { nfcChipInfo(); }
+static void launchNfcLock() { nfcLockTag(); }
+static void launchNfcPassword() { nfcPasswordMenu(); }
+static void launchNfcFormat() { nfcFormatMemory(); }
+static void launchNfcApdu() { nfcSendApdu(); }
+static void launchNfcSaveDump() { nfcSaveAsFile(); }
 #endif
 
 // --- GPS ---
@@ -589,24 +605,49 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
         {"tagtinker", "TagTinker ESL", "IR", false, evilOn, launchTagTinker},
 #endif
 
-        // RFID
+        // RFID (RFID2 / RC522 / 125 kHz) — separate from NFC
 #if !defined(REMOVE_RFID_HW_INTERFACE)
-        {"rfid_read", "Read tag", "RFID", false, alwaysOn, launchTagRead},
-        {"rfid_scan", "Scan tags", "RFID", false, alwaysOn, launchTagScan},
-        {"rfid_load", "Load file", "RFID", false, alwaysOn, launchTagLoad},
-        {"rfid_erase", "Erase data", "RFID", false, alwaysOn, launchTagErase},
-        {"rfid_write_ndef", "Write NDEF", "RFID", false, alwaysOn, launchTagWriteNdef},
-        {"rfid_emulate_ndef", "Emulate NDEF", "RFID", false, alwaysOn, launchTagEmulateNdef},
+        {"rfid_tag_read", "Read tag", "RFID", false, alwaysOn, launchRfidTagRead},
+        {"rfid_tag_scan", "Scan tags", "RFID", false, alwaysOn, launchRfidTagScan},
+        {"rfid_tag_load", "Load file", "RFID", false, alwaysOn, launchRfidTagLoad},
+        {"rfid_tag_erase", "Erase data", "RFID", false, alwaysOn, launchRfidTagErase},
 #endif
-        {"chameleon", "Chameleon", "RFID", false, alwaysOn, launchChameleon},
-        {"rfid_config", "RFID Config", "RFID", false, alwaysOn, launchRfidConfig},
 #ifndef LITE_VERSION
-        {"emv_reader", "Read EMV", "RFID", false, notLite, launchEmv},
         {"rfid125", "Read 125kHz", "RFID", false, notLite, launchRfid125},
-        {"amiibo", "Amiibolink", "RFID", false, notLite, launchAmiibo},
-        {"pn532_ble", "PN532 BLE", "RFID", false, notLite, launchPn532Ble},
+#endif
+        {"rfid_config", "RFID Config", "RFID", false, alwaysOn, launchRfidConfig},
+
+        // NFC (PN532 / ST25) — legacy rfid_* ids keep NFC shortcuts
 #if !defined(REMOVE_RFID_HW_INTERFACE)
-        {"pn532_uart", "PN532 UART", "RFID", false, notLite, launchPn532Killer},
+        {"rfid_read", "Read tag", "NFC", false, alwaysOn, launchTagRead},
+        {"nfc_read", "Read tag", "NFC", false, alwaysOn, launchTagRead},
+        {"rfid_scan", "Scan tags", "NFC", false, alwaysOn, launchTagScan},
+        {"nfc_scan", "Scan tags", "NFC", false, alwaysOn, launchTagScan},
+        {"rfid_load", "Load file", "NFC", false, alwaysOn, launchTagLoad},
+        {"nfc_load", "Load file", "NFC", false, alwaysOn, launchTagLoad},
+        {"rfid_erase", "Erase data", "NFC", false, alwaysOn, launchTagErase},
+        {"nfc_erase", "Erase data", "NFC", false, alwaysOn, launchTagErase},
+        {"rfid_write_ndef", "Write NDEF", "NFC", false, alwaysOn, launchTagWriteNdef},
+        {"nfc_write_ndef", "Write NDEF", "NFC", false, alwaysOn, launchTagWriteNdef},
+        {"rfid_emulate_ndef", "Emulate NDEF", "NFC", false, alwaysOn, launchTagEmulateNdef},
+        {"nfc_emulate_ndef", "Emulate NDEF", "NFC", false, alwaysOn, launchTagEmulateNdef},
+        {"nfc_records", "Read records", "NFC", false, alwaysOn, launchNfcReadRecords},
+        {"nfc_dump", "Memory dump", "NFC", false, alwaysOn, launchNfcMemoryDump},
+        {"nfc_chip_info", "Chip info", "NFC", false, alwaysOn, launchNfcChipInfo},
+        {"nfc_lock", "Lock tag", "NFC", false, alwaysOn, launchNfcLock},
+        {"nfc_password", "NTAG password", "NFC", false, alwaysOn, launchNfcPassword},
+        {"nfc_format", "Format memory", "NFC", false, alwaysOn, launchNfcFormat},
+        {"nfc_apdu", "NFC command", "NFC", false, alwaysOn, launchNfcApdu},
+        {"nfc_save_dump", "Save as file", "NFC", false, alwaysOn, launchNfcSaveDump},
+#endif
+        {"chameleon", "Chameleon", "NFC", false, alwaysOn, launchChameleon},
+        {"nfc_config", "NFC Config", "NFC", false, alwaysOn, launchNfcConfig},
+#ifndef LITE_VERSION
+        {"emv_reader", "Read EMV", "NFC", false, notLite, launchEmv},
+        {"amiibo", "Amiibolink", "NFC", false, notLite, launchAmiibo},
+        {"pn532_ble", "PN532 BLE", "NFC", false, notLite, launchPn532Ble},
+#if !defined(REMOVE_RFID_HW_INTERFACE)
+        {"pn532_uart", "PN532 UART", "NFC", false, notLite, launchPn532Killer},
 #endif
 #endif
 
@@ -1201,6 +1242,7 @@ static void pickShortcutApp() {
         "RF",
         "IR",
         "RFID",
+        "NFC",
         "GPS",
         "NRF24",
         "NetOps",

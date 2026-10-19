@@ -14,6 +14,7 @@ struct themeFiles {
     String usb = "";
     String rf = "";
     String rfid = "";
+    String nfc = "";
     String fm = "";
     String ir = "";
     String files = "";
@@ -41,6 +42,7 @@ struct themeInfo {
     bool usb = false;
     bool rf = false;
     bool rfid = false;
+    bool nfc = false;
     bool fm = false;
     bool ir = false;
     bool files = false;

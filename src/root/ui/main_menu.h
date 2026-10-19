@@ -8,6 +8,7 @@
 #include "menu/ble/ble_menu.h"
 #include "menu/rf/rf_menu.h"
 #include "menu/rfid/rfid_menu.h"
+#include "menu/nfc/nfc_menu.h"
 #include "menu/lora/lora_menu.h"
 #include "menu/infrared/infrared_menu.h"
 #include "menu/gps/gps_menu.h"
@@ -42,6 +43,7 @@ public:
     NetOpsMenu netOpsMenu;
     OthersMenu othersMenu;
     RFIDMenu rfidMenu;
+    NFCMenu nfcMenu;
     RFMenu rfMenu;
     ScriptsMenu scriptsMenu;
     UsbMenu usbMenu;

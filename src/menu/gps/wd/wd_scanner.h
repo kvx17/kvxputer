@@ -22,13 +22,18 @@ public:
     void beginRadio();
     void restoreRadio();
 
-    // Runs one full sweep. Calls gpsPump between channels / after scans.
-    int sweep(std::vector<WdWifiHit> &out, const std::function<void()> &gpsPump);
+    /// Runs one full sweep. Calls onTick often (GPS pump + Esc). Returns -1 if aborted.
+    int sweep(
+        std::vector<WdWifiHit> &out,
+        const std::function<bool()> &shouldAbort,
+        const std::function<void()> &onTick
+    );
 
     void maybeRotateMac(uint32_t sweepIndex);
     void stopWifi();
     void startWifi();
     bool wifiStopped() const { return stopped; }
+    void abortScan();
 
     int channelCount() const { return maxChannel; }
 
@@ -52,4 +57,11 @@ private:
     void applyCountryAndPower();
     int freqForChannel(int ch) const;
     void randomizeMac();
+    int scanChannelAsync(
+        uint8_t channel,
+        bool passive,
+        uint32_t dwell,
+        const std::function<bool()> &shouldAbort,
+        const std::function<void()> &onTick
+    );
 };

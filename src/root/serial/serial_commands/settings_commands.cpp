@@ -40,6 +40,8 @@ uint32_t settingsCallback(cmd *c) {
         else if (setting_name == "rfScanRange") kvxConfigPins.setRfScanRange(setting_value.toInt());
         else if (setting_name == "rfidModule")
             kvxConfigPins.setRfidModule(static_cast<RFIDModules>(setting_value.toInt()));
+        else if (setting_name == "nfcModule")
+            kvxConfigPins.setNfcModule(static_cast<RFIDModules>(setting_value.toInt()));
         else isPinField = false;
         if (isPinField) {
             serialDevice->println(setting_name + " = " + setting_value);

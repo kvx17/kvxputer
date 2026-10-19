@@ -4,6 +4,7 @@
  */
 
 #include "wardriving.h"
+#include "menu/gps/wd/wd_viewer.h"
 #include "menu/gps/wigle.h"
 #include "menu/others/audio.h"
 #include "root/app/utils.h"
@@ -13,10 +14,12 @@
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/ui/settings.h"
 #include <cctype>
 #include <cstring>
 #include <esp_wifi.h>
+#include <vector>
 
 namespace {
 constexpr const char *OUT_DIR = kvx::paths::GPS_WDBOTH;
@@ -73,6 +76,29 @@ void Wardriving::beep(unsigned freq, unsigned ms) {
     _tone(freq, ms);
 }
 
+void Wardriving::clearInputFlags() {
+    EscPress = false;
+    SelPress = false;
+    AnyKeyPress = false;
+    UpPress = false;
+    DownPress = false;
+    NextPress = false;
+    PrevPress = false;
+    SerialCmdPress = false;
+}
+
+bool Wardriving::pollExitRequest() {
+    if (exitRequested || forceHome || returnToMenu) return true;
+    // Peek sticky Esc/` without going through check()'s debounce suspend.
+    if (EscPress) {
+        EscPress = false;
+        AnyKeyPress = false;
+        exitRequested = true;
+        return true;
+    }
+    return false;
+}
+
 void Wardriving::setup() {
     ioExpander.turnPinOnOff(IO_EXP_GPS, HIGH);
 #ifdef USE_BOOST
@@ -113,25 +139,63 @@ void Wardriving::setup() {
     }
     gpsConnected = true;
 
-    displayTextLine("Waiting GPS sentences...");
+    // Detect GPS module (NMEA on UART) before scanning.
+    drawMainBorderWithTitle(wantWifi && wantBle ? "WD Both" : (wantWifi ? "WD WiFi" : "WD BLE"));
+    displayTextLine("Looking for GPS...");
+    bool gpsLink = false;
     uint32_t t0 = millis();
-    while (gps.msSinceSentence() == 0xFFFFFFFF && millis() - t0 < 20000) {
+    while (millis() - t0 < 15000) {
         gps.pump();
+        uint32_t waited = (millis() - t0) / 1000;
+        if (gps.msSinceSentence() != 0xFFFFFFFF) {
+            gpsLink = true;
+            break;
+        }
+        displayTextLine("Looking for GPS... " + String(waited) + "s");
         if (check(EscPress)) {
             endSession();
             return;
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
-    if (!logger.openSession(*fs, OUT_DIR)) {
-        displayError("CSV path failed", true);
+    if (gpsLink) {
+        // Give a moment for a possible first fix / sat count to populate.
+        uint32_t t1 = millis();
+        while (millis() - t1 < 2000) {
+            gps.pump();
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+        WdGpsFix fx = gps.getFix();
+        String msg = "GPS connected";
+        if (fx.has_3d_fix && fx.accuracy_ok) {
+            msg += "\nFix OK — logging";
+        } else {
+            msg += "\nDetecting location...";
+            if (cfg.gps_log_mode == "fix_only") msg += "\n(log waits for fix)";
+            else if (cfg.gps_log_mode == "zero_gps") msg += "\n(zero_gps: log now)";
+            else msg += "\n(last_known after fix)";
+        }
+        if (fx.satellites > 0) msg += "\nSats: " + String(fx.satellites);
+        displaySuccess(msg, true);
+    } else {
+        String msg = "GPS not detected\nCheck Grove / baud\n";
+        if (cfg.gps_log_mode == "zero_gps") msg += "Continuing (zero_gps)";
+        else msg += "Logging waits for GPS";
+        displayError(msg, true);
+        if (cfg.gps_log_mode == "fix_only" || cfg.gps_log_mode == "last_known") {
+            // Still continue — user can get a fix outdoors; session stays alive.
+        }
+    }
+
+    // Open CSV on storage before WiFi scans (SPI/SD is more reliable here).
+    if (!logger.openSession(fs, OUT_DIR)) {
+        displayError("CSV create failed\nCheck SD / storage", true);
         endSession();
         return;
     }
-    // File is created lazily on the first logged row (avoids empty header-only CSVs).
     displaySuccess(
-        String(fs == &SD ? "SD " : "LFS ") + logger.filename() + "\n(on first AP)", true
+        String(fs == &SD ? "SD: " : "LFS: ") + logger.filename(), true
     );
 
     lastScanMs = 0;
@@ -267,20 +331,20 @@ void Wardriving::checkBattery() {
 void Wardriving::endSession() {
     if (sessionEnded) return;
     sessionEnded = true;
-    writeStatsRow("exit");
-    logger.flush();
-    const uint32_t rowsDone = logger.rowsWritten();
-    const uint32_t sweepsDone = logger.sweeps();
-    const size_t uniqueDone = logger.uniqueCount();
-    logger.close();
+    exitRequested = true;
+    if (wantWifi) scanner.abortScan();
+
+    // Stop radios BEFORE final SD flush — SPI SD + WiFi can drop buffered writes.
     if (wantBle) {
 #if !defined(KVX_BLE_BACKEND_HOSTED)
         if (bleInitialized) {
+            if (pBLEScan) pBLEScan->stop();
             BLEDevice::deinit(true);
             pBLEScan = nullptr;
             bleInitialized = false;
         }
 #else
+        bleBackend().stopScan();
         bleBackend().deinit();
 #endif
     }
@@ -290,28 +354,92 @@ void Wardriving::endSession() {
     }
     gps.end();
     gpsConnected = false;
+
+    writeStatsRow("exit");
+    logger.flush();
+    const uint32_t rowsDone = logger.rowsWritten();
+    const uint32_t sweepsDone = logger.sweeps();
+    const size_t uniqueDone = logger.uniqueCount();
+    const uint32_t writeErrs = logger.writeErrors();
+    const String sessionPath = logger.fullPath();
+    const String sessionName = logger.filename();
+    logger.close();
+
+    // Verify bytes actually landed (empty = headers only ≈ 2 lines).
+    size_t onDisk = 0;
+    if (fs && sessionPath.length()) {
+        File probe = fs->open(sessionPath, FILE_READ);
+        if (probe) {
+            onDisk = probe.size();
+            probe.close();
+        }
+    }
+
     if (stats.displayBlank) setBrightness(kvxConfig.bright, false);
 
-    drawMainBorderWithTitle("WD Summary");
-    padprintln("Rows: " + String(rowsDone));
-    padprintln("WiFi: " + String(stats.wifiLogged) + " BLE: " + String(stats.bleLogged));
-    padprintln("Unique: " + String(uniqueDone));
-    padprintln("Sweeps: " + String(sweepsDone));
-    padprintf("Dist: %.2f km\n", stats.distance_m / 1000.0);
-    padprintln("U=upload  any=exit");
-    uint32_t t0 = millis();
-    while (millis() - t0 < 8000) {
+    // Drop keys mashed while scans were blocking so they don't dismiss summary.
+    clearInputFlags();
+    vTaskDelay(80 / portTICK_PERIOD_MS);
+    clearInputFlags();
+
+    ScrollableTextArea area("WD Summary");
+    area.addLine("File: " + (sessionName.length() ? sessionName : String("(none)")));
+    area.addLine("Rows: " + String(rowsDone));
+    area.addLine("WiFi: " + String(stats.wifiLogged) + "  BLE: " + String(stats.bleLogged));
+    area.addLine("Unique: " + String(uniqueDone));
+    area.addLine("Sweeps: " + String(sweepsDone));
+    area.addLine("Dist: " + String(stats.distance_m / 1000.0, 2) + " km");
+    if (writeErrs) area.addLine("Write errs: " + String(writeErrs));
+    area.addLine("On disk: " + String((unsigned)onDisk) + " B");
+    if (rowsDone == 0) {
+        area.addLine("");
+        area.addLine("No networks logged.");
+        area.addLine("Need GPS fix, or set");
+        area.addLine("gps_log_mode=zero_gps");
+        area.addLine("in WD Config.");
+    } else if (onDisk < 64 && rowsDone > 0) {
+        area.addLine("");
+        area.addLine("WARNING: file tiny");
+        area.addLine("SD write may have failed");
+    }
+    area.addLine("");
+    area.addLine(";/. scroll");
+    area.addLine("OK = open results");
+    area.addLine("U = upload");
+    area.addLine("Esc = exit");
+    area.draw(true);
+
+    while (!returnToMenu && !forceHome) {
         char c = checkLetterShortcutPress();
         if (c == 'u' || c == 'U') {
+            clearInputFlags();
             Wigle wigle;
             if (wifiConnectMenu()) {
                 wigle.upload_folder(fs, OUT_DIR, cfg.delete_after_upload, cfg.compress, cfg.min_sweeps);
             }
-            break;
+            clearInputFlags();
+            area.draw(true);
+            continue;
         }
-        if (check(EscPress) || check(SelPress) || check(AnyKeyPress)) break;
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        if (check(EscPress)) break;
+        if (check(SelPress)) {
+            clearInputFlags();
+            if (fs && sessionPath.length()) {
+                wardrivingViewCaptureFile(*fs, sessionPath, sessionName);
+            } else {
+                displayError("No session file", true);
+            }
+            clearInputFlags();
+            drawMainBorderWithTitle("WD Summary");
+            area.draw(true);
+            continue;
+        }
+        if (check(PrevPress) || check(UpPress)) area.scrollUp();
+        else if (check(NextPress) || check(DownPress)) area.scrollDown();
+        area.draw(false);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
+    clearInputFlags();
     returnToMenu = true;
 }
 
@@ -322,10 +450,12 @@ void Wardriving::handleKeys() {
     }
     if (check(UpPress) || check(PrevPress)) {
         if (ui.view() == WdDashView::Channels) ui.nextChannelMode();
+        else ui.scrollUp();
         return;
     }
     if (check(DownPress) || check(NextPress)) {
         if (ui.view() == WdDashView::Channels) ui.nextChannelMode();
+        else ui.scrollDown();
         return;
     }
 
@@ -353,8 +483,11 @@ void Wardriving::handleKeys() {
             if (scanner.wifiStopped()) {
                 scanner.startWifi();
                 stats.wifiStopped = false;
+                // Same session file — do not create a new empty wd_NNN.csv.
                 logger.close();
-                logger.openSession(*fs, OUT_DIR);
+                if (!logger.reopenCurrent()) {
+                    displayError("CSV reopen failed", true);
+                }
                 beep(2400, 50);
             } else {
                 scanner.stopWifi();
@@ -372,7 +505,10 @@ void Wardriving::handleKeys() {
             }
             break;
         }
-        case 'q': endSession(); break;
+        case 'q':
+            exitRequested = true;
+            endSession();
+            break;
         case ',':
         case '.':
             if (ui.view() == WdDashView::Channels) ui.nextChannelMode();
@@ -391,8 +527,18 @@ void Wardriving::updateHud() {
     WdGpsFix logFix;
     bool canLog = gps.resolveLogPosition(logFix);
     stats.gpsModeLabel = cfg.gps_log_mode;
-    if (gps.sentencesStale()) stats.statusNote = "GPS: no sentences";
-    else stats.statusNote = "";
+    const bool loggingCoords =
+        canLog && (logFix.lat != 0.0 || logFix.lng != 0.0);
+    if (!canLog) stats.statusNote = "NOT LOGGING (no GPS)";
+    else if (gps.sentencesStale()) stats.statusNote = "GPS: not connected";
+    else if (loggingCoords) {
+        if (live.accuracy_ok) stats.statusNote = "GPS: fix OK";
+        else stats.statusNote = "GPS: logging (weak/no HDOP)";
+    } else if (cfg.gps_log_mode == "zero_gps") {
+        stats.statusNote = "Logging @ 0,0 (no fix)";
+    } else {
+        stats.statusNote = "GPS: detecting location";
+    }
 
     bool skipGeo = (cfg.gps_log_mode == "zero_gps" && !(live.has_3d_fix && live.accuracy_ok));
     stats.inGeofence = canLog && !skipGeo && filter.inGeofence(logFix.lat, logFix.lng);
@@ -401,6 +547,7 @@ void Wardriving::updateHud() {
 }
 
 void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
+    if (pollExitRequest()) return;
 #if defined(KVX_BLE_BACKEND_HOSTED)
     if (!bleBackend().startScan()) {
         displayError("WD BLE\nneeds hosted C6 BLE GAP", true);
@@ -409,12 +556,13 @@ void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
     uint32_t end = millis() + (uint32_t)scanTime * 1000UL;
     while (millis() < end) {
         gps.pump();
-        if (check(EscPress)) break;
+        if (pollExitRequest()) break;
         vTaskDelay(20 / portTICK_PERIOD_MS);
     }
     BleScanResult hits[32];
     int count = bleBackend().copyScan(hits, 32);
     bleBackend().stopScan();
+    if (exitRequested) return;
     stats.bleSeen += count;
     for (int i = 0; i < count; i++) {
         String address = hits[i].addr;
@@ -425,16 +573,14 @@ void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
         uint64_t key = 0;
         parseMacToU64(address, key);
         bool isNew = key ? logger.noteUnique(key) : true;
-        bool allow =
-            filter.allowLog("", address, fix.lat, fix.lng, skipGeofence);
+        bool allow = filter.allowLog("", address, fix.lat, fix.lng, skipGeofence);
         if (!allow) {
             stats.blocked++;
             if (cfg.beep_on_blocked) beep(800, 30);
             continue;
         }
         if (!stats.loggingPaused) {
-            logger.writeBle(address, name, rssi, mfg, fix);
-            stats.bleLogged++;
+            if (logger.writeBle(address, name, rssi, mfg, fix)) stats.bleLogged++;
         }
         if (isNew && cfg.beep_on_new) beep(2500, 40);
         checkForAlert(address, "BLE", name);
@@ -452,10 +598,26 @@ void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
         pBLEScan->stop();
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
-    // Pump GPS during the blocking window by using short async-style waits:
-    // getResults blocks; pump before/after.
     gps.pump();
-    BLEScanResults found = pBLEScan->getResults(scanTime * 1000, false);
+    // Non-blocking start so Esc can abort during the scan window.
+    if (!pBLEScan->start(scanTime * 1000, false, true)) {
+        // Fallback: short blocking scan
+        BLEScanResults found = pBLEScan->getResults(500, false);
+        (void)found;
+    }
+    while (pBLEScan->isScanning()) {
+        gps.pump();
+        if (pollExitRequest()) {
+            pBLEScan->stop();
+            break;
+        }
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+    if (exitRequested) {
+        pBLEScan->clearResults();
+        return;
+    }
+    BLEScanResults found = pBLEScan->getResults();
     gps.pump();
     int count = found.getCount();
     stats.bleSeen += count;
@@ -484,13 +646,13 @@ void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
             continue;
         }
         if (!stats.loggingPaused) {
-            logger.writeBle(address, name, rssi, mfg, fix);
-            stats.bleLogged++;
+            if (logger.writeBle(address, name, rssi, mfg, fix)) stats.bleLogged++;
         }
         if (isNew && cfg.beep_on_new) beep(2500, 40);
         checkForAlert(address, "BLE", name);
         if ((i & 0x1F) == 0) {
             gps.pump();
+            if (pollExitRequest()) break;
             vTaskDelay(1);
         }
     }
@@ -499,13 +661,17 @@ void Wardriving::scanBle(const WdGpsFix &fix, bool skipGeofence) {
 }
 
 void Wardriving::runSweep() {
+    auto shouldAbort = [this]() { return pollExitRequest(); };
+    auto onTick = [this]() { gps.pump(); };
+
     WdGpsFix fix;
     if (!gps.resolveLogPosition(fix)) {
-        // Still scan for UI counts when possible
+        // fix_only with no fix: still scan for the HUD, but do not write CSV rows.
         if (wantWifi && !scanner.wifiStopped()) {
-            if (wantWifi) scanner.maybeRotateMac(sweepIndex);
+            scanner.maybeRotateMac(sweepIndex);
             std::vector<WdWifiHit> hits;
-            scanner.sweep(hits, [this]() { gps.pump(); });
+            int n = scanner.sweep(hits, shouldAbort, onTick);
+            if (n < 0 || exitRequested) return;
             memset(stats.channelSweep, 0, sizeof(stats.channelSweep));
             for (const auto &h : hits) {
                 stats.wifiSeen++;
@@ -524,9 +690,6 @@ void Wardriving::runSweep() {
             }
             logger.noteSweep();
             sweepIndex++;
-        }
-        if (wantBle) {
-            // BLE without log position: skip CSV
         }
         return;
     }
@@ -548,7 +711,8 @@ void Wardriving::runSweep() {
     if (wantWifi && !scanner.wifiStopped()) {
         scanner.maybeRotateMac(sweepIndex);
         std::vector<WdWifiHit> hits;
-        scanner.sweep(hits, [this]() { gps.pump(); });
+        int n = scanner.sweep(hits, shouldAbort, onTick);
+        if (n < 0 || exitRequested) return;
         memset(stats.channelSweep, 0, sizeof(stats.channelSweep));
         for (const auto &h : hits) {
             stats.wifiSeen++;
@@ -568,33 +732,42 @@ void Wardriving::runSweep() {
                 stats.blocked++;
                 if (cfg.beep_on_blocked) beep(800, 25);
             } else if (!stats.loggingPaused) {
-                logger.writeWifi(h, fix);
-                stats.wifiLogged++;
-                if (isNew && cfg.beep_on_new) beep(2500, 35);
+                if (logger.writeWifi(h, fix)) {
+                    stats.wifiLogged++;
+                    if (isNew && cfg.beep_on_new) beep(2500, 35);
+                }
             }
             WdRecentAp ap{h.ssid, h.bssid, h.rssi, h.channel, h.auth, fix.datetime, isNew};
             ui.pushRecent(ap, isNew);
             checkForAlert(h.bssid, "WiFi", h.ssid);
+            if (pollExitRequest()) return;
         }
     }
 
-    if (wantBle) scanBle(fix, skipGeo);
+    if (wantBle && !exitRequested) scanBle(fix, skipGeo);
+    if (exitRequested) return;
 
     logger.noteSweep();
     sweepIndex++;
-    logger.maybeFlush();
+    logger.flush();
 }
 
 void Wardriving::loop() {
     returnToMenu = false;
+    exitRequested = false;
+    clearInputFlags();
     while (!sessionEnded && !returnToMenu && !forceHome) {
-        if (check(EscPress)) {
+        if (pollExitRequest()) {
+            displayTextLine("Stopping...");
             endSession();
             break;
         }
         gps.pump();
         handleKeys();
-        if (sessionEnded) break;
+        if (sessionEnded || exitRequested) {
+            if (!sessionEnded) endSession();
+            break;
+        }
 
         checkBattery();
         updateHud();
@@ -603,6 +776,11 @@ void Wardriving::loop() {
         if (lastScanMs == 0 || millis() - lastScanMs >= delayMs) {
             runSweep();
             lastScanMs = millis();
+            if (exitRequested) {
+                displayTextLine("Stopping...");
+                endSession();
+                break;
+            }
         }
 
         if (cfg.stats_enabled && millis() - lastStatsMs >= (uint32_t)cfg.stats_interval_s * 1000UL) {
@@ -613,11 +791,13 @@ void Wardriving::loop() {
         uint32_t slice = millis();
         while (millis() - slice < 40) {
             gps.pump();
-            if (check(EscPress)) {
-                endSession();
-                break;
-            }
+            if (pollExitRequest()) break;
             vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+        if (exitRequested) {
+            displayTextLine("Stopping...");
+            endSession();
+            break;
         }
     }
     if (!sessionEnded) endSession();

@@ -73,7 +73,7 @@ void WdScanner::restoreRadio() {
 }
 
 void WdScanner::stopWifi() {
-    WiFi.scanDelete();
+    abortScan();
     WiFi.mode(WIFI_OFF);
     stopped = true;
 }
@@ -85,15 +85,18 @@ void WdScanner::startWifi() {
     stopped = false;
 }
 
+void WdScanner::abortScan() {
+    WiFi.scanDelete();
+}
+
 void WdScanner::randomizeMac() {
     uint8_t mac[6];
     for (int i = 0; i < 6; i++) mac[i] = (uint8_t)esp_random();
     if (macSpoofOui) {
-        // Keep locally administered bit clear half the time for OUI-like look
         if (esp_random() & 1) mac[0] = (mac[0] & 0xFC) | 0x02;
-        else mac[0] = (mac[0] & 0xFE); // unicast, may look like vendor
+        else mac[0] = (mac[0] & 0xFE);
     } else {
-        mac[0] = (mac[0] & 0xFC) | 0x02; // locally administered unicast
+        mac[0] = (mac[0] & 0xFC) | 0x02;
     }
     esp_wifi_set_mac(WIFI_IF_STA, mac);
 }
@@ -110,7 +113,48 @@ int WdScanner::freqForChannel(int ch) const {
     return 0;
 }
 
-int WdScanner::sweep(std::vector<WdWifiHit> &out, const std::function<void()> &gpsPump) {
+int WdScanner::scanChannelAsync(
+    uint8_t channel,
+    bool passive,
+    uint32_t dwell,
+    const std::function<bool()> &shouldAbort,
+    const std::function<void()> &onTick
+) {
+    // Cancel any leftover scan before starting.
+    int st = WiFi.scanComplete();
+    if (st == WIFI_SCAN_RUNNING) {
+        WiFi.scanDelete();
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+
+    int16_t started = WiFi.scanNetworks(true, true, passive, dwell, channel);
+    if (started == WIFI_SCAN_FAILED) return 0;
+
+    uint32_t t0 = millis();
+    // Hard cap so we never hang forever if the driver stalls.
+    const uint32_t timeout = dwell * (channel == 0 ? (uint32_t)maxChannel + 2 : 3) + 3000;
+    while (true) {
+        if (onTick) onTick();
+        if (shouldAbort && shouldAbort()) {
+            WiFi.scanDelete();
+            return -1;
+        }
+        int done = WiFi.scanComplete();
+        if (done >= 0) return done;
+        if (done == WIFI_SCAN_FAILED) return 0;
+        if (millis() - t0 > timeout) {
+            WiFi.scanDelete();
+            return 0;
+        }
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+}
+
+int WdScanner::sweep(
+    std::vector<WdWifiHit> &out,
+    const std::function<bool()> &shouldAbort,
+    const std::function<void()> &onTick
+) {
     out.clear();
     if (stopped) return 0;
 
@@ -119,6 +163,7 @@ int WdScanner::sweep(std::vector<WdWifiHit> &out, const std::function<void()> &g
     const uint32_t dwell = passive ? (uint32_t)passiveDwell : (uint32_t)activeDwell;
 
     auto harvest = [&](int n) {
+        if (n < 0) n = 0;
         for (int i = 0; i < n; i++) {
             WdWifiHit h;
             h.bssid = WiFi.BSSIDstr(i);
@@ -133,19 +178,18 @@ int WdScanner::sweep(std::vector<WdWifiHit> &out, const std::function<void()> &g
     };
 
     if (!hop) {
-        if (gpsPump) gpsPump();
-        int n = WiFi.scanNetworks(false, true, passive, dwell, 0);
-        if (gpsPump) gpsPump();
-        if (n < 0) n = 0;
+        if (onTick) onTick();
+        int n = scanChannelAsync(0, passive, dwell, shouldAbort, onTick);
+        if (n < 0) return -1;
         harvest(n);
         return (int)out.size();
     }
 
     for (int ch = 1; ch <= maxChannel; ch++) {
-        if (gpsPump) gpsPump();
-        int n = WiFi.scanNetworks(false, true, passive, dwell, (uint8_t)ch);
-        if (gpsPump) gpsPump();
-        if (n < 0) n = 0;
+        if (shouldAbort && shouldAbort()) return -1;
+        if (onTick) onTick();
+        int n = scanChannelAsync((uint8_t)ch, passive, dwell, shouldAbort, onTick);
+        if (n < 0) return -1;
         for (int i = 0; i < n; i++) {
             WdWifiHit h;
             h.bssid = WiFi.BSSIDstr(i);

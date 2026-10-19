@@ -9,13 +9,17 @@
 
 class WdLogger {
 public:
-    /// Reserve next wd_NNN.csv path; file is created on first write.
-    bool openSession(FS &fs, const char *dir);
+    /// Create wd_NNN.csv immediately (header written + flushed).
+    bool openSession(FS *fs, const char *dir);
+    /// Re-open the current session path for append (after WiFi stop/start).
+    bool reopenCurrent();
     void close();
     bool isOpen() const { return (bool)file; }
     bool hasPath() const { return path.length() > 0; }
     void flush();
     bool maybeFlush(uint32_t intervalMs = 60000);
+    /// Bytes on disk after a flush (0 if unavailable).
+    size_t fileSize() const;
 
     bool writeWifi(const WdWifiHit &hit, const WdGpsFix &fix);
     bool writeBle(
@@ -28,8 +32,8 @@ public:
     uint32_t rowsWritten() const { return rows; }
     uint32_t sweeps() const { return sweepCount; }
     void noteSweep() { sweepCount++; }
+    uint32_t writeErrors() const { return writeFailCount; }
 
-    // Unique tracking for UI / beeps only — does not gate CSV writes.
     bool noteUnique(uint64_t macKey);
     size_t uniqueCount() const { return unique.size(); }
 
@@ -44,10 +48,11 @@ private:
     uint32_t rows = 0;
     uint32_t sweepCount = 0;
     uint32_t lastFlushMs = 0;
+    uint32_t writeFailCount = 0;
     std::unordered_set<uint64_t> unique;
     static constexpr size_t MAX_UNIQUE = 4096;
 
-    bool ensureOpen();
+    bool reopenForAppend();
     void writeHeader();
     static String escapeSsid(const String &ssid);
 };

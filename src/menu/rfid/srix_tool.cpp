@@ -40,7 +40,7 @@ void SRIXTool::setup() {
     padprintln("Initializing I2C...");
 
     holdI2CBus();
-    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forNfc());
 
     // Init I2C
     TwoWire *Wire = acquireI2CBus();
@@ -865,7 +865,7 @@ SRIXTool::SRIXTool(bool headless_mode) {
     memset(_uid, 0, sizeof(_uid));
 
     holdI2CBus();
-    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forNfc());
 
     SRIX_LOG(
         "[SRIX] I2C pins: SDA=%d, SCL=%d", kvxConfigPins.i2c_bus.sda, kvxConfigPins.i2c_bus.scl

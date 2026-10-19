@@ -77,7 +77,7 @@ void _setup_gpio() {
     if (bq.getDesignCap() != BATTERY_DESIGN_CAPACITY) { bq.setDesignCap(BATTERY_DESIGN_CAPACITY); }
     // Start with default IR, RF and RFID Configs, replace old
     kvxConfigPins.rfModule = CC1101_SPI_MODULE;
-    kvxConfigPins.rfidModule = PN532_I2C_MODULE;
+    kvxConfigPins.nfcModule = PN532_I2C_MODULE;
     kvxConfigPins.irRx = 1;
     kvxConfigPins.irTx = 2;
 #else
@@ -96,7 +96,7 @@ void _setup_gpio() {
         Wire.endTransmission();
         Wire.end();
     }
-    kvxConfigPins.rfidModule = PN532_SPI_MODULE;
+    kvxConfigPins.nfcModule = PN532_SPI_MODULE;
 
 #endif
 

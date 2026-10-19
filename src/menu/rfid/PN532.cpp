@@ -1485,3 +1485,53 @@ int PN532::write_ndef_blocks() {
 
     return SUCCESS;
 }
+
+#include "ntag_ops.h"
+
+int PN532::format_memory() { return erase(); }
+
+int PN532::lock_ntag() {
+    if (!nfc.startPassiveTargetIDDetection()) return TAG_NOT_PRESENT;
+    if (!nfc.readDetectedPassiveTargetID()) return FAILURE;
+    if (uid.sak != PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return nfc.ntag2xx_WritePage(page, (uint8_t *)data);
+    };
+    auto readPage = [this](uint8_t page, uint8_t data[4]) -> bool {
+        return nfc.mifareultralight_ReadPage(page, data);
+    };
+    return ntagLock(pages, writePage, readPage);
+}
+
+int PN532::set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) {
+    if (!nfc.startPassiveTargetIDDetection()) return TAG_NOT_PRESENT;
+    if (!nfc.readDetectedPassiveTargetID()) return FAILURE;
+    if (uid.sak != PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return nfc.ntag2xx_WritePage(page, (uint8_t *)data);
+    };
+    return ntagSetPassword(pages, pwd, pack, writePage);
+}
+
+int PN532::clear_ntag_password() {
+    if (!nfc.startPassiveTargetIDDetection()) return TAG_NOT_PRESENT;
+    if (!nfc.readDetectedPassiveTargetID()) return FAILURE;
+    if (uid.sak != PICC_TYPE_MIFARE_UL) return TAG_NOT_MATCH;
+    int pages = totalPages > 0 ? totalPages : 45;
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return nfc.ntag2xx_WritePage(page, (uint8_t *)data);
+    };
+    return ntagClearPassword(pages, writePage);
+}
+
+int PN532::transceive_apdu(const uint8_t *tx, uint16_t txLen, uint8_t *rx, uint16_t rxCap,
+                           uint16_t *rxLen) {
+    if (!tx || !rx || !rxLen || rxCap == 0) return FAILURE;
+    if (!nfc.inListPassiveTarget()) return TAG_NOT_PRESENT;
+    uint8_t len = (uint8_t)((rxCap > 255) ? 255 : rxCap);
+    if (!nfc.inDataExchange((uint8_t *)tx, (uint8_t)txLen, rx, &len)) return FAILURE;
+    *rxLen = len;
+    return SUCCESS;
+}

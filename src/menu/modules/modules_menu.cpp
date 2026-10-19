@@ -11,11 +11,8 @@
 #include <cstring>
 
 static void pahubMaybeSetRfid(PahubDevice dev) {
-    RFIDModules cur = (RFIDModules)kvxConfigPins.rfidModule;
-    bool i2cReader = (cur == M5_RFID2_MODULE || cur == PN532_I2C_MODULE);
-    if (!i2cReader) return;
     if (dev == PahubDevRFID2) kvxConfigPins.setRfidModule(M5_RFID2_MODULE);
-    else if (dev == PahubDevNFC) kvxConfigPins.setRfidModule(PN532_I2C_MODULE);
+    else if (dev == PahubDevNFC) kvxConfigPins.setNfcModule(PN532_I2C_MODULE);
 }
 
 static void pahubMaybeSetRf(PahubDevice dev) {

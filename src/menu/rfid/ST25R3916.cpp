@@ -239,8 +239,11 @@ bool ST25R3916::_initSPI() {
 }
 
 bool ST25R3916::_initI2C() {
-    TwoWire *Wire = acquireI2CBus();
-    _hw = new RfalRfST25R3916Class(Wire, GPIO_NUM_NC);
+    TwoWire *wire = acquireI2CBus();
+    if (!wire) return false;
+    // M5 Unit NFC docs: I2C @ 0x50, 100k / 400k — prefer 400k.
+    wire->setClock(400000);
+    _hw = new RfalRfST25R3916Class(wire, GPIO_NUM_NC);
     return _hw != nullptr;
 }
 
@@ -3337,6 +3340,87 @@ int ST25R3916::_emulateFelica() {
     int polls = _handleFelicaListen(30000);
     _listenStop();
     ST25R_LOG("emulate felica: encerrado — polls=%d", polls);
+    return SUCCESS;
+}
+
+
+#include "ntag_ops.h"
+
+int ST25R3916::format_memory() { return erase(); }
+
+int ST25R3916::lock_ntag() {
+    if (!_nfc) return FAILURE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev;
+    if (!_pollForTag(&dev)) return TAG_NOT_PRESENT;
+    if (dev->type != RFAL_NFC_LISTEN_TYPE_NFCA || dev->dev.nfca.selRes.sak != 0x00) {
+        _nfc->rfalNfcDeactivate(false);
+        return TAG_NOT_MATCH;
+    }
+    int pages = totalPages > 0 ? totalPages : (_ntagPagesHint > 0 ? _ntagPagesHint : 45);
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return _writeT2TPage(page, data, true);
+    };
+    auto readPage = [this](uint8_t page, uint8_t data[4]) -> bool {
+        uint8_t rx[16] = {0};
+        uint16_t rxLen = 0;
+        auto err = _nfc->rfalT2TPollerRead(page, rx, sizeof(rx), &rxLen);
+        if (err != ST_ERR_NONE || rxLen < 4) return false;
+        memcpy(data, rx, 4);
+        return true;
+    };
+    int rc = ntagLock(pages, writePage, readPage);
+    _nfc->rfalNfcDeactivate(false);
+    return rc;
+}
+
+int ST25R3916::set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) {
+    if (!_nfc) return FAILURE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev;
+    if (!_pollForTag(&dev)) return TAG_NOT_PRESENT;
+    if (dev->type != RFAL_NFC_LISTEN_TYPE_NFCA || dev->dev.nfca.selRes.sak != 0x00) {
+        _nfc->rfalNfcDeactivate(false);
+        return TAG_NOT_MATCH;
+    }
+    int pages = totalPages > 0 ? totalPages : (_ntagPagesHint > 0 ? _ntagPagesHint : 45);
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return _writeT2TPage(page, data, true);
+    };
+    int rc = ntagSetPassword(pages, pwd, pack, writePage);
+    _nfc->rfalNfcDeactivate(false);
+    return rc;
+}
+
+int ST25R3916::clear_ntag_password() {
+    if (!_nfc) return FAILURE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev;
+    if (!_pollForTag(&dev)) return TAG_NOT_PRESENT;
+    if (dev->type != RFAL_NFC_LISTEN_TYPE_NFCA || dev->dev.nfca.selRes.sak != 0x00) {
+        _nfc->rfalNfcDeactivate(false);
+        return TAG_NOT_MATCH;
+    }
+    int pages = totalPages > 0 ? totalPages : (_ntagPagesHint > 0 ? _ntagPagesHint : 45);
+    auto writePage = [this](uint8_t page, const uint8_t data[4]) -> bool {
+        return _writeT2TPage(page, data, true);
+    };
+    int rc = ntagClearPassword(pages, writePage);
+    _nfc->rfalNfcDeactivate(false);
+    return rc;
+}
+
+int ST25R3916::transceive_apdu(const uint8_t *tx, uint16_t txLen, uint8_t *rx, uint16_t rxCap,
+                               uint16_t *rxLen) {
+    if (!_nfc || !tx || !rx || !rxLen) return FAILURE;
+    _deselectSharedSpiDevices();
+    rfalNfcDevice *dev;
+    if (!_pollForTag(&dev)) return TAG_NOT_PRESENT;
+    if (!_isoDepApdu(tx, txLen, rx, rxCap, rxLen)) {
+        _nfc->rfalNfcDeactivate(false);
+        return FAILURE;
+    }
+    _nfc->rfalNfcDeactivate(false);
     return SUCCESS;
 }
 

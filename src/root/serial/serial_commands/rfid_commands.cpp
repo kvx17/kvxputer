@@ -1,13 +1,9 @@
 #include "rfid_commands.h"
 #include "root/storage/paths.h"
-#if !defined(LITE_VERSION)
-#include "menu/rfid/ST25R3916.h"
-#endif
 #include "root/storage/sd_functions.h"
 #include "root/hal/bus_HAL.h"
 #include "root/hal/pahub.h"
-#include "menu/rfid/PN532.h"
-#include "menu/rfid/RFID2.h"
+#include "menu/rfid/rfid_shared.h"
 #include "menu/rfid/RFIDInterface.h"
 #include <globals.h>
 
@@ -30,34 +26,21 @@ static void _releaseRfid() {
     releaseI2CBusHold();
 }
 
-static RFIDInterface *_createRfidModule() {
-    switch (kvxConfigPins.rfidModule) {
-        case PN532_I2C_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C);
-#ifdef M5STICK
-        case PN532_I2C_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C_SPI);
-#endif
-        case PN532_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::SPI);
-        case RC522_SPI_MODULE: return new RFID2(false);
-#if !defined(LITE_VERSION)
-        case ST25R3916_SPI_MODULE: return new ST25R3916(ST25R3916::SPI_MODE);
-        case ST25R3916_I2C_MODULE: return new ST25R3916(ST25R3916::I2C_MODE);
-#endif
-        case M5_RFID2_MODULE:
-        default: return new RFID2();
-    }
+static bool _tryOpenHf(HfDomain domain) {
+    holdI2CBus();
+    _pahub = openHfPahubGuard(domain);
+    _rfid = createHfModule(domain);
+    if (_rfid && _rfid->begin()) return true;
+    _releaseRfid();
+    return false;
 }
 
 static bool _ensureRfid() {
     if (_rfid != nullptr) return true;
-    holdI2CBus();
-    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
-    _rfid = _createRfidModule();
-    if (!_rfid->begin()) {
-        _releaseRfid();
-        serialDevice->println("ERROR: RFID module not found");
-        return false;
-    }
-    return true;
+    // Prefer NFC (PN532/ST25), then RFID2/RC522 for basic read/write.
+    if (_tryOpenHf(HfDomain::Nfc) || _tryOpenHf(HfDomain::Rfid)) return true;
+    serialDevice->println("ERROR: NFC/RFID module not found");
+    return false;
 }
 
 static uint32_t _argTimeout(Command &cmd, uint32_t fallback = 5000) {

@@ -63,6 +63,7 @@ void setRFModuleMenu();
 void setRFFreqMenu();
 
 void setRFIDModuleMenu();
+void setNFCModuleMenu();
 
 void addMifareKeyMenu();
 

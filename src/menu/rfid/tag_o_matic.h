@@ -31,11 +31,14 @@ public:
         SAVE_MODE
     };
 
+    // Which Config module picker + PaHub channel to use.
+    enum Domain { DOMAIN_RFID = 0, DOMAIN_NFC = 1 };
+
     /////////////////////////////////////////////////////////////////////////////////////
     // Constructor
     /////////////////////////////////////////////////////////////////////////////////////
-    TagOMatic();
-    TagOMatic(RFID_State initial_state);
+    TagOMatic(Domain domain = DOMAIN_RFID);
+    TagOMatic(RFID_State initial_state, Domain domain = DOMAIN_RFID);
     ~TagOMatic();
 // Headless constructor
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
@@ -61,6 +64,7 @@ public:
 private:
     PahubChannelGuard *_pahub = nullptr;
     RFIDInterface *_rfid = nullptr;
+    Domain _domain = DOMAIN_RFID;
     RFID_State _initial_state;
     bool _read_uid = false;
     bool _ndef_created = false;
@@ -80,11 +84,15 @@ private:
     void dump_ndef_details();
     void dump_scan_results();
     void show_not_implemented_card();
+    String format_card_details() const;
+    /** Scrollable dump. true = OK (open actions), false = Esc. */
+    bool show_tag_results();
 
     /////////////////////////////////////////////////////////////////////////////////////
     // State management
     /////////////////////////////////////////////////////////////////////////////////////
     void select_state();
+    void tag_actions_menu();
     void set_state(RFID_State state);
     void delayWithReturn(uint32_t ms);
     bool ndefEmulationSupported();

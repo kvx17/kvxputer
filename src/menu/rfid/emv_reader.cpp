@@ -18,15 +18,15 @@ EMVReader::~EMVReader() {
 void EMVReader::setup() {
     _cancelled = false;
     holdI2CBus();
-    _pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
-    switch (kvxConfigPins.rfidModule) {
+    _pahub = new PahubChannelGuard(PahubChannelGuard::forNfc());
+    switch (kvxConfigPins.nfcModule) {
         case PN532_I2C_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C); break;
 #ifdef M5STICK
         case PN532_I2C_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::I2C_SPI); break;
 #endif
         case PN532_SPI_MODULE: _rfid = new PN532(PN532::CONNECTION_TYPE::SPI); break;
         default: {
-            Serial.println("EMVReader: Unsupported RFID module for EMV reading.");
+            Serial.println("EMVReader: Unsupported NFC module for EMV reading.");
             displayError("EMV needs PN532\non Grove PORT.A", true);
             return;
         }

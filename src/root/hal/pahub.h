@@ -8,7 +8,8 @@ static constexpr uint8_t PAHUB_CH_COUNT = 6;
 static constexpr uint8_t PAHUB_ADDR_MIN = 0x70;
 static constexpr uint8_t PAHUB_ADDR_MAX = 0x77;
 static constexpr uint8_t PAHUB_RFID2_ADDR = 0x28;
-static constexpr uint8_t PAHUB_NFC_ADDR = 0x24;
+static constexpr uint8_t PAHUB_NFC_ADDR = 0x24;       // PN532 I2C
+static constexpr uint8_t PAHUB_UNIT_NFC_ADDR = 0x50;  // M5 Unit NFC (ST25R3916 I2C)
 static constexpr uint8_t PAHUB_SCROLL_ADDR = 0x40;
 static constexpr uint8_t PAHUB_JOY2_ADDR = 0x63;
 
@@ -36,6 +37,7 @@ bool pahubDeviceOnMux(PahubDevice dev);
 
 int8_t pahubChannelFor(PahubDevice dev);
 int8_t pahubChannelForRfidModule();
+int8_t pahubChannelForNfcModule();
 bool pahubSelect(int8_t ch);
 bool pahubDeselect();
 bool pahubScanChannel(uint8_t ch, PahubScanResult &out);
@@ -54,6 +56,7 @@ class PahubChannelGuard {
 public:
     explicit PahubChannelGuard(int8_t channel);
     static PahubChannelGuard forRfid();
+    static PahubChannelGuard forNfc();
     static PahubChannelGuard forDevice(PahubDevice dev);
     ~PahubChannelGuard();
     PahubChannelGuard(const PahubChannelGuard &) = delete;

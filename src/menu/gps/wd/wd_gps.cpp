@@ -73,7 +73,8 @@ void WdGps::pump() {
     }
 
     WdGpsFix cur = getFix();
-    if (cur.has_3d_fix && cur.accuracy_ok) {
+    // Keep last-known whenever we have a usable lat/lng (don't require HDOP).
+    if (cur.location_valid && (cur.lat != 0.0 || cur.lng != 0.0)) {
         lastKnown = cur;
         everHadFix = true;
     }
@@ -81,8 +82,10 @@ void WdGps::pump() {
 }
 
 float WdGps::accuracyMeters() {
-    if (!gps.hdop.isValid()) return 999.0f;
-    return (float)gps.hdop.hdop() * HDOP_TO_METERS;
+    if (!gps.hdop.isValid()) return -1.0f; // unknown — caller estimates
+    float h = (float)gps.hdop.hdop();
+    if (h <= 0.0f) return -1.0f;
+    return h * HDOP_TO_METERS;
 }
 
 String WdGps::formatUtcDateTime() {
@@ -108,9 +111,20 @@ WdGpsFix WdGps::getFix() {
     f.lat = f.location_valid ? gps.location.lat() : 0.0;
     f.lng = f.location_valid ? gps.location.lng() : 0.0;
     f.altitude = gps.altitude.isValid() ? (float)gps.altitude.meters() : 0.0f;
-    f.accuracy_m = accuracyMeters();
     f.satellites = gps.satellites.isValid() ? (int)gps.satellites.value() : 0;
-    f.has_3d_fix = f.location_valid && f.satellites >= minSats;
+    float acc = accuracyMeters();
+    if (acc < 0.0f) {
+        // No HDOP yet — estimate from sats so we don't hard-fail at 999m.
+        if (f.satellites >= 8) acc = 15.0f;
+        else if (f.satellites >= 6) acc = 30.0f;
+        else if (f.satellites >= 4) acc = 50.0f;
+        else if (f.location_valid) acc = 100.0f;
+        else acc = 999.0f;
+    }
+    f.accuracy_m = acc;
+    // Usable fix: valid lat/lng. Allow sat count 0 (GSV not yet parsed) or >= min.
+    const bool hasCoords = f.location_valid && (f.lat != 0.0 || f.lng != 0.0);
+    f.has_3d_fix = hasCoords && (f.satellites == 0 || f.satellites >= minSats);
     f.accuracy_ok = f.accuracy_m <= accuracyThresholdM;
     f.date_valid = gps.date.isValid();
     f.time_valid = gps.time.isValid();
@@ -126,10 +140,13 @@ bool WdGps::canLog() {
 
 bool WdGps::resolveLogPosition(WdGpsFix &out) {
     WdGpsFix live = getFix();
-    const bool good = live.has_3d_fix && live.accuracy_ok;
+    const bool hasCoords = live.location_valid && (live.lat != 0.0 || live.lng != 0.0);
+    // Prefer real coordinates whenever TinyGPS has a position — do not require
+    // HDOP/accuracy_ok, or CSV rows stay at 0,0 while the HUD looks "connected".
+    const bool usable = hasCoords && live.accuracy_ok;
 
     if (logMode == "zero_gps") {
-        if (good) {
+        if (hasCoords) {
             out = live;
             return true;
         }
@@ -145,7 +162,7 @@ bool WdGps::resolveLogPosition(WdGpsFix &out) {
     }
 
     if (logMode == "last_known") {
-        if (good) {
+        if (hasCoords) {
             out = live;
             return true;
         }
@@ -154,8 +171,8 @@ bool WdGps::resolveLogPosition(WdGpsFix &out) {
         return true;
     }
 
-    // fix_only
-    if (!good) return false;
+    // fix_only — require coords + accuracy within threshold
+    if (!usable) return false;
     out = live;
     return true;
 }

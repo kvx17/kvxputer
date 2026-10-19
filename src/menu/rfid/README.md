@@ -1,19 +1,23 @@
 # RFID menu domain
 
-Wired HF drivers: **PN532**, **RFID2** (M5 Unit / RC522 SPI), **ST25R3916** (non-lite). Companion apps (Chameleon, PN532 BLE, PN532 UART/Killer, Amiibolink, 125 kHz) are separate menu entries, not `RFIDModules` values.
+**RFID** (this menu) and **NFC** are separate channels:
 
-Select the reader under **RFID → Config → RFID Module**. On the device, **RFID → Config → Wiring help** lists modules, I2C/SPI mode switches, and Grove/SPI pinouts. Elechouse PN532 V3 and ITEAD/Katranji PN532 boards use **PN532 on I2C** or **PN532 on SPI** (same driver). Full docs: [main README NFC/RFID section](../../../README.md#nfc--rfid).
+| Menu | Modules (`config`) | Typical tools |
+|------|--------------------|---------------|
+| **RFID** | Unit RFID2, RC522 SPI (`rfidModule`) | Read / scan / load / erase, 125 kHz |
+| **NFC** | PN532, ST25R3916 (`nfcModule`) | NDEF, emulate, EMV, companions |
 
-## Capabilities
+Select the reader under **RFID → Config → RFID Module**. On the device, **RFID → Config → Wiring help** lists RFID2 / RC522 pinouts. PN532 / ST25 setup lives under **NFC → Config**. Full docs: [main README NFC/RFID section](../../../README.md#nfc--rfid).
 
-| | PN532 | RFID2 / RC522 | ST25R3916 |
-|---|---|---|---|
-| Classic / UL / NTAG read-write | Yes | Yes | Yes |
-| Clone UID (magic) | Yes | Yes | Yes |
-| Emulate tag / Emulate NDEF | Yes | No | Yes |
-| FeliCa (limited) | Yes | No | Yes |
+## Capabilities (RFID2 / RC522)
 
-PN532 emulate caveats: Classic dumps → NDEF as Type 4 Tag (not byte-perfect Classic); FeliCa → IDm/PMm only.
+| | RFID2 / RC522 |
+|---|---|
+| Classic / UL / NTAG read-write | Yes |
+| Clone UID (magic) | Yes |
+| Emulate tag / Emulate NDEF | No |
+
+PN532 / ST25 capabilities are documented under the NFC channel.
 
 ## Support files
 

@@ -101,7 +101,7 @@ void _setup_gpio() {
 
     // Start with default IR, RF and RFID Configs, replace old
     kvxConfigPins.rfModule = CC1101_SPI_MODULE;
-    kvxConfigPins.rfidModule = PN532_I2C_MODULE;
+    kvxConfigPins.nfcModule = PN532_I2C_MODULE;
 
     kvxConfigPins.irRx = RXLED;
     kvxConfigPins.irTx = TXLED;

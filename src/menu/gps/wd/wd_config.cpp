@@ -22,11 +22,13 @@ bool load(FS &fs, const char *dir, WdConfig &c) {
     f.close();
     if (err) return false;
 
+    bool migrated = false;
     if (JsonObject gps = doc["gps"].as<JsonObject>()) {
         if (!gps["min_sats"].isNull()) c.min_sats = gps["min_sats"].as<int>();
         if (!gps["accuracy_threshold_m"].isNull()) c.accuracy_threshold_m = gps["accuracy_threshold_m"].as<float>();
         if (!gps["gmt_offset_hours"].isNull()) c.gmt_offset_hours = gps["gmt_offset_hours"].as<int>();
         if (!gps["gps_log_mode"].isNull()) c.gps_log_mode = gps["gps_log_mode"].as<String>();
+        migrated = gps["log_mode_migrated_v2"] | false;
     }
     if (JsonObject scan = doc["scan"].as<JsonObject>()) {
         if (!scan["scan_mode"].isNull()) c.scan_mode = scan["scan_mode"].as<String>();
@@ -91,6 +93,15 @@ bool load(FS &fs, const char *dir, WdConfig &c) {
     if (c.wifi_tx_power > 84) c.wifi_tx_power = 84;
     if (c.gmt_offset_hours < -12) c.gmt_offset_hours = -12;
     if (c.gmt_offset_hours > 14) c.gmt_offset_hours = 14;
+
+    // Older default fix_only produced header-only CSVs without a GPS fix.
+    // Migrate once to zero_gps; user can switch back in WD Config.
+    if (!migrated && c.gps_log_mode == "fix_only") {
+        c.gps_log_mode = "zero_gps";
+        save(fs, dir, c);
+    } else if (!migrated) {
+        save(fs, dir, c); // stamp log_mode_migrated_v2
+    }
     return true;
 }
 
@@ -106,6 +117,7 @@ bool save(FS &fs, const char *dir, const WdConfig &c) {
     gps["accuracy_threshold_m"] = c.accuracy_threshold_m;
     gps["gmt_offset_hours"] = c.gmt_offset_hours;
     gps["gps_log_mode"] = c.gps_log_mode;
+    gps["log_mode_migrated_v2"] = true;
 
     JsonObject scan = doc["scan"].to<JsonObject>();
     scan["scan_mode"] = c.scan_mode;

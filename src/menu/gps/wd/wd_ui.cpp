@@ -7,6 +7,7 @@
 void WdUi::reset() {
     current = WdDashView::Summary;
     chMode = 0;
+    scroll = 0;
     liveFeed.clear();
     newFeed.clear();
 }
@@ -15,10 +16,19 @@ void WdUi::nextView() {
     uint8_t v = (uint8_t)current + 1;
     if (v >= (uint8_t)WdDashView::Count) v = 0;
     current = (WdDashView)v;
+    scroll = 0;
 }
 
 void WdUi::nextChannelMode() {
     chMode = (chMode + 1) % 3;
+}
+
+void WdUi::scrollUp() {
+    if (scroll > 0) scroll--;
+}
+
+void WdUi::scrollDown() {
+    scroll++;
 }
 
 void WdUi::pushRecent(const WdRecentAp &ap, bool uniqueOnlyFeed) {
@@ -70,6 +80,9 @@ void WdUi::drawLines(const char *title, const std::vector<String> &lines, const 
     const int listY = KVX_TOPBAR_H + 4;
     const int footerH = uiLineH(dense) + 2;
     const int maxRows = max(1, (tftHeight - listY - footerH) / rowH);
+    const int maxScroll = max(0, (int)lines.size() - maxRows);
+    if (scroll > maxScroll) scroll = maxScroll;
+    if (scroll < 0) scroll = 0;
 
     tft.fillScreen(kvxConfig.bgColor);
     drawKvxTopBar(title);
@@ -77,15 +90,21 @@ void WdUi::drawLines(const char *title, const std::vector<String> &lines, const 
     tft.setTextSize(dense);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
     const int maxChars = max(1, (tftWidth - 12) / uiCharW(dense));
-    for (int i = 0; i < maxRows && i < (int)lines.size(); i++) {
-        String line = lines[i];
+    for (int i = 0; i < maxRows && (scroll + i) < (int)lines.size(); i++) {
+        String line = lines[scroll + i];
         if ((int)line.length() > maxChars) line = line.substring(0, maxChars);
         tft.setCursor(6, listY + i * rowH);
         tft.print(line);
     }
 
+    String foot = footer;
+    if (maxScroll > 0) {
+        char hint[24];
+        snprintf(hint, sizeof(hint), "  %d/%d", scroll + 1, (int)lines.size());
+        foot += hint;
+    }
     tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawCentreString(footer, tftWidth / 2, tftHeight - footerH, 1);
+    tft.drawCentreString(foot.c_str(), tftWidth / 2, tftHeight - footerH, 1);
 }
 
 void WdUi::draw(
@@ -109,8 +128,12 @@ void WdUi::draw(
     switch (current) {
         case WdDashView::Summary: {
             if (logger.isOpen()) lines.push_back("File: " + logger.filename());
-            else if (logger.hasPath()) lines.push_back("File: " + logger.filename() + " *");
-            else lines.push_back("File: (waiting)");
+            else if (logger.hasPath()) lines.push_back("File: " + logger.filename() + " !");
+            else lines.push_back("File: (none)");
+            if (logger.writeErrors()) {
+                snprintf(buf, sizeof(buf), "WriteErr: %lu", (unsigned long)logger.writeErrors());
+                lines.push_back(buf);
+            }
             if (st.loggingPaused) lines.push_back("LOG PAUSED");
             if (st.wifiStopped) lines.push_back("WIFI STOPPED");
             if (!st.statusNote.isEmpty()) lines.push_back(st.statusNote);
@@ -127,15 +150,20 @@ void WdUi::draw(
             lines.push_back(elapsed());
             snprintf(buf, sizeof(buf), "Sats:%d Acc:%.0fm", live.satellites, live.accuracy_m);
             lines.push_back(buf);
-            if (live.has_3d_fix && live.accuracy_ok) {
+            const bool liveCoords =
+                live.location_valid && (live.lat != 0.0 || live.lng != 0.0);
+            if (liveCoords) {
                 snprintf(buf, sizeof(buf), "%.5f %.5f", live.lat, live.lng);
                 lines.push_back(buf);
-                lines.push_back("GPS: FIX OK");
-            } else if (canLog && logFix) {
+                lines.push_back(live.accuracy_ok ? "GPS: FIX OK" : "GPS: COORDS (soft)");
+            } else if (canLog && logFix && (logFix->lat != 0.0 || logFix->lng != 0.0)) {
                 snprintf(buf, sizeof(buf), "GPS:%s", st.gpsModeLabel.c_str());
                 lines.push_back(buf);
                 snprintf(buf, sizeof(buf), "%.5f %.5f", logFix->lat, logFix->lng);
                 lines.push_back(buf);
+            } else if (canLog && logFix) {
+                lines.push_back("GPS: logging 0,0");
+                lines.push_back(String("Mode: ") + cfg.gps_log_mode);
             } else {
                 lines.push_back("GPS: no fix");
                 lines.push_back(String("Mode: ") + cfg.gps_log_mode);
@@ -226,6 +254,6 @@ void WdUi::draw(
         default: break;
     }
 
-    const char *footer = "Sel dash  H help  ESC exit";
+    const char *footer = "Sel dash  ;/. scroll  ESC";
     drawLines(title, lines, footer);
 }

@@ -119,6 +119,22 @@ void KvxputerConfigPins::fromJson(JsonObject obj) {
         log_e("Fail");
     }
 
+    if (!root["nfcModule"].isNull()) {
+        nfcModule = root["nfcModule"].as<int>();
+    } else {
+        // Migrate older single-picker configs: PN532/ST25 lived in rfidModule.
+        if (isNfcCapableModule(rfidModule)) {
+            nfcModule = rfidModule;
+            rfidModule = M5_RFID2_MODULE;
+        } else {
+#if !defined(LITE_VERSION)
+            nfcModule = ST25R3916_I2C_MODULE;
+#else
+            nfcModule = PN532_I2C_MODULE;
+#endif
+        }
+    }
+
     if (!root["iButton"].isNull()) {
         int val = root["iButton"].as<int>();
         if (val < GPIO_NUM_MAX) iButton = val;
@@ -264,6 +280,7 @@ void KvxputerConfigPins::toJson(JsonObject obj) const {
     root["rfScanRange"] = rfScanRange;
     root["bleName"] = bleName;
     root["rfidModule"] = rfidModule;
+    root["nfcModule"] = nfcModule;
     root["gpsBaudrate"] = gpsBaudrate;
     root["iButton"] = iButton;
 
@@ -398,6 +415,7 @@ void KvxputerConfigPins::validateConfig() {
     validateRfScanRangeValue();
     validateRfModuleValue();
     validateRfidModuleValue();
+    validateNfcModuleValue();
     validateGpsBaudrateValue();
 #if !defined(LITE_VERSION)
     validateSpiPins(ST25R_bus);
@@ -559,6 +577,18 @@ void KvxputerConfigPins::validateRfScanRangeValue() {
     if (rfScanRange < 0 || rfScanRange > 3) rfScanRange = 3;
 }
 
+bool KvxputerConfigPins::isNfcCapableModule(int module) {
+    return module == PN532_I2C_MODULE || module == PN532_SPI_MODULE || module == PN532_I2C_SPI_MODULE
+#if !defined(LITE_VERSION)
+           || module == ST25R3916_SPI_MODULE || module == ST25R3916_I2C_MODULE
+#endif
+        ;
+}
+
+bool KvxputerConfigPins::isRfidCapableModule(int module) {
+    return module == M5_RFID2_MODULE || module == RC522_SPI_MODULE;
+}
+
 void KvxputerConfigPins::setRfidModule(RFIDModules value) {
     rfidModule = value;
     validateRfidModuleValue();
@@ -566,14 +596,22 @@ void KvxputerConfigPins::setRfidModule(RFIDModules value) {
 }
 
 void KvxputerConfigPins::validateRfidModuleValue() {
-    if (
-        rfidModule != M5_RFID2_MODULE && rfidModule != PN532_I2C_MODULE && rfidModule != PN532_SPI_MODULE &&
-        rfidModule != RC522_SPI_MODULE && rfidModule != PN532_I2C_SPI_MODULE
+    if (!isRfidCapableModule(rfidModule)) rfidModule = M5_RFID2_MODULE;
+}
+
+void KvxputerConfigPins::setNfcModule(RFIDModules value) {
+    nfcModule = value;
+    validateNfcModuleValue();
+    saveFile();
+}
+
+void KvxputerConfigPins::validateNfcModuleValue() {
+    if (!isNfcCapableModule(nfcModule)) {
 #if !defined(LITE_VERSION)
-        && rfidModule != ST25R3916_SPI_MODULE && rfidModule != ST25R3916_I2C_MODULE
+        nfcModule = ST25R3916_I2C_MODULE;
+#else
+        nfcModule = PN532_I2C_MODULE;
 #endif
-    ) {
-        rfidModule = M5_RFID2_MODULE;
     }
 }
 

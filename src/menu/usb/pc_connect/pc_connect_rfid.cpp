@@ -2,9 +2,7 @@
 
 #if !defined(LITE_VERSION)
 // Include order matters: ST25R3916 before Adafruit PN532 (FELICA_CMD_POLLING clash).
-#include "menu/rfid/ST25R3916.h"
-#include "menu/rfid/PN532.h"
-#include "menu/rfid/RFID2.h"
+#include "menu/rfid/rfid_shared.h"
 #include "menu/rfid/RFIDInterface.h"
 #include "root/hal/bus_HAL.h"
 #include "root/hal/pahub.h"
@@ -19,19 +17,17 @@ PahubChannelGuard *g_pahub = nullptr;
 String g_lastUid;
 uint32_t g_lastPoll = 0;
 
-RFIDInterface *createModule() {
-    switch (kvxConfigPins.rfidModule) {
-        case PN532_I2C_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C);
-#ifdef M5STICK
-        case PN532_I2C_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::I2C_SPI);
-#endif
-        case PN532_SPI_MODULE: return new PN532(PN532::CONNECTION_TYPE::SPI);
-        case RC522_SPI_MODULE: return new RFID2(false);
-        case ST25R3916_SPI_MODULE: return new ST25R3916(ST25R3916::SPI_MODE);
-        case ST25R3916_I2C_MODULE: return new ST25R3916(ST25R3916::I2C_MODE);
-        case M5_RFID2_MODULE:
-        default: return new RFID2();
-    }
+bool tryOpenHf(HfDomain domain) {
+    holdI2CBus();
+    g_pahub = openHfPahubGuard(domain);
+    g_rfid = createHfModule(domain);
+    if (g_rfid && g_rfid->begin()) return true;
+    delete g_rfid;
+    g_rfid = nullptr;
+    delete g_pahub;
+    g_pahub = nullptr;
+    releaseI2CBusHold();
+    return false;
 }
 
 void releaseModule() {
@@ -48,11 +44,8 @@ bool pcConnectRfidActive() { return g_active; }
 
 bool pcConnectRfidStart() {
     pcConnectStopRadio();
-    holdI2CBus();
-    g_pahub = new PahubChannelGuard(PahubChannelGuard::forRfid());
-    g_rfid = createModule();
-    if (!g_rfid || !g_rfid->begin()) {
-        releaseModule();
+    // Prefer NFC (PN532/ST25), then RFID2/RC522.
+    if (!tryOpenHf(HfDomain::Nfc) && !tryOpenHf(HfDomain::Rfid)) {
         return false;
     }
     g_lastUid = "";

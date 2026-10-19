@@ -47,6 +47,7 @@ bool KvxputerTheme::openThemeFile(FS *fs, String filepath, bool overwriteConfigS
         {"usb",         &theme.usb,         theme.paths.usb        },
         {"rf",          &theme.rf,          theme.paths.rf         },
         {"rfid",        &theme.rfid,        theme.paths.rfid       },
+        {"nfc",         &theme.nfc,         theme.paths.nfc        },
         {"fm",          &theme.fm,          theme.paths.fm         },
         {"ir",          &theme.ir,          theme.paths.ir         },
         {"files",       &theme.files,       theme.paths.files      },

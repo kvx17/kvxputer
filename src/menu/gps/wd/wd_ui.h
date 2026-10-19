@@ -58,6 +58,8 @@ public:
     void reset();
     void nextView();
     void nextChannelMode();
+    void scrollUp();
+    void scrollDown();
     WdDashView view() const { return current; }
     uint8_t channelMode() const { return chMode; }
 
@@ -82,6 +84,7 @@ public:
 private:
     WdDashView current = WdDashView::Summary;
     uint8_t chMode = 0; // 0 session 1 sweep 2 unique
+    int scroll = 0;
     std::vector<WdRecentAp> liveFeed;
     std::vector<WdRecentAp> newFeed;
     static constexpr size_t FEED_MAX = 10;

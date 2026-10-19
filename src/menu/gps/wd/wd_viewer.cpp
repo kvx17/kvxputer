@@ -119,25 +119,40 @@ static bool isHeaderOrMeta(const String &line) {
     return false;
 }
 
+static bool looksLikeMac(const String &s) {
+    uint64_t ignore = 0;
+    return parseMacToU64(s, ignore);
+}
+
 static bool parseNetworkRow(const String &line, WdCapRow &out) {
     auto f = splitCsvLine(line);
     if (f.size() < 7) return false;
 
-    // Type is the last field in WiGLE CSV v1.6
-    String type = trimQuotes(f.back());
-    type.toUpperCase();
-    // Some writers leave a trailing empty field — walk back
-    if (type.isEmpty() && f.size() >= 2) {
-        type = trimQuotes(f[f.size() - 2]);
-        type.toUpperCase();
-    }
-    if (type != "WIFI" && type != "BLE") return false;
+    String mac = trimQuotes(f[0]);
+    if (!looksLikeMac(mac)) return false;
 
+    // Type is usually the last non-empty field in WiGLE CSV v1.6
+    String type;
+    for (int i = (int)f.size() - 1; i >= 0; i--) {
+        String t = trimQuotes(f[i]);
+        t.toUpperCase();
+        if (t == "WIFI" || t == "BLE") {
+            type = t;
+            break;
+        }
+    }
     String ssid = trimQuotes(f.size() > 1 ? f[1] : "");
     String auth = trimQuotes(f.size() > 2 ? f[2] : "");
     if (ssid == "FLAG" || auth.indexOf("FLAG") >= 0) return false;
 
-    out.bssid = trimQuotes(f[0]);
+    // Infer type when older / truncated rows omit it
+    if (type.isEmpty()) {
+        String authU = auth;
+        authU.toUpperCase();
+        type = (authU.indexOf("BLE") >= 0) ? "BLE" : "WIFI";
+    }
+
+    out.bssid = mac;
     out.ssid = ssid;
     out.auth = auth;
     if (out.auth.startsWith("[") && out.auth.endsWith("]") && out.auth.length() >= 2) {
@@ -145,7 +160,7 @@ static bool parseNetworkRow(const String &line, WdCapRow &out) {
     }
     out.firstSeen = trimQuotes(f.size() > 3 ? f[3] : "");
     out.channel = trimQuotes(f.size() > 4 ? f[4] : "").toInt();
-    // RSSI is column 6 in the standard layout; if shorter, last numeric before lat
+    // RSSI is column 6 in the standard layout (0=MAC … 6=RSSI)
     out.rssi = trimQuotes(f.size() > 6 ? f[6] : "").toInt();
     out.lat = trimQuotes(f.size() > 7 ? f[7] : "").toDouble();
     out.lng = trimQuotes(f.size() > 8 ? f[8] : "").toDouble();
@@ -356,14 +371,30 @@ static void viewOneFile(FS &fs, const String &path, const String &name) {
         return;
     }
     if (rows.empty()) {
-        char msg[96];
-        snprintf(
-            msg,
-            sizeof(msg),
-            "No AP rows\nlines:%d data:%d\n(headers only?)",
-            st.linesRead,
-            st.dataLines
-        );
+        size_t sz = 0;
+        File probe = fs.open(path, FILE_READ);
+        if (probe) {
+            sz = probe.size();
+            probe.close();
+        }
+        char msg[128];
+        if (st.dataLines == 0) {
+            snprintf(
+                msg,
+                sizeof(msg),
+                "Empty capture\n%d hdr lines %uB\nNeed GPS fix\nor gps=zero_gps",
+                st.linesRead,
+                (unsigned)sz
+            );
+        } else {
+            snprintf(
+                msg,
+                sizeof(msg),
+                "Parse failed\nlines:%d data:%d\nparsed:0",
+                st.linesRead,
+                st.dataLines
+            );
+        }
         displayError(msg, true);
         return;
     }
@@ -375,6 +406,10 @@ static void viewOneFile(FS &fs, const String &path, const String &name) {
 }
 
 } // namespace
+
+void wardrivingViewCaptureFile(FS &fs, const String &path, const String &name) {
+    viewOneFile(fs, path, name);
+}
 
 void wardrivingViewCaptures() {
     FS *fs = nullptr;

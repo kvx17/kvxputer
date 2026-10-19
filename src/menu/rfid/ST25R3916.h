@@ -25,6 +25,12 @@ public:
     int write(int cardBaudRate = 0) override;
     int write_ndef() override;
     int emulate() override;
+    int lock_ntag() override;
+    int set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) override;
+    int clear_ntag_password() override;
+    int format_memory() override;
+    int transceive_apdu(const uint8_t *tx, uint16_t txLen, uint8_t *rx, uint16_t rxCap,
+                        uint16_t *rxLen) override;
     int load() override;
     int loadFromFile(const String &filepath) override;
     int save(const String &filename) override;

@@ -23,7 +23,7 @@ String WdLogger::escapeSsid(const String &ssid) {
     out.reserve(ssid.length());
     for (size_t i = 0; i < ssid.length(); i++) {
         char c = ssid[i];
-        if (c == '"') out += '"'; // CSV escape: double the quote
+        if (c == '"') out += '"';
         out += c;
     }
     return out;
@@ -50,32 +50,64 @@ int WdLogger::nextSessionIndex(FS &fs, const char *dir) {
     return maxIdx + 1;
 }
 
-bool WdLogger::openSession(FS &fs, const char *dir) {
+bool WdLogger::openSession(FS *fs, const char *dir) {
     close();
-    kvx::paths::ensureDir(fs, dir);
-    int idx = nextSessionIndex(fs, dir);
+    if (!fs || !dir) return false;
+
+    kvx::paths::ensureDir(*fs, dir);
+    int idx = nextSessionIndex(*fs, dir);
     char buf[32];
     snprintf(buf, sizeof(buf), "wd_%03d.csv", idx);
     name = buf;
     path = String(dir) + "/" + name;
-    fsPtr = &fs;
+    fsPtr = fs;
     rows = 0;
     sweepCount = 0;
+    writeFailCount = 0;
     unique.clear();
+
+    // Create immediately (before WiFi scans) so SD open is not racing the radio.
+    file = fsPtr->open(path, FILE_WRITE);
+    if (!file) {
+        fsPtr = nullptr;
+        path = "";
+        name = "";
+        return false;
+    }
+    writeHeader();
+    file.flush();
     lastFlushMs = millis();
-    // Defer creating the file until the first logged row so View Captures
-    // does not list empty header-only sessions.
+
+    // Verify the file landed on storage.
+    size_t sz = file.size();
+    if (sz < 32) {
+        file.close();
+        fsPtr->remove(path);
+        fsPtr = nullptr;
+        path = "";
+        name = "";
+        return false;
+    }
     return true;
 }
 
-bool WdLogger::ensureOpen() {
-    if (file) return true;
+bool WdLogger::reopenForAppend() {
     if (!fsPtr || path.isEmpty()) return false;
-    file = fsPtr->open(path, FILE_WRITE);
-    if (!file) return false;
-    writeHeader();
-    lastFlushMs = millis();
-    return true;
+    if (file) {
+        file.flush();
+        file.close();
+    }
+    file = fsPtr->open(path, FILE_APPEND);
+    return (bool)file;
+}
+
+bool WdLogger::reopenCurrent() {
+    return reopenForAppend();
+}
+
+size_t WdLogger::fileSize() const {
+    if (!file) return 0;
+    return file.size();
 }
 
 void WdLogger::writeHeader() {
@@ -89,7 +121,6 @@ void WdLogger::writeHeader() {
         "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude,CurrentLongitude,"
         "AltitudeMeters,AccuracyMeters,RCOIs,MfgrId,Type"
     );
-    file.flush();
 }
 
 void WdLogger::close() {
@@ -97,7 +128,7 @@ void WdLogger::close() {
         file.flush();
         file.close();
     }
-    fsPtr = nullptr;
+    // Keep fsPtr + path so reopenCurrent() can append to the same session.
 }
 
 void WdLogger::flush() {
@@ -121,13 +152,16 @@ bool WdLogger::noteUnique(uint64_t macKey) {
 }
 
 bool WdLogger::writeWifi(const WdWifiHit &hit, const WdGpsFix &fix) {
-    if (!ensureOpen()) return false;
+    if (!file && !reopenForAppend()) {
+        writeFailCount++;
+        return false;
+    }
     String ssid = escapeSsid(hit.ssid);
     char line[512];
-    snprintf(
+    int n = snprintf(
         line,
         sizeof(line),
-        "%s,\"%s\",[%s],%s,%d,%d,%d,%.6f,%.6f,%.1f,%.1f,,,WIFI\n",
+        "%s,\"%s\",[%s],\"%s\",%d,%d,%d,%.6f,%.6f,%.1f,%.1f,,,WIFI\n",
         hit.bssid.c_str(),
         ssid.c_str(),
         authModeString(hit.auth).c_str(),
@@ -140,23 +174,39 @@ bool WdLogger::writeWifi(const WdWifiHit &hit, const WdGpsFix &fix) {
         fix.altitude,
         fix.accuracy_m
     );
-    file.print(line);
+    if (n <= 0 || n >= (int)sizeof(line)) {
+        writeFailCount++;
+        return false;
+    }
+    size_t wrote = file.print(line);
+    if (wrote == 0) {
+        // Retry once after reopen (SD can drop the handle under WiFi load).
+        if (!reopenForAppend() || file.print(line) == 0) {
+            writeFailCount++;
+            return false;
+        }
+    }
     rows++;
+    // Periodic flush keeps SD consistent if power/radio drops the handle.
+    if ((rows % 8) == 0) flush();
     return true;
 }
 
 bool WdLogger::writeBle(
     const String &addr, const String &devName, int rssi, uint16_t mfgId, const WdGpsFix &fix
 ) {
-    if (!ensureOpen()) return false;
+    if (!file && !reopenForAppend()) {
+        writeFailCount++;
+        return false;
+    }
     char mfg[8] = "";
     if (mfgId != 0) snprintf(mfg, sizeof(mfg), "%04X", mfgId);
     String ssid = escapeSsid(devName);
     char line[512];
-    snprintf(
+    int n = snprintf(
         line,
         sizeof(line),
-        "%s,\"%s\",Misc [BLE],%s,0,,%d,%.6f,%.6f,%.1f,%.1f,,%s,BLE\n",
+        "%s,\"%s\",Misc [BLE],\"%s\",0,,%d,%.6f,%.6f,%.1f,%.1f,,%s,BLE\n",
         addr.c_str(),
         ssid.c_str(),
         fix.datetime.c_str(),
@@ -167,25 +217,43 @@ bool WdLogger::writeBle(
         fix.accuracy_m,
         mfg
     );
-    file.print(line);
+    if (n <= 0 || n >= (int)sizeof(line)) {
+        writeFailCount++;
+        return false;
+    }
+    if (file.print(line) == 0) {
+        if (!reopenForAppend() || file.print(line) == 0) {
+            writeFailCount++;
+            return false;
+        }
+    }
     rows++;
+    if ((rows % 8) == 0) flush();
     return true;
 }
 
 bool WdLogger::writeFlag(const WdGpsFix &fix) {
-    if (!ensureOpen()) return false;
+    if (!file && !reopenForAppend()) {
+        writeFailCount++;
+        return false;
+    }
     char line[256];
     snprintf(
         line,
         sizeof(line),
-        "00:00:00:00:00:00,\"FLAG\",[FLAG],%s,0,,,%.6f,%.6f,%.1f,%.1f,,,WIFI\n",
+        "00:00:00:00:00:00,\"FLAG\",[FLAG],\"%s\",0,,,%.6f,%.6f,%.1f,%.1f,,,WIFI\n",
         fix.datetime.c_str(),
         fix.lat,
         fix.lng,
         fix.altitude,
         fix.accuracy_m
     );
-    file.print(line);
+    if (file.print(line) == 0) {
+        if (!reopenForAppend() || file.print(line) == 0) {
+            writeFailCount++;
+            return false;
+        }
+    }
     rows++;
     flush();
     return true;

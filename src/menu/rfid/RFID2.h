@@ -35,6 +35,10 @@ public:
     int erase();
     int write(int cardBaudRate = 0);
     int write_ndef();
+    int lock_ntag() override;
+    int set_ntag_password(const uint8_t pwd[4], const uint8_t pack[2]) override;
+    int clear_ntag_password() override;
+    int format_memory() override;
     int load();
     int save(const String &filename);
 

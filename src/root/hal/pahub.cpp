@@ -112,7 +112,7 @@ const char *pahubDeviceName(PahubDevice dev) {
 
 PahubDevice pahubFingerprintAddr(uint8_t addr) {
     if (addr == PAHUB_RFID2_ADDR) return PahubDevRFID2;
-    if (addr == PAHUB_NFC_ADDR) return PahubDevNFC;
+    if (addr == PAHUB_NFC_ADDR || addr == PAHUB_UNIT_NFC_ADDR) return PahubDevNFC;
     if (addr == PAHUB_SCROLL_ADDR) return PahubDevScroll;
     if (addr == PAHUB_JOY2_ADDR) return PahubDevJoystick2;
     return PahubDevNone;
@@ -189,7 +189,19 @@ int8_t pahubChannelForRfidModule() {
     if (!kvxConfig.pahubEnabled) return -1;
     switch (kvxConfigPins.rfidModule) {
         case M5_RFID2_MODULE: return pahubChannelFor(PahubDevRFID2);
-        case PN532_I2C_MODULE: return pahubChannelFor(PahubDevNFC);
+        default: break;
+    }
+    return -1;
+}
+
+int8_t pahubChannelForNfcModule() {
+    if (!kvxConfig.pahubEnabled) return -1;
+    switch (kvxConfigPins.nfcModule) {
+        case PN532_I2C_MODULE:
+#if !defined(LITE_VERSION)
+        case ST25R3916_I2C_MODULE:
+#endif
+            return pahubChannelFor(PahubDevNFC);
         default: break;
     }
     return -1;
@@ -340,6 +352,8 @@ PahubChannelGuard::PahubChannelGuard(int8_t channel) {
 }
 
 PahubChannelGuard PahubChannelGuard::forRfid() { return PahubChannelGuard(pahubChannelForRfidModule()); }
+
+PahubChannelGuard PahubChannelGuard::forNfc() { return PahubChannelGuard(pahubChannelForNfcModule()); }
 
 PahubChannelGuard PahubChannelGuard::forDevice(PahubDevice dev) {
     return PahubChannelGuard(pahubChannelFor(dev));
