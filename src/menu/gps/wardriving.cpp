@@ -4,6 +4,7 @@
  */
 
 #include "wardriving.h"
+#include "menu/gps/gps_hw.h"
 #include "menu/gps/wd/wd_viewer.h"
 #include "menu/gps/wigle.h"
 #include "menu/others/audio.h"
@@ -141,17 +142,25 @@ void Wardriving::setup() {
 
     // Detect GPS module (NMEA on UART) before scanning.
     drawMainBorderWithTitle(wantWifi && wantBle ? "WD Both" : (wantWifi ? "WD WiFi" : "WD BLE"));
-    displayTextLine("Looking for GPS...");
+    {
+        GpsHwSource src = gpsHwCurrentSource();
+        displayTextLine(
+            String(gpsHwSourceName(src)) + "\nRX" + String((int)kvxConfigPins.gps_bus.rx) + " TX" +
+            String((int)kvxConfigPins.gps_bus.tx) + " @" + String(kvxConfigPins.gpsBaudrate)
+        );
+        vTaskDelay(600 / portTICK_PERIOD_MS);
+    }
+    displayTextLine("Looking for NMEA...");
     bool gpsLink = false;
     uint32_t t0 = millis();
-    while (millis() - t0 < 15000) {
+    while (millis() - t0 < 20000) {
         gps.pump();
         uint32_t waited = (millis() - t0) / 1000;
         if (gps.msSinceSentence() != 0xFFFFFFFF) {
             gpsLink = true;
             break;
         }
-        displayTextLine("Looking for GPS... " + String(waited) + "s");
+        displayTextLine("Looking for NMEA... " + String(waited) + "s");
         if (check(EscPress)) {
             endSession();
             return;
@@ -160,32 +169,37 @@ void Wardriving::setup() {
     }
 
     if (gpsLink) {
-        // Give a moment for a possible first fix / sat count to populate.
+        // Cold start on AT6668 can take ~23s outdoors — give more time for first coords.
         uint32_t t1 = millis();
-        while (millis() - t1 < 2000) {
+        while (millis() - t1 < 8000) {
             gps.pump();
+            WdGpsFix mid = gps.getFix();
+            if (mid.location_valid && (mid.lat != 0.0 || mid.lng != 0.0)) break;
             vTaskDelay(50 / portTICK_PERIOD_MS);
         }
         WdGpsFix fx = gps.getFix();
-        String msg = "GPS connected";
-        if (fx.has_3d_fix && fx.accuracy_ok) {
-            msg += "\nFix OK — logging";
+        String msg = String(gpsHwSourceName(gpsHwCurrentSource())) + " OK";
+        msg += "\nRX" + String((int)kvxConfigPins.gps_bus.rx) + " TX" +
+               String((int)kvxConfigPins.gps_bus.tx);
+        if (fx.location_valid && (fx.lat != 0.0 || fx.lng != 0.0)) {
+            char buf[40];
+            snprintf(buf, sizeof(buf), "\n%.5f %.5f", fx.lat, fx.lng);
+            msg += buf;
+            msg += "\nFix — logging coords";
         } else {
-            msg += "\nDetecting location...";
+            msg += "\nNMEA yes, no fix yet";
             if (cfg.gps_log_mode == "fix_only") msg += "\n(log waits for fix)";
-            else if (cfg.gps_log_mode == "zero_gps") msg += "\n(zero_gps: log now)";
+            else if (cfg.gps_log_mode == "zero_gps") msg += "\n(logging @ 0,0)";
             else msg += "\n(last_known after fix)";
         }
         if (fx.satellites > 0) msg += "\nSats: " + String(fx.satellites);
         displaySuccess(msg, true);
     } else {
-        String msg = "GPS not detected\nCheck Grove / baud\n";
-        if (cfg.gps_log_mode == "zero_gps") msg += "Continuing (zero_gps)";
-        else msg += "Logging waits for GPS";
+        String msg = "No NMEA\n";
+        msg += String(gpsHwSourceName(gpsHwCurrentSource()));
+        msg += "\nGPS > Config > Source\nCap RX15/TX13 115200\nGrove RX1/TX2 115200";
+        if (cfg.gps_log_mode == "zero_gps") msg += "\nContinuing (zero_gps)";
         displayError(msg, true);
-        if (cfg.gps_log_mode == "fix_only" || cfg.gps_log_mode == "last_known") {
-            // Still continue — user can get a fix outdoors; session stays alive.
-        }
     }
 
     // Open CSV on storage before WiFi scans (SPI/SD is more reliable here).

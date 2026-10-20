@@ -1,6 +1,7 @@
 #if !defined(LITE_VERSION)
 #include "site_survey.h"
 
+#include "menu/gps/gps_hw.h"
 #include "menu/wifi/channel_analyzer.h"
 #include "root/app/utils.h"
 #include "root/config/configPins.h"
@@ -18,10 +19,9 @@ HardwareSerial gpsSer(2);
 TinyGPSPlus gps;
 
 bool beginGps() {
-    pinMode(kvxConfigPins.gps_bus.rx, INPUT);
-    gpsSer.begin(kvxConfigPins.gpsBaudrate, SERIAL_8N1, kvxConfigPins.gps_bus.rx, kvxConfigPins.gps_bus.tx);
+    GpsHwInfo hw = gpsHwPrepare(gpsSer);
+    displayTextLine(String(hw.label) + " @ " + String(hw.baud));
     uint32_t t0 = millis();
-    displayTextLine("Waiting GPS...");
     while (millis() - t0 < 10000) {
         while (gpsSer.available()) gps.encode(gpsSer.read());
         if (gps.location.isValid()) return true;

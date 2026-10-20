@@ -218,9 +218,23 @@ void _post_setup_gpio() {
     Serial.printf("DEBUG: Attempting to initialize TCA8418 at address 0x%02X\n", TCA8418_I2C_ADDR);
     UseTCA8418 = tca.begin(TCA8418_I2C_ADDR, &Wire1);
 
+    // AT6668 GPS (Cap LoRa-1262 or Unit GPS v1.1) defaults — must beat pins.json
+    // left at 9600 Grove from older firmware. Cap: RX15/TX13; Grove Unit: RX1/TX2.
+#if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
+    applyLoraCapPinDefaults();
+#else
+    kvxConfigPins.gps_bus.rx = (gpio_num_t)GROVE_SCL;
+    kvxConfigPins.gps_bus.tx = (gpio_num_t)GROVE_SDA;
+    kvxConfigPins.gpsBaudrate = 115200;
+#endif
+
     if (!UseTCA8418) {
         Serial.println("ADV  : Failed to initialize TCA8418!");
         Serial.println("Probable standard Cardputer detected, switching to Keyboard library");
+        // No Cap bus — Unit GPS on Grove PORT.A @ 115200 (AT6668).
+        kvxConfigPins.gps_bus.rx = (gpio_num_t)GROVE_SCL;
+        kvxConfigPins.gps_bus.tx = (gpio_num_t)GROVE_SDA;
+        kvxConfigPins.gpsBaudrate = 115200;
         Wire1.end();
         Keyboard.begin();
         pahubBootProbe();
@@ -233,17 +247,14 @@ void _post_setup_gpio() {
 #if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)
     applyLoraCapPinDefaults();
     ensureLoraSettings();
-#else
-    kvxConfigPins.gps_bus.rx = (gpio_num_t)15;
-    kvxConfigPins.gps_bus.tx = (gpio_num_t)13;
-    kvxConfigPins.gpsBaudrate = 115200;
 #endif
 
     kvxConfigPins.CC1101_bus.sck = (gpio_num_t)40;
     kvxConfigPins.CC1101_bus.miso = (gpio_num_t)39;
     kvxConfigPins.CC1101_bus.mosi = (gpio_num_t)14;
-    kvxConfigPins.CC1101_bus.cs = (gpio_num_t)13;
-    kvxConfigPins.CC1101_bus.io0 = (gpio_num_t)5;
+    // Do NOT use GPIO13 as CC1101 CS — Cap LoRa GNSS UART TX is G13.
+    kvxConfigPins.CC1101_bus.cs = (gpio_num_t)GROVE_SDA;
+    kvxConfigPins.CC1101_bus.io0 = (gpio_num_t)GROVE_SCL;
 
     kvxConfigPins.NRF24_bus.sck = (gpio_num_t)40;
     kvxConfigPins.NRF24_bus.miso = (gpio_num_t)39;

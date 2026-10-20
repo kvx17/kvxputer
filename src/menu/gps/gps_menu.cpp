@@ -1,4 +1,5 @@
 #include "gps_menu.h"
+#include "menu/gps/gps_hw.h"
 #include "root/ui/display.h"
 #include "root/ui/settings.h"
 #include "root/app/utils.h"
@@ -47,6 +48,28 @@ void GpsMenu::wardrivingMenu() {
 }
 void GpsMenu::configMenu() {
     options = {
+        {"GPS Source",
+         []() {
+             options = {
+                 {"Auto (Cap then Grove)",
+                  []() {
+                      gpsHwSetPreferredSource(GpsHwSource::Auto);
+                      displaySuccess("GPS: Auto\nCap RX15/TX13\nGrove RX1/TX2\n115200 AT6668", true);
+                  }},
+                 {"Cap LoRa-1262",
+                  []() {
+                      gpsHwSetPreferredSource(GpsHwSource::CapLora);
+                      displaySuccess("Cap LoRa-1262\nRX15 TX13\n115200 bps", true);
+                  }},
+                 {"Unit GPS (Grove)",
+                  []() {
+                      gpsHwSetPreferredSource(GpsHwSource::GroveUnit);
+                      displaySuccess("Unit GPS v1.1\nGrove RX1 TX2\n115200 bps", true);
+                  }},
+                 {"Back", []() {}},
+             };
+             loopOptions(options, MENU_TYPE_SUBMENU, "GPS Source");
+         }},
         {"Baudrate", setGpsBaudrateMenu                                 },
         {"GPS Pins", [=]() { setUARTPinsMenu(kvxConfigPins.gps_bus); }},
 #if !defined(LITE_VERSION) && defined(HAS_LORA_CAP)

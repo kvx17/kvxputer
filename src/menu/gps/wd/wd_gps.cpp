@@ -1,4 +1,5 @@
 #include "wd_gps.h"
+#include "menu/gps/gps_hw.h"
 #include <globals.h>
 #include <sys/time.h>
 #include <time.h>
@@ -52,10 +53,13 @@ void WdGps::restorePins() {
 
 bool WdGps::begin() {
     releasePins();
-    pinMode(kvxConfigPins.gps_bus.rx, INPUT);
-    serial.begin(kvxConfigPins.gpsBaudrate, SERIAL_8N1, kvxConfigPins.gps_bus.rx, kvxConfigPins.gps_bus.tx);
+    // Cap LoRa-1262 (RX15/TX13) or Unit GPS v1.1 Grove (RX1/TX2), both AT6668 @ 115200.
+    GpsHwInfo hw = gpsHwPrepare(serial);
+    Serial.printf("[WD GPS] %s RX%d TX%d @ %d\n", hw.label, hw.rx, hw.tx, hw.baud);
     started = true;
     lastSentenceMs = 0;
+    everHadFix = false;
+    timeSynced = false;
     return true;
 }
 
