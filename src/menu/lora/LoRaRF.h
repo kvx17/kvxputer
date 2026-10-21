@@ -7,6 +7,7 @@
 #include "HWCDC.h"
 void lorachat();
 void loraconf();
+void loraAntennaCheck();
 void applyLoraCapPinDefaults();
 void ensureLoraSettings();
 void configureLoraCap();

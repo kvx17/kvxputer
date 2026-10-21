@@ -6,8 +6,9 @@
 
 void LoRaMenu::optionsMenu() {
     options = {
-        {"Chat",             []() { lorachat(); }      },
-        {"Settings",         []() { loraconf(); }      },
+        {"Chat",             []() { lorachat(); }          },
+        {"Antenna Check",    []() { loraAntennaCheck(); }},
+        {"Settings",         []() { loraconf(); }          },
         {"Change username",  []() { changeusername(); }},
         {"Change Frequency", []() { chfreq(); }        },
     };
