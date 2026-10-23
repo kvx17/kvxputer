@@ -40,6 +40,7 @@
 #include "menu/wifi/socks4_proxy.h"
 #include "menu/wifi/tcp_utils.h"
 #include "menu/wifi/roku/roku.h"
+#include "menu/files/file_share.h"
 #ifndef LITE_VERSION
 #include "menu/netops/net_toolkit/net_toolkit.h"
 #endif
@@ -74,6 +75,7 @@ void WifiMenu::optionsMenu() {
     if (WiFi.getMode() & WIFI_MODE_STA && WiFi.isConnected()) {
         options.push_back({"AP info", displayAPInfo});
     }
+    options.push_back({"File Share", fileShareMenu});
     options.push_back({"Wifi Atks", wifi_atk_menu});
     options.push_back({"Evil Portal", [=]() { EvilPortal(); }});
     options.push_back({"NetCut", [=]() { netcutMenu(); }});

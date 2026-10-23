@@ -57,6 +57,7 @@
 #include "menu/others/calculator.h"
 #include "menu/others/calc/calc_menu.h"
 #include "menu/others/qrcode_menu.h"
+#include "menu/files/file_share.h"
 #if defined(HAS_KEYBOARD)
 #include "menu/others/passgen/passgen.h"
 #include "menu/others/barcode/barcode.h"
@@ -411,6 +412,7 @@ static void launchCctv() { cctvMenu(); }
 
 // --- Files / USB / Others / Clock / Charge ---
 static void launchWebUi() { loopOptionsWebUi(); }
+static void launchFileShare() { fileShareMenu(); }
 static void launchLittleFs() { loopSD(LittleFS); }
 static void launchSdCard() {
     if (setupSdCard()) loopSD(SD);
@@ -758,6 +760,7 @@ const std::vector<AppCatalogItem> &appCatalogItems() {
 
         // Files
         {"webui", "WebUI", "Files", false, alwaysOn, launchWebUi},
+        {"file_share", "File Share", "Files", false, alwaysOn, launchFileShare},
         {"littlefs", "LittleFS", "Files", false, alwaysOn, launchLittleFs},
         {"sd_card", "SD Card", "Files", false, alwaysOn, launchSdCard},
 #ifndef LITE_VERSION

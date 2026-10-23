@@ -5,6 +5,7 @@ Feature modules in this folder:
 | File | Feature |
 |------|---------|
 | `wifi_menu.cpp` | Main menu router |
+| `../files/file_share.*` | File Share (AP or STA HTTP file browser) |
 | `evil_portal.cpp` | Captive portal |
 | `sniffer.cpp` | PCAP / handshake capture |
 | `wifi_atks.cpp` | Deauth, beacon, karma |

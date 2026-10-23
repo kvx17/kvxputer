@@ -3,10 +3,16 @@
 #include "root/ui/display.h"
 #include "root/app/utils.h"
 #include "menu/lora/LoRaRF.h"
+#if defined(HAS_LORA_CAP)
+#include "menu/lora/meshtastic/mesh_ui.h"
+#endif
 
 void LoRaMenu::optionsMenu() {
     options = {
         {"Chat",             []() { lorachat(); }          },
+#if defined(HAS_LORA_CAP)
+        {"Meshtastic",       []() { meshtasticMenu(); }    },
+#endif
         {"Antenna Check",    []() { loraAntennaCheck(); }},
         {"Settings",         []() { loraconf(); }          },
         {"Change username",  []() { changeusername(); }},

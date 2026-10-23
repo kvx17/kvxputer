@@ -46,6 +46,14 @@ JsonDocument KvxputerConfig::toJson() const {
     JsonObject _wifiAp = setting["wifiAp"].to<JsonObject>();
     _wifiAp["ssid"] = wifiAp.ssid;
     _wifiAp["pwd"] = wifiAp.pwd;
+    JsonObject _fileShare = setting["fileShare"].to<JsonObject>();
+    _fileShare["ssid"] = fileShare.ssid;
+    _fileShare["pwd"] = fileShare.pwd;
+    _fileShare["user"] = fileShare.user;
+    _fileShare["portalPwd"] = fileShare.portalPwd;
+    _fileShare["readOnly"] = fileShare.readOnly;
+    _fileShare["channel"] = fileShare.channel;
+    _fileShare["root"] = fileShare.root;
     setting["wifiMAC"] = wifiMAC; //@IncursioHack
     setting["TerminalLog"] = TerminalLog;
 
@@ -360,6 +368,20 @@ void KvxputerConfig::fromFile(bool checkFS) {
     } else {
         count++;
         log_e("Fail");
+    }
+
+    if (!setting["fileShare"].isNull()) {
+        JsonObject fsObj = setting["fileShare"].as<JsonObject>();
+        if (!fsObj["ssid"].isNull()) fileShare.ssid = fsObj["ssid"].as<String>();
+        if (!fsObj["pwd"].isNull()) fileShare.pwd = fsObj["pwd"].as<String>();
+        if (!fsObj["user"].isNull()) fileShare.user = fsObj["user"].as<String>();
+        if (!fsObj["portalPwd"].isNull()) fileShare.portalPwd = fsObj["portalPwd"].as<String>();
+        if (!fsObj["readOnly"].isNull()) fileShare.readOnly = fsObj["readOnly"].as<int>();
+        if (!fsObj["channel"].isNull()) fileShare.channel = fsObj["channel"].as<int>();
+        if (!fsObj["root"].isNull()) fileShare.root = fsObj["root"].as<String>();
+    } else {
+        count++;
+        log_e("fileShare not found, using defaults");
     }
 
     //@IncursioHack
@@ -1020,6 +1042,20 @@ void KvxputerConfig::setWebUICreds(const String &usr, const String &pwd) {
 void KvxputerConfig::setWifiApCreds(const String &ssid, const String &pwd) {
     wifiAp.ssid = ssid;
     wifiAp.pwd = pwd;
+    saveFile();
+}
+
+void KvxputerConfig::setFileShareSettings(
+    const String &ssid, const String &pwd, const String &user, const String &portalPwd, int readOnly,
+    int channel, const String &root
+) {
+    fileShare.ssid = ssid;
+    fileShare.pwd = pwd;
+    fileShare.user = user;
+    fileShare.portalPwd = portalPwd;
+    fileShare.readOnly = readOnly ? 1 : 0;
+    fileShare.channel = channel;
+    fileShare.root = root;
     saveFile();
 }
 

@@ -181,10 +181,11 @@ static void drawFooterBar(const String &query, size_t hitCount, bool scanning) {
     tft.fillRect(0, tftHeight - fh, tftWidth, fh, kvxConfig.secColor);
     tft.setTextSize(FP);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
-    String foot = "FN+↑↓ 1-4 Enter Esc Tab";
+    // ; , . / navigate; FN+those insert the symbols; FN+1-4 launch.
+    String foot = "↑↓ FN+1-4 Ent Esc Tab";
     if (query.length() && !scanning) foot = String(hitCount) + "  " + foot;
     else if (scanning) foot = String("… ") + foot;
-    if ((int)foot.length() * uiCharW(FP) > tftWidth - 4) foot = "FN+↑↓ 1-4 Ent Esc";
+    if ((int)foot.length() * uiCharW(FP) > tftWidth - 4) foot = "↑↓ FN+1-4 Esc";
     tft.drawCentreString(foot, tftWidth / 2, tftHeight - fh + 2, 1);
 }
 
@@ -488,52 +489,74 @@ void quickSearchLoop() {
         }
         if (toggled) continue;
 
-        // FN + arrows / page / digit launch.
-        if (fn) {
-            bool handled = false;
+        // Navigation without FN: ; up, . down, , left/page, / right/page.
+        // With FN those same keys insert the symbols (Cardputer reports 0xDA.. as FN+arrows).
+        {
             const unsigned long now = millis();
             const bool navOk = (now - lastNavMs) >= kNavRepeatMs;
-            for (char c : key.word) {
-                const uint8_t u = (uint8_t)c;
-                if (u == 0xDA) { // Up
-                    if (navOk && selected > 0) {
-                        selected--;
-                        lastNavMs = now;
+            bool handled = false;
+
+            if (fn) {
+                for (char c : key.word) {
+                    const uint8_t u = (uint8_t)c;
+                    char insert = 0;
+                    if (u == 0xDA) insert = ';';      // FN + ;
+                    else if (u == 0xD9) insert = '.'; // FN + .
+                    else if (u == 0xD8) insert = ','; // FN + ,
+                    else if (u == 0xD7) insert = '/'; // FN + /
+                    else if (c >= '1' && c <= '4' && !fnDigitLatched) {
+                        int rank = c - '1';
+                        if (rank < (int)hits.size()) {
+                            fnDigitLatched = true;
+                            const SearchHit hit = hits[rank];
+                            bool ok = (mode == SearchMode::Apps) ? launchAppHit(hit) : openFileHit(hit);
+                            if (ok) return;
+                            fullRedraw = true;
+                        }
+                        handled = true;
+                        continue;
                     }
-                    handled = true;
-                } else if (u == 0xD9) { // Down
-                    if (navOk && selected + 1 < (int)hits.size()) {
-                        selected++;
-                        lastNavMs = now;
+                    if (insert) {
+                        if (query.length() < 48) {
+                            query += insert;
+                            listDirty = true;
+                        }
+                        handled = true;
                     }
-                    handled = true;
-                } else if (u == 0xD8) { // Left = page up
-                    if (navOk) {
-                        selected = max(0, selected - visible);
-                        lastNavMs = now;
-                    }
-                    handled = true;
-                } else if (u == 0xD7) { // Right = page down
-                    if (navOk) {
-                        selected = min((int)hits.size() - 1, selected + visible);
-                        if (selected < 0) selected = 0;
-                        lastNavMs = now;
-                    }
-                    handled = true;
-                } else if (c >= '1' && c <= '4' && !fnDigitLatched) {
-                    int rank = c - '1';
-                    if (rank < (int)hits.size()) {
-                        fnDigitLatched = true;
-                        const SearchHit hit = hits[rank];
-                        bool ok = (mode == SearchMode::Apps) ? launchAppHit(hit) : openFileHit(hit);
-                        if (ok) return;
-                        fullRedraw = true;
-                    }
-                    handled = true;
                 }
+                // FN+Space and other FN combos: ignore (don't type garbage).
+                if (handled || key.word.size()) continue;
+            } else {
+                for (char c : key.word) {
+                    if (c == ';') {
+                        if (navOk && selected > 0) {
+                            selected--;
+                            lastNavMs = now;
+                        }
+                        handled = true;
+                    } else if (c == '.') {
+                        if (navOk && selected + 1 < (int)hits.size()) {
+                            selected++;
+                            lastNavMs = now;
+                        }
+                        handled = true;
+                    } else if (c == ',') {
+                        if (navOk) {
+                            selected = max(0, selected - visible);
+                            lastNavMs = now;
+                        }
+                        handled = true;
+                    } else if (c == '/') {
+                        if (navOk) {
+                            selected = min((int)hits.size() - 1, selected + visible);
+                            if (selected < 0) selected = 0;
+                            lastNavMs = now;
+                        }
+                        handled = true;
+                    }
+                }
+                if (handled) continue;
             }
-            // FN+Space: ignore. Other FN+printable: ignore (don't type).
-            if (handled || key.word.size()) continue;
         }
 
         // Backspace (short): delete one char.
@@ -545,11 +568,12 @@ void quickSearchLoop() {
             continue;
         }
 
-        // Printable characters (including Space).
+        // Printable characters (including Space). Skip arrow-key glyphs and HID codes.
         for (char c : key.word) {
             const uint8_t u = (uint8_t)c;
             if (u == 0xDA || u == 0xD9 || u == 0xD8 || u == 0xD7 || u == 0xB3 || u == 0xB1 || u == 0xD4)
                 continue;
+            if (c == ';' || c == '.' || c == ',' || c == '/') continue;
             if (c >= 32 && c < 127) {
                 if (query.length() < 48) {
                     query += c;

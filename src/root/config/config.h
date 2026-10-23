@@ -42,6 +42,15 @@ public:
         bool allowSetSsid;
         bool allowGetCreds;
     };
+    struct FileShareSettings {
+        String ssid = "kvxputer";
+        String pwd = "kvxputer";
+        String user = "kvx";
+        String portalPwd = "kvxputer";
+        int readOnly = 0;
+        int channel = 6;
+        String root = "";
+    };
 
     const char *filepath = kvx::paths::CONF;
 
@@ -72,6 +81,7 @@ public:
     Credential webUI = {"admin", "bruce"};
     std::vector<String> webUISessions = {}; // FIFO queue of session tokens
     WiFiCredential wifiAp = {"kvxputer", "kvxputer"};
+    FileShareSettings fileShare;
     std::map<String, String> wifi = {};
     std::set<String> evilWifiNames = {};
     String wifiMAC = ""; //@IncursioHack
@@ -246,6 +256,10 @@ public:
     // Wifi
     void setWebUICreds(const String &usr, const String &pwd);
     void setWifiApCreds(const String &ssid, const String &pwd);
+    void setFileShareSettings(
+        const String &ssid, const String &pwd, const String &user, const String &portalPwd, int readOnly,
+        int channel, const String &root
+    );
     void setTerminalLog(bool value);
     void addWifiCredential(const String &ssid, const String &pwd);
     void addQrCodeEntry(const String &menuName, const String &content);

@@ -185,6 +185,19 @@ static CapAntSwitch loraCapSetAntenna(bool enable) {
     return sw;
 }
 
+bool ensureLoraCapAntenna() {
+#if defined(HAS_LORA_CAP)
+    CapAntSwitch sw = loraCapSetAntenna(true);
+    if (sw.high) Serial.println("LoRa Cap: antenna switch ON");
+    else if (!sw.bus) Serial.println("LoRa Cap: I2C bus down (need Cardputer-Adv)");
+    else if (!sw.present) Serial.println("LoRa Cap: no PI4IOE, antenna hardwired");
+    else Serial.println("LoRa Cap: antenna switch stayed off");
+    return sw.high || !sw.present;
+#else
+    return true;
+#endif
+}
+
 SPIClass *selectLoraSPIBus() {
     SPIClass *bus =
         acquireSPIBus(kvxConfigPins.LoRa_bus.sck, kvxConfigPins.LoRa_bus.miso, kvxConfigPins.LoRa_bus.mosi);
@@ -1120,24 +1133,18 @@ static bool antScanChoice(const float *means, int best, bool activity, float &mh
     opts.push_back({"Save strongest", []() {}});
     opts.push_back({"Back", []() {}});
     int sel = loopOptions(opts, MENU_TYPE_SUBMENU, activity ? "Signal found" : "Band is quiet", 0);
-    const int watch = n;
     const int save = n + 1;
     const int back = n + 2;
     if (antLeave() || sel < 0 || sel == back) return false;
     int chosen = best;
     if (sel >= 0 && sel < n) chosen = sel;
+    if (sel == save || sel == n) chosen = best;
     mhz = bands[chosen].mhz;
     label = bands[chosen].label;
     if (sel == save) {
-        mhz = bands[best].mhz;
-        label = bands[best].label;
         if (saveLoraMhz(mhz)) displaySuccess("Frequency saved", true);
         else displayError("Save failed", true);
-    } else if (sel == watch) {
-        mhz = bands[best].mhz;
-        label = bands[best].label;
     }
-    (void)watch;
     return antTune(mhz);
 }
 
@@ -1276,7 +1283,8 @@ static void antLive(float mhz, const char *label) {
             span = hi - lo;
         }
         char radio[32];
-        if (lora1262) snprintf(radio, sizeof(radio), antTcxo ? "SX1262 OK  TCXO 3V" : "SX1262 OK");
+        if (lora1262 && antTcxo) snprintf(radio, sizeof(radio), "SX1262 OK  TCXO 3V");
+        else if (lora1262) snprintf(radio, sizeof(radio), "SX1262 OK");
         else snprintf(radio, sizeof(radio), "SX1276 OK");
         char freq[32];
         snprintf(freq, sizeof(freq), "%.3f MHz  %s", mhz, label);

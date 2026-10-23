@@ -209,7 +209,7 @@ On the main channel grid (Cardputer / Adv):
 
 `;` `.` `,` `/` without FN still move the tile cursor. App letter shortcuts are unchanged.
 
-**Quick search:** type to filter the app catalog; empty shows the last 4 launches. **FN+↑↓** moves the list, **FN+1–4** opens that ranked result, **Enter** launches the selection, **Esc** closes. **Tab** switches to file name search under LittleFS `/` and SD `/kvxputer/` (progressive, capped).
+**Quick search:** type to filter the app catalog; empty shows the last 4 launches. **`;` `.` `,` `/`** move the list (up/down/page); **FN+`;` `.` `,` `/`** type those characters. **FN+1–4** opens that ranked result, **Enter** launches the selection, **Esc** closes. **Tab** switches to file name search under LittleFS `/` and SD `/kvxputer/` (progressive, capped).
 
 ---
 
@@ -477,6 +477,7 @@ pio run -e companion-c5-unified -t upload
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Connect to Wifi**                       | Join an AP as STA.                                                                                                                                        |
 | **Start WiFi AP**                         | SoftAP for portals and labs.                                                                                                                              |
+| **File Share**                            | WPA2 AP or existing Wi‑Fi file browser (SD/LittleFS); portal login on device. Also under Files.                                                           |
 | **Turn Off WiFi**                         | Tear down STA/AP.                                                                                                                                         |
 | **AP info**                               | Connected-network details (STA).                                                                                                                          |
 | **Wifi Atks**                             | Target AP, Karma, Beacon SPAM, Deauth Flood, Enhanced Deauth. Target mode: Information, Deauth, Handshake capture, Clone Portal, Deauth+Clone (± verify). |
@@ -695,6 +696,7 @@ Post-read Tag-O-Matic actions (NFC domain) also offer Compare, Magic write, Dete
 | ------------------------ | -------------------------------------- |
 | **SD Card / LittleFS**   | Browse and manage files.               |
 | **WebUI**                | HTTP file manager over Wi‑Fi.          |
+| **File Share**           | WPA2 AP file browser for phones/PCs.   |
 | **Connect** *(lite off)* | Peer file/command sharing over serial. |
 | **Mass Storage**         | Same MSC expose as USB.                |
 
