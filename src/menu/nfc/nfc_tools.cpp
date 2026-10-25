@@ -72,7 +72,7 @@ void nfcReadRecords() {
             options.emplace_back(label, [&, i]() { pick = (int)i; });
         }
         options.emplace_back("Back", [&]() { pick = -2; });
-        if (loopOptions(options, MENU_TYPE_SUBMENU, "NDEF records") < 0 || pick < 0) break;
+        if (loopOptions(options, MENU_TYPE_SUBMENU, "NDEF Rec") < 0 || pick < 0) break;
         if (pick == -2) break;
 
         int act = -1;
@@ -142,18 +142,11 @@ void nfcChipInfo() {
     PahubChannelGuard *guard = nullptr;
     if (!withLiveTag(&rfid, &guard, true)) return;
     ScrollableTextArea area("Chip info");
-    const uint16_t valueColor = kvxConfig.secColor;
-    const uint8_t labelFont = uiDenseFont();
-    const uint8_t valueFont = uiBodyFont();
-    auto addField = [&](const String &label, const String &value) {
-        area.addLine(label, kvxConfig.priColor, labelFont);
-        area.addLine(value, valueColor, valueFont);
-    };
-    addField("Type:", rfid->printableUID.picc_type);
-    addField("UID:", rfid->printableUID.uid);
-    addField("ATQA:", rfid->printableUID.atqa);
-    addField("SAK:", rfid->printableUID.sak);
-    addField("Pages:", String(rfid->dataPages) + "/" + String(rfid->totalPages));
+    area.addField("Type:", rfid->printableUID.picc_type);
+    area.addField("UID:", rfid->printableUID.uid);
+    area.addField("ATQA:", rfid->printableUID.atqa);
+    area.addField("SAK:", rfid->printableUID.sak);
+    area.addField("Pages:", String(rfid->dataPages) + "/" + String(rfid->totalPages));
 #if !defined(LITE_VERSION)
     // ST25 extras when active
     // dynamic_cast not RTTI-safe on Arduino — use picc_type / ntag fields via printable only
@@ -164,7 +157,7 @@ void nfcChipInfo() {
     int freeHint = 0;
     if (rfid->totalPages > 4 && rfid->dataPages >= 0) {
         freeHint = (rfid->totalPages - 4) * 4; // rough user bytes
-        addField("User bytes:", "~" + String(freeHint));
+        area.addField("User bytes:", "~" + String(freeHint));
     }
     area.addLine("");
     area.addLine("Esc = back");
@@ -195,7 +188,7 @@ void nfcLockTag() {
              releaseLive(rfid, guard);
          }},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "IRREVERSIBLE lock");
+    loopOptions(options, MENU_TYPE_SUBMENU, "IRREV Lock");
 #endif
 }
 
@@ -249,7 +242,7 @@ void nfcPasswordMenu() {
          }},
         {"Back", []() {}},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "NTAG password");
+    loopOptions(options, MENU_TYPE_SUBMENU, "NTAG Pass");
 #endif
 }
 
@@ -279,7 +272,7 @@ void nfcFormatMemory() {
              releaseLive(rfid, guard);
          }},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "Zero user memory");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Zero Mem");
 #endif
 }
 

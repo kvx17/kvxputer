@@ -70,7 +70,7 @@ void upnpMenu() {
                      items.push_back({loc.substring(0, 28).c_str(), [loc]() { displayInfo(loc, true); }});
                  }
                  items.push_back({"Back", []() {}});
-                 loopOptions(items, MENU_TYPE_SUBMENU, "UPnP devices");
+                 loopOptions(items, MENU_TYPE_SUBMENU, "UPnP Dev");
              }},
             {"UPnP NAT",
              []() {

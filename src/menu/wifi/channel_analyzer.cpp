@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#include "root/app/utils.h"
 #include "root/ui/display.h"
 #include "root/ui/scanner_list.h"
 #include "root/input/mykeyboard.h"
@@ -14,6 +15,7 @@
 #include <Arduino.h>
 #include <cstring>
 #include <globals.h>
+#include <vector>
 
 // 2.4GHz channels to sweep.
 static const uint8_t CA_CHANNELS[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
@@ -653,20 +655,18 @@ void channel_analyzer_setup() {
 
     ca_start_wifi();
 
-    tft.fillScreen(kvxConfig.bgColor);
-    drawMainBorderWithTitle("kvx wifi analyzer");
-    tft.setTextSize(FP);
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    padprintln("");
+    {
+        std::vector<String> intro;
+        intro.push_back("");
 #if defined(ARDUINO_M5STACK_TAB5)
-    padprintln(" STA scan (hosted C6)");
+        intro.push_back("STA scan (hosted C6)");
 #else
-    padprintln(" sweeping 1-11 ...");
+        intro.push_back("sweeping 1-11 ...");
 #endif
-    padprintln(" Lt/Rt=ch OK=SSIDs");
-    padprintln(" L=all list  Esc=exit");
-    delay(800);
-    drawMainBorder(true);
+        intro.push_back("Lt/Rt=ch OK=SSIDs");
+        intro.push_back("L=all list  Esc=exit");
+        showScrollableBody("WiFi Analyz", intro);
+    }
     ca_draw(load, peak, rssi, CA_CHANNELS[navIdx], dwell);
 
     for (;;) {

@@ -246,7 +246,7 @@ bool pickAp(TargetAp &out) {
     for (size_t idx = 0; idx < list.size(); idx++) {
         options.push_back({labels[idx].c_str(), [&list, idx, &out]() { out = list[idx]; }});
     }
-    int sel = loopOptions(options, MENU_TYPE_SUBMENU, "PMKID target");
+    int sel = loopOptions(options, MENU_TYPE_SUBMENU, "PMKID");
     options.clear();
     WiFi.scanDelete();
     if (sel < 0 || list.empty()) return false;

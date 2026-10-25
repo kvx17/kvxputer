@@ -117,7 +117,7 @@ void sipMenu() {
              }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "SIP Toolkit");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "SIP Tools");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }

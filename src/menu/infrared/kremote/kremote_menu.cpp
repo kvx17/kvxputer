@@ -41,7 +41,7 @@ static void kremoteBrowseFolderMenu() {
             {"Reset default", []() { kvxConfig.setKremoteBrowseFolder(""); }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Browse IR folder");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "IR Folder");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }
@@ -53,7 +53,7 @@ static void kremoteIrHwMenu() {
         {"Both (stronger)", []() { kvxConfig.setKremoteIrHw(KREMOTE_IR_BOTH); }},
         {"Back", []() {}},
     };
-    loopOptions(opts, MENU_TYPE_SUBMENU, "IR hardware");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "IR HW");
 }
 
 static void kremoteSettingsMenu() {
@@ -68,7 +68,7 @@ static void kremoteSettingsMenu() {
             {kremoteBrowseFolderMenuLabel(), []() { kremoteBrowseFolderMenu(); }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Universal Remote");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Univ Rem");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }
@@ -161,7 +161,7 @@ void kremoteMenu() {
             {"About", []() { kremoteAbout(); }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "kvxputer universal remote");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Univ Rem");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }

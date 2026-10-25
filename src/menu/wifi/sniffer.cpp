@@ -29,6 +29,8 @@
 
 #include "FS.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/sd_functions.h"
 #include "root/net/webInterface.h"
@@ -1224,9 +1226,25 @@ void sniffer_setup() {
     deauth_tmp = millis();
     // Prepare deauth frame for each AP record
     memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
-    // Main sniffer loop
+    // Scope keeps ScrollableTextArea off the goto Exit path above.
+    {
+    // Main sniffer loop — scrollable body under top bar; footer stays pinned.
+    const int sniffFootH = uiLineH(uiBodyFont()) * 2 + 4;
+    const int sniffBodyY = KVX_TOPBAR_H + 4;
+    const int sniffBodyH = max(20, tftHeight - sniffBodyY - sniffFootH);
+    ScrollableTextArea sniffBody(
+        uiBodyFont(), BORDER_PAD_X, sniffBodyY, tftWidth - 2 * BORDER_PAD_X, sniffBodyH, false, false
+    );
 
     for (;;) {
+        // Scroll body with Up/Down only — Next/Prev remain channel hop.
+        if (check(UpPress)) {
+            sniffBody.scrollUp();
+            sniffBody.draw(false);
+        } else if (check(DownPress)) {
+            sniffBody.scrollDown();
+            sniffBody.draw(false);
+        }
         if (returnToMenu) {
             if (littleFsWasFull) {
                 Serial.println("Not enough space on LittleFS");
@@ -1332,7 +1350,7 @@ void sniffer_setup() {
                      modeOptions.push_back({"Sniff Deauth", [&]() {
                                                 sniffer_set_mode(SnifferMode::DeauthOnly);
                                             }});
-                     loopOptions(modeOptions, MENU_TYPE_SUBMENU, "Capture Mode");
+                     loopOptions(modeOptions, MENU_TYPE_SUBMENU, "Capture");
                      redraw = true;
                  }                                                                                        },
                 {deauth ? "Disable deauth attack" : "Enable deauth attack", [&]() { deauth = !deauth; }   },
@@ -1364,15 +1382,17 @@ void sniffer_setup() {
 
         if (redraw) { // Redraw UI
             redraw = false;
-            // calculate run time
             uint32_t runtime = (millis() - start_time) / 1000;
 
-            if (returnToMenu) goto Exit;
-            tft.drawPixel(0, 0, 0);
-            drawMainBorderWithTitle("pcap sniffer", clearScreen); // Clear Screen and redraw border
-            clearScreen = false;
-            tft.setTextSize(FP);
-            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+            if (returnToMenu) break;
+            {
+                TftFrame frame;
+                if (clearScreen) tft.fillScreen(kvxConfig.bgColor);
+                drawKvxTopBar("pcap sniff");
+                clearScreen = false;
+            }
+            const size_t keepScroll = sniffBody.firstVisibleLine;
+            sniffBody.clear();
             String activeFile = "File: ";
             if (sniffer_get_mode() == SnifferMode::Full && rawCaptureEnabled()) {
                 activeFile += FileSys + ":" + filename;
@@ -1381,28 +1401,23 @@ void sniffer_setup() {
             } else {
                 activeFile += "handshake pcaps";
             }
-            padprintln(activeFile);
-            padprintln("Sniffer Mode: " + currentModeString());
+            sniffBody.addLine(activeFile);
+            sniffBody.addField("Mode:", currentModeString());
             if (deauth) {
-                tft.setTextColor(kvxConfig.bgColor, kvxConfig.priColor);
-                padprintln(
-                    "Deauth: in " + String((DEAUTH_INTERVAL - (millis() - deauth_tmp)) / 1000) + "s, total " +
-                    String(deauth_counter) + " pkts sent"
+                sniffBody.addLine(
+                    "Deauth: in " + String((DEAUTH_INTERVAL - (millis() - deauth_tmp)) / 1000) +
+                        "s, total " + String(deauth_counter) + " pkts",
+                    kvxConfig.secColor
                 );
-                tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-
-            } else padprintln("Silent mode.");
-
-            padprintln("Run time " + String(runtime / 60) + ":" + String(runtime % 60));
-
-            // New: show beacon counts and recent SSIDs
+            } else {
+                sniffBody.addLine("Silent mode.");
+            }
+            sniffBody.addField("Run time:", String(runtime / 60) + ":" + String(runtime % 60));
             size_t activeOnChannel = countActiveBeaconsOnChannel(all_wifi_channels[ch]);
-            padprintln(
-                "Beacons " + String(beacon_frames) + " tot. /" + String(registeredBeacons.size()) +
+            sniffBody.addLine(
+                "Beacons " + String(beacon_frames) + " tot /" + String(registeredBeacons.size()) +
                 " cached / ch " + String(activeOnChannel) + " active"
             );
-
-            // show a short list of recent SSIDs on this channel (comma-separated)
             std::vector<String> recentSsids = recentSsidsOnChannel(all_wifi_channels[ch], 5);
             if (!recentSsids.empty()) {
                 String s = "SSIDs: ";
@@ -1410,10 +1425,15 @@ void sniffer_setup() {
                     s += recentSsids[i];
                     if (i + 1 < recentSsids.size()) s += ", ";
                 }
-                padprintln(s);
+                sniffBody.addLine(s);
             }
+            sniffBody.firstVisibleLine = keepScroll;
+            sniffBody.draw(true);
 
-            // make a nice reverse video bar
+            // Pinned footer (not part of the scroll viewport)
+            const int fy = uiFooterY(uiBodyFont());
+            tft.fillRect(0, fy - uiLineH(uiBodyFont()), tftWidth, uiLineH(uiBodyFont()) * 2 + 2, kvxConfig.bgColor);
+            tft.setTextSize(uiBodyFont());
             tft.setTextColor(kvxConfig.bgColor, kvxConfig.priColor);
             tft.drawRightString(
                 "Ch" +
@@ -1424,13 +1444,16 @@ void sniffer_setup() {
                     ) +
                     String(all_wifi_channels[ch]) + " (Next)",
                 tftWidth - 10,
-                uiFooterY(FP),
+                fy,
                 1
             );
             tft.drawString(
-                " EAPOL: " + String(num_EAPOL) + " HS: " + String(num_HS) + " ", 10, uiFooterY(FP)
+                " EAPOL: " + String(num_EAPOL) + " HS: " + String(num_HS) + " ", 10, fy
             );
-            tft.drawCentreString("Packets " + String(packet_counter), tftWidth / 2, uiFooterY(FP) - uiLineH(FP), 1);
+            tft.drawCentreString(
+                "Packets " + String(packet_counter), tftWidth / 2, fy - uiLineH(uiBodyFont()), 1
+            );
+            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         }
 
         if (currentTime - lastTime > 100) tft.drawPixel(0, 0, 0);
@@ -1464,6 +1487,7 @@ void sniffer_setup() {
         }
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
+    } // sniffBody scope
 Exit:
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();

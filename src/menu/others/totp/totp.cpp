@@ -10,6 +10,7 @@
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include <ArduinoJson.h>
 #include <mbedtls/md.h>
 #include <globals.h>
@@ -173,23 +174,26 @@ void showCodes() {
     int paintedRemain = -1;
     bool chromeDrawn = false;
 
+    const int bodyY = KVX_TOPBAR_H + 4;
+    const int bodyH = tftHeight - bodyY - 4;
+    ScrollableTextArea area(
+        uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
+    );
+
     auto paint = [&](size_t i, const String &code, int remain) {
         if (!chromeDrawn) {
-            drawMainBorderWithTitle("TOTP");
+            TftFrame frame;
+            tft.fillScreen(kvxConfig.bgColor);
+            drawKvxTopBar("TOTP");
             chromeDrawn = true;
-        } else {
-            tft.fillRect(6, 26, tftWidth - 12, tftHeight - 32, kvxConfig.bgColor);
         }
-        tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y + FM * LH);
-        tft.setTextSize(FP);
-        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-        padprintln(g_accounts[i].name);
-        tft.setTextSize(FG);
-        padprintln(code);
-        tft.setTextSize(FP);
-        padprintln(String(remain) + "s  " + String(i + 1) + "/" + String(g_accounts.size()));
-        padprintln(",/. next  ESC exit");
-        padprintln("Device-bound store");
+        area.clear();
+        area.addLine(g_accounts[i].name);
+        area.addLine(code, kvxConfig.secColor, (uint8_t)uiHeroFont());
+        area.addLine(String(remain) + "s  " + String(i + 1) + "/" + String(g_accounts.size()));
+        area.addLine(",/. next  ESC exit");
+        area.addLine("Device-bound store");
+        area.draw(true);
         paintedIdx = i;
         paintedCode = code;
         paintedRemain = remain;
@@ -210,6 +214,7 @@ void showCodes() {
 
         uint32_t t0 = millis();
         while (millis() - t0 < 250) {
+            area.update(false);
             if (check(EscPress) || returnToMenu) return;
             if (check(NextPress) || check(PrevPress)) {
                 if (check(NextPress)) idx = (idx + 1) % g_accounts.size();

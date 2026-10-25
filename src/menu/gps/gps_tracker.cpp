@@ -62,7 +62,7 @@ void GPSTracker::setup() {
     PPM.enableOTG();
 #endif
     tft.fillScreen(kvxConfig.bgColor);
-    drawKvxTopBar("GPS Tracker");
+    drawKvxTopBar("GPS Track");
     displayTextLine("Initializing...");
 
     if (!begin_gps()) return;
@@ -161,26 +161,20 @@ void GPSTracker::loop() {
     returnToMenu = false;
 
     tft.fillScreen(kvxConfig.bgColor);
-    drawKvxTopBar("GPS Tracker");
+    drawKvxTopBar("GPS Track");
 
     const int bodyY = KVX_TOPBAR_H + 2;
     const int bodyH = max(20, tftHeight - bodyY - 2);
     ScrollableTextArea area(
-        uiDenseFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
+        uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
     );
-
-    const uint16_t labelColor = kvxConfig.priColor;
-    const uint16_t valueColor = kvxConfig.secColor;
-    const uint8_t labelFont = uiDenseFont();
-    const uint8_t valueFont = uiBodyFont();
 
     auto rebuildHud = [&](bool locValid, bool useFallback, int sats) {
         const size_t keepScroll = area.firstVisibleLine;
         area.clear();
 
         auto addField = [&](const char *label, const String &value) {
-            area.addLine(label, labelColor, labelFont);
-            area.addLine(value, valueColor, valueFont);
+            area.addField(label, value);
         };
 
         char buf[48];
@@ -322,7 +316,7 @@ void GPSTracker::loop() {
             if (locValid || useFallback) snprintf(status, sizeof(status), "FIX");
             else if (sats > 0) snprintf(status, sizeof(status), "ACQ");
             else snprintf(status, sizeof(status), "NOFIX");
-            drawKvxTopBar("GPS Tracker", status);
+            drawKvxTopBar("GPS Track", status);
             rebuildHud(locValid, useFallback, sats);
 
             if (chars == 0) {

@@ -3,6 +3,7 @@
 
 #include "root/serial/serialcmds.h"
 #include "root/storage/sd_functions.h" // to catch FileList Struct
+#include "root/ui/kvx_ui.h"
 #include <FS.h>
 #include <LittleFS.h>
 #include <SD.h>
@@ -16,20 +17,37 @@
 #define MENU_TYPE_REGULAR 2
 
 // Font scale contract (Cardputer FP=FM=2, FG=3):
-//   uiDenseFont — top bar, HUD overlays, dense grids that cannot fit body glyphs
-//   uiBodyFont  — padprintln, ScrollableTextArea, form fields, footers
-//   uiMenuFont  — loopOptions / submenu rows / section titles
+//   uiDenseFont — top bar, HUD overlays, dense grids that cannot fit body glyphs (GLCD 1)
+//   uiBodyFont  — padprintln, ScrollableTextArea, form fields, footers (GFXfont ~12px)
+//   uiMenuFont  — loopOptions / submenu rows / section titles (GLCD FM)
 //   uiHeroFont  — rare large callouts (calculator result, etc.)
+// UI_FONT_BODY is a setTextSize sentinel (not a GLCD multiplier). Boards use FP/FM/FG <= 6.
+#ifndef UI_FONT_BODY
+#define UI_FONT_BODY 32
+#endif
+#ifndef UI_BODY_LINE_H
+#define UI_BODY_LINE_H 12
+#endif
+#ifndef UI_BODY_CHAR_W
+#define UI_BODY_CHAR_W 7
+#endif
 inline int uiDenseFont() { return max(1, FP / 2); }
-inline int uiBodyFont() { return FP; }
+inline int uiBodyFont() { return UI_FONT_BODY; }
 inline int uiMenuFont() { return FM; }
 inline int uiHeroFont() { return FG; }
-inline int uiLineH(int sz = FP) { return sz * LH; }
-inline int uiCharW(int sz = FP) { return sz * LW; }
-inline int uiRowH(int sz = FP) { return sz * LH + 4; }
-inline int uiFooterY(int sz = FP) { return tftHeight - sz * LH - 2; }
-// Live-status line under drawMainBorder* title (replaces hardcoded Y 40/56/72).
-inline int uiStatusY(int line) { return BORDER_PAD_Y + uiLineH(FM) + 4 + line * uiRowH(FP); }
+inline bool uiIsBodyFont(int sz) { return sz == UI_FONT_BODY; }
+inline int uiLineH(int sz = UI_FONT_BODY) {
+    return uiIsBodyFont(sz) ? UI_BODY_LINE_H : sz * LH;
+}
+inline int uiCharW(int sz = UI_FONT_BODY) {
+    return uiIsBodyFont(sz) ? UI_BODY_CHAR_W : sz * LW;
+}
+inline int uiRowH(int sz = UI_FONT_BODY) { return uiLineH(sz) + 4; }
+inline int uiFooterY(int sz = UI_FONT_BODY) { return tftHeight - uiLineH(sz) - 2; }
+// Live-status line under the kvx top bar (body starts at KVX_TOPBAR_H).
+inline int uiStatusY(int line) {
+    return KVX_TOPBAR_H + 4 + line * uiRowH(uiBodyFont());
+}
 
 // Draw offscreen (M5Canvas / TFT_eSprite) then blit once. Nested frames share one buffer.
 // No-PSRAM boards free the canvas after present so radio bring-up keeps a DMA block.

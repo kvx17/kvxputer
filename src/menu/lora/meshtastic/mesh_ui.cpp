@@ -392,7 +392,7 @@ static void editPsk() {
              }
          }},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "Channel PSK");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Chan PSK");
 }
 
 static void editPreset() {
@@ -403,7 +403,7 @@ static void editPreset() {
         {"MediumSlow", []() { gCfg.preset = Preset::MediumSlow; }},
         {"MediumFast", []() { gCfg.preset = Preset::MediumFast; }},
     };
-    int sel = loopOptions(options, MENU_TYPE_SUBMENU, "Modem preset", (int)gCfg.preset);
+    int sel = loopOptions(options, MENU_TYPE_SUBMENU, "Modem", (int)gCfg.preset);
     if (sel >= 0) {
         gCfg.preset = (Preset)sel;
         saveMeshSettings();
@@ -438,7 +438,7 @@ static void settingsLoop() {
              }},
             {"Back", []() {}},
         };
-        int selected = loopOptions(options, MENU_TYPE_SUBMENU, "Mesh Settings");
+        int selected = loopOptions(options, MENU_TYPE_SUBMENU, "Mesh Set");
         if (selected < 0 || selected == (int)options.size() - 1) return;
     }
 }

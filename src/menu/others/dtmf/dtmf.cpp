@@ -298,7 +298,7 @@ void runListen() {
     {
         TftFrame frame;
         tft.fillScreen(kvxConfig.bgColor);
-        drawKvxTopBar("DTMF Listen");
+        drawKvxTopBar("DTMF Listn");
         tft.setTextSize(FP);
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         tft.drawString("Listening…", 8, KVX_TOPBAR_H + 6);

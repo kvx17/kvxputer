@@ -238,7 +238,7 @@ void codecHashMenu() {
         {"SHA256",        []() { runHash(MBEDTLS_MD_SHA256, false); }},
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Codec / Hash");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Codec");
     options.clear();
 }
 

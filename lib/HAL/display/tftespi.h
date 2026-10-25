@@ -136,6 +136,7 @@ public:
     TFT_eSPI *native();
 
 private:
+    uint8_t _uiTextSize = 1; // tracks UI_FONT_BODY sentinel; TFT textsize stays 1 for GFX face
     bool ensureCanvas();
     void syncCanvasState();
     void markDirty(int32_t x, int32_t y, int32_t w, int32_t h);

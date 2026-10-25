@@ -27,7 +27,7 @@ void calcMenu() {
             {"Flow and pipe",   calcFlow    },
             {"Back",            [&goBack]() { goBack = true; }},
         };
-        int idx = loopOptions(options, MENU_TYPE_SUBMENU, "Calculators");
+        int idx = loopOptions(options, MENU_TYPE_SUBMENU, "Calcs");
         if (idx < 0 || goBack || forceHome) break;
     }
 }

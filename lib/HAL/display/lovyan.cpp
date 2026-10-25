@@ -312,6 +312,8 @@ int16_t tft_display::getCursorX() const { return lgfx::LGFX_Device::getCursorX()
 int16_t tft_display::getCursorY() const { return lgfx::LGFX_Device::getCursorY(); }
 
 void tft_display::setTextSize(uint8_t s) {
+    // UI_FONT_BODY (32): no GFXfont path on Lovyan — fall back to FP-scale GLCD.
+    if (s == 32) s = 2;
     _textSize = s ? s : 1;
     lgfx::LGFX_Device::setTextSize(_textSize);
 }

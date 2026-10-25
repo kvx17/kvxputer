@@ -698,7 +698,7 @@ static void runSystemShortcutsMenu(HidRemoteTransportSession &s) {
         }
         opts.push_back({"Back", []() {}});
 
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "System Shortcuts", start, false);
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Sys Short", start, false);
         if (sel < 0 || sel >= (int)(sizeof(kShortcuts) / sizeof(kShortcuts[0]))) return;
         start = sel;
         kShortcuts[sel].send(s);

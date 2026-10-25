@@ -180,7 +180,7 @@ void lootConsoleMenu() {
     }
     if (entries.empty()) options.push_back({"(no loot files)", []() {}});
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Loot Console");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Loot");
     options.clear();
 }
 

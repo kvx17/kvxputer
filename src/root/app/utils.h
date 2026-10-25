@@ -3,10 +3,18 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <initializer_list>
+#include <vector>
 void backToMenu();
 void addOptionToMainMenu();
 /// Scrollable in-app help. Title lives in the kvx system topbar (battery strip).
 void showAppHelp(std::initializer_list<const char *> lines);
+/**
+ * App body with top-bar title. Scrolls when content exceeds the viewport
+ * (more than ~4 body lines on Cardputer). Scroll reaches last text row + 1 pad.
+ * Returns true if OK, false if Esc/home.
+ */
+bool showScrollableBody(const String &title, const std::vector<String> &lines);
+bool showScrollableBody(const String &title, std::initializer_list<const char *> lines);
 int getBattery() __attribute__((weak));
 int getBatteryMilliVolts();
 int getBatteryTrendMilliVoltsPerMin();

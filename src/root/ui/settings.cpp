@@ -1420,7 +1420,7 @@ void setStartupApp() {
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
                                if (appName == "JS Interpreter") {
                                    options = getScriptsOptionsList("", true);
-                                   loopOptions(options, MENU_TYPE_SUBMENU, "Startup Script");
+                                   loopOptions(options, MENU_TYPE_SUBMENU, "Startup");
                                }
 #endif
                            }});

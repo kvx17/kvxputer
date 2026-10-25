@@ -19,6 +19,7 @@
 // The CF_OL24 etc. are a shorthand reference, but this is not essential to use the fonts
 
 #ifdef LOAD_GFXFF
+#ifndef KVX_GFXFF_MINIMAL
 
   // New custom font file #includes
   #include <Fonts/Custom/Orbitron_Light_24.h> // CF_OL24
@@ -27,6 +28,7 @@
   #include <Fonts/Custom/Satisfy_24.h>        // CF_S24
   #include <Fonts/Custom/Yellowtail_32.h>     // CF_Y32
 
+#endif // !KVX_GFXFF_MINIMAL
 #endif
 
 // Shorthand references - any coding scheme can be used, here CF_ = Custom Font

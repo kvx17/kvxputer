@@ -261,7 +261,7 @@ static bool composeCustom(RFIDInterface *rfid) {
         {"Plain text", [&]() { asHex = false; }},
         {"Hex bytes",  [&]() { asHex = true; } },
     };
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "Custom data") < 0) return false;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "Custom") < 0) return false;
     String data = keyboard("", 100, asHex ? "Hex:" : "Text:");
     if (data == "\x1B") return false;
     if (asHex) {
@@ -340,7 +340,7 @@ static bool composeSavedLinks(RFIDInterface *rfid) {
     for (size_t i = 0; i < kvxConfig.qrCodes.size(); i++) {
         options.emplace_back(kvxConfig.qrCodes[i].menuName, [&, i]() { picked = (int)i; });
     }
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "Saved links") < 0 || picked < 0) return false;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "Saved Link") < 0 || picked < 0) return false;
     ndefBuildUri(rfid, kvxConfig.qrCodes[picked].content);
     return true;
 }
@@ -395,7 +395,7 @@ bool ndefComposeInteractive(RFIDInterface *rfid) {
         {"Saved links", [&]() { pick = PickSaved; }    },
     };
 
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "NDEF content") < 0 || pick < 0) return false;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "NDEF") < 0 || pick < 0) return false;
 
     switch (pick) {
         case PickUrl: return composeHttpsUrl(rfid);

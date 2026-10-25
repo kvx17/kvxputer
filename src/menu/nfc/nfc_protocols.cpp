@@ -95,7 +95,7 @@ void nfcDesfireBrowser() {
     NfcSession s;
     if (!s.open(true)) return;
     int rc = s.rfid->desfire_list();
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;
@@ -124,7 +124,7 @@ void nfcUlcAuth() {
         {"Manual 16-byte key", [&]() { mode = 0; }},
         {"Try SD dictionary",  [&]() { mode = 1; }},
     };
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "Ultralight-C") < 0) return;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "UL-C") < 0) return;
 
     std::vector<String> keys;
     if (mode == 0) {

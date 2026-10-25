@@ -84,7 +84,7 @@ void ConfigMenu::displayUIMenu() {
             {"Back",                 []() {}                                         },
         };
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Display & UI");
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Display");
 
         // Exit only if user pressed Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
@@ -156,7 +156,7 @@ void ConfigMenu::audioMenu() {
             {"Back",                                                        []() {}                       },
         };
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Audio Config");
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Audio");
 
         // Exit only if user pressed Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }
@@ -194,7 +194,7 @@ void ConfigMenu::systemMenu() {
             {"Back",                                                                []() {}                              },
         };
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "System Config");
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "System");
 
         // Exit only if user pressed Back or ESC
         if (selected == -1 || selected == localOptions.size() - 1) { return; }

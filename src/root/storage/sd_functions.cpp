@@ -1060,7 +1060,7 @@ void viewFile(FS &fs, const String &filepath) {
     File file = fs.open(filepath, FILE_READ);
     if (!file) return;
 
-    ScrollableTextArea area = ScrollableTextArea("VIEW FILE");
+    ScrollableTextArea area = ScrollableTextArea("View File");
     area.fromFile(file);
 
     file.close();
@@ -1128,7 +1128,7 @@ void fileInfo(FS &fs, const String &filepath) {
 
     file.close();
 
-    ScrollableTextArea area = ScrollableTextArea("FILE INFO");
+    ScrollableTextArea area = ScrollableTextArea("File Info");
     area.addLine("Path: " + filepath);
     area.addLine("");
     area.addLine("Bytes: " + String(bytesize));

@@ -69,6 +69,6 @@ void busScanMenu() {
         options.push_back({"PaHub scan", i2cGroveScan});
     }
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Bus Scanner");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Bus Scan");
     options.clear();
 }

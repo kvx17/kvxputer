@@ -186,7 +186,7 @@ void TagOMatic::loop() {
                     drawKvxTopBar((_domain == DOMAIN_NFC) ? "NFC" : "RFID", "Scan");
                 }
                 ScrollableTextArea area(
-                    FP,
+                    uiBodyFont(),
                     BORDER_PAD_X,
                     KVX_TOPBAR_H + 2,
                     tftWidth - 2 * BORDER_PAD_X,
@@ -470,34 +470,24 @@ void TagOMatic::dump_card_details() {
 }
 
 void TagOMatic::fill_tag_detail_area(ScrollableTextArea &area) const {
-    const uint16_t valueColor = kvxConfig.secColor;
-    const uint8_t labelFont = uiDenseFont();
-    const uint8_t valueFont = uiBodyFont();
-    auto addField = [&](const String &label, const String &value) {
-        area.addLine(label, kvxConfig.priColor, labelFont);
-        area.addLine(value, valueColor, valueFont);
-    };
-
-    addField("Device type:", _rfid->printableUID.picc_type);
+    area.addField("Device type:", _rfid->printableUID.picc_type);
     if (_rfid->printableUID.picc_type != "FeliCa") {
-        addField("UID:", _rfid->printableUID.uid);
-        addField("ATQA:", _rfid->printableUID.atqa);
-        addField("SAK:", _rfid->printableUID.sak);
+        area.addField("UID:", _rfid->printableUID.uid);
+        area.addField("ATQA:", _rfid->printableUID.atqa);
+        area.addField("SAK:", _rfid->printableUID.sak);
         if (_rfid->dataPages > 0 || _rfid->totalPages > 0) {
-            addField(
+            area.addField(
                 "Pages read:",
                 String(_rfid->dataPages) + "/" + String(_rfid->totalPages)
             );
         }
     } else {
-        addField("IDm:", _rfid->printableUID.uid);
-        addField("PMm:", _rfid->printableUID.sak);
-        addField("Sys code:", _rfid->printableUID.atqa);
+        area.addField("IDm:", _rfid->printableUID.uid);
+        area.addField("PMm:", _rfid->printableUID.sak);
+        area.addField("Sys code:", _rfid->printableUID.atqa);
     }
     if (_rfid->pageReadStatus != RFIDInterface::SUCCESS) {
-        area.addLine(
-            "[!] " + _rfid->statusMessage(_rfid->pageReadStatus), kvxConfig.priColor, labelFont
-        );
+        area.addLine("[!] " + _rfid->statusMessage(_rfid->pageReadStatus));
     }
     if (_rfid->strAllPages.length()) {
         area.addLine("");
@@ -506,24 +496,16 @@ void TagOMatic::fill_tag_detail_area(ScrollableTextArea &area) const {
         while (start < dump.length()) {
             int nl = dump.indexOf('\n', start);
             if (nl < 0) nl = dump.length();
-            area.addLine(dump.substring(start, nl), valueColor, valueFont);
+            area.addLine(dump.substring(start, nl), kvxConfig.secColor);
             start = nl + 1;
         }
     }
 }
 
 void TagOMatic::fill_ndef_detail_area(ScrollableTextArea &area) const {
-    const uint16_t valueColor = kvxConfig.secColor;
-    const uint8_t labelFont = uiDenseFont();
-    const uint8_t valueFont = uiBodyFont();
-    auto addField = [&](const String &label, const String &value) {
-        area.addLine(label, kvxConfig.priColor, labelFont);
-        area.addLine(value, valueColor, valueFont);
-    };
-
     if (!_rfid->rawNdefRecord.empty()) {
-        addField("Payload type:", "MIME / raw");
-        addField("Payload size:", String(_rfid->rawNdefRecord.size()) + " bytes");
+        area.addField("Payload type:", "MIME / raw");
+        area.addField("Payload size:", String(_rfid->rawNdefRecord.size()) + " bytes");
         return;
     }
 
@@ -560,9 +542,9 @@ void TagOMatic::fill_ndef_detail_area(ScrollableTextArea &area) const {
         default: break;
     }
 
-    addField("Payload type:", payloadType);
-    addField("Payload size:", String(_rfid->ndefMessage.payloadSize) + " bytes");
-    if (payloadText.length()) addField("Payload:", payloadText);
+    area.addField("Payload type:", payloadType);
+    area.addField("Payload size:", String(_rfid->ndefMessage.payloadSize) + " bytes");
+    if (payloadText.length()) area.addField("Payload:", payloadText);
 
     // Identity when a captured/loaded tag is also being served.
     if (_rfid->printableUID.uid.length()) {
@@ -579,7 +561,7 @@ bool TagOMatic::show_tag_results() {
     }
 
     ScrollableTextArea area(
-        FP,
+        uiBodyFont(),
         BORDER_PAD_X,
         KVX_TOPBAR_H + 2,
         tftWidth - 2 * BORDER_PAD_X,
@@ -617,7 +599,7 @@ void TagOMatic::emulate_with_details(bool ndefContent) {
     };
 
     ScrollableTextArea area(
-        FP,
+        uiBodyFont(),
         BORDER_PAD_X,
         KVX_TOPBAR_H + 2,
         tftWidth - 2 * BORDER_PAD_X,

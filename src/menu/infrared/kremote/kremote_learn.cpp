@@ -5,6 +5,8 @@
 #include "root/config/configPins.h"
 #include "root/input/mykeyboard.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/ui/settings.h"
 #include <IRrecv.h>
 #include <IRutils.h>
@@ -109,16 +111,29 @@ static IRCode *krResultsToCode(decode_results &results) {
     return code;
 }
 
-static void krLearnBanner(const char *slotName, int index) {
-    drawMainBorderWithTitle("Learn Remote");
-    tft.setTextSize(FP);
-    tft.setCursor(10, 32);
-    padprintln("Button " + String(index + 1) + "/" + String(KREMOTE_SLOT_COUNT));
-    padprintln(String("Capture: ") + slotName);
-    padprintln("");
-    padprintln("Point remote <30cm");
-    padprintln("OK=accept  Rt=skip");
-    padprintln("Lt=retry   Esc=save");
+static void krLearnPaint(ScrollableTextArea &area, std::initializer_list<String> lines) {
+    area.clear();
+    for (const String &line : lines) area.addLine(line);
+    area.draw(true);
+}
+
+static void krLearnBanner(ScrollableTextArea &area, const char *slotName, int index) {
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("Learn Rem");
+    }
+    krLearnPaint(
+        area,
+        {
+            "Button " + String(index + 1) + "/" + String(KREMOTE_SLOT_COUNT),
+            String("Capture: ") + slotName,
+            "",
+            "Point remote <30cm",
+            "OK=accept  Rt=skip",
+            "Lt=retry   Esc=save",
+        }
+    );
 }
 
 enum KrCaptureAction { KR_ACCEPT, KR_SKIP, KR_RETRY, KR_ABORT_SAVE };
@@ -129,13 +144,21 @@ static KrCaptureAction krCaptureSlot(IRrecv &irrecv, const char *slotName, int i
     irrecv.enableIRIn();
     irrecv.resume();
 
+    const int bodyY = KVX_TOPBAR_H + 4;
+    const int bodyH = tftHeight - bodyY - 4;
+    ScrollableTextArea area(
+        uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
+    );
+
     while (true) {
-        krLearnBanner(slotName, index);
-        padprintln("");
-        padprintln("Waiting for signal...");
+        krLearnBanner(area, slotName, index);
+        area.addLine("");
+        area.addLine("Waiting for signal...");
+        area.draw(true);
 
         bool got = false;
         while (!got) {
+            area.update(false);
             if (check(EscPress)) return KR_ABORT_SAVE;
             if (check(NextPress)) return KR_SKIP; // skip before capture
             if (irrecv.decode(&results)) {
@@ -146,23 +169,28 @@ static KrCaptureAction krCaptureSlot(IRrecv &irrecv, const char *slotName, int i
         }
 
         IRCode *pending = krResultsToCode(results);
-        drawMainBorderWithTitle("Learn Remote");
-        tft.setTextSize(FP);
-        tft.setCursor(10, 32);
-        padprintln(String("Got: ") + slotName);
-        if (pending->type == "raw") {
-            padprintln("Type: raw");
-            padprintln(pending->data.substring(0, 40) + "...");
-        } else {
-            padprintln("Proto: " + pending->protocol);
-            padprintln("Addr: " + pending->address);
-            padprintln("Cmd: " + pending->command);
+        {
+            TftFrame frame;
+            tft.fillScreen(kvxConfig.bgColor);
+            drawKvxTopBar("Learn Rem");
         }
-        padprintln("");
-        padprintln("OK=accept  Rt=skip");
-        padprintln("Lt=retry   Esc=save");
+        area.clear();
+        area.addLine(String("Got: ") + slotName);
+        if (pending->type == "raw") {
+            area.addLine("Type: raw");
+            area.addLine(pending->data.substring(0, 40) + "...");
+        } else {
+            area.addLine("Proto: " + pending->protocol);
+            area.addLine("Addr: " + pending->address);
+            area.addLine("Cmd: " + pending->command);
+        }
+        area.addLine("");
+        area.addLine("OK=accept  Rt=skip");
+        area.addLine("Lt=retry   Esc=save");
+        area.draw(true);
 
         while (true) {
+            area.update(false);
             if (check(SelPress)) {
                 *outCode = pending;
                 irrecv.resume();
@@ -209,7 +237,7 @@ void kremoteLearnFlow() {
         {"Update Remote", []() {}},
         {"Cancel", []() {}},
     };
-    int mode = loopOptions(modeOpts, MENU_TYPE_SUBMENU, "Learn Remote");
+    int mode = loopOptions(modeOpts, MENU_TYPE_SUBMENU, "Learn Rem");
     if (mode < 0 || mode == 2) return;
 
     FS *fs = kremotePickFs();

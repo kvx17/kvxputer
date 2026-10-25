@@ -4,6 +4,8 @@
 #include "root/hal/bus_HAL.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include <USB.h>
 #include <cstring>
 
@@ -142,9 +144,20 @@ void MassStorage::setupUsbEvent() {
 }
 
 void MassStorage::displayMessage(String message) {
-    drawMainBorderWithTitle("Mass Storage");
-    padprintln("");
-    padprintln(message);
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("Mass Store");
+    }
+    const int bodyY = KVX_TOPBAR_H + 4;
+    const int bodyH = tftHeight - bodyY - 4;
+    ScrollableTextArea area(
+        uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
+    );
+    area.addLine(message);
+    area.addLine("");
+    area.addLine("ESC=eject when done");
+    area.draw(true);
 }
 
 int32_t usbWriteCallback(uint32_t lba, uint32_t offset, uint8_t *buffer, uint32_t bufsize) {

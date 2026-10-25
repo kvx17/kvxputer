@@ -570,7 +570,7 @@ void pineapHunterMenu() {
         {"Start", pineapHunterRun },
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Rogue AP Hunter");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Rogue AP");
     options.clear();
 }
 

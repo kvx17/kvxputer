@@ -53,7 +53,7 @@ void crackNtlm() {
         opts.push_back({line.c_str(), [full]() { displayInfo(full, true); }});
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "NTLMv2 hashes");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "NTLMv2");
 }
 
 void cleanNtlm() {

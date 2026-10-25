@@ -610,8 +610,12 @@ int loopOptions(
     bool firstRender = true;
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
-    if (menuType != MENU_TYPE_SUBMENU) drawMainBorder();
-    else kvxInvalidateSubmenuCache();
+    if (menuType != MENU_TYPE_SUBMENU) {
+        if (kvxActiveTitle.length()) drawMainBorderWithTitle(kvxActiveTitle);
+        else drawMainBorder();
+    } else {
+        kvxInvalidateSubmenuCache();
+    }
     ledSetStatus(LED_STATUS_BUSY);
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -964,81 +968,8 @@ void drawSubmenu(int index, std::vector<Option> &options, const char *title) {
 }
 
 void drawStatusBar() {
-    if (chargeModeActive) return;
-    uint8_t bat = getBattery();
-    if (bat > 0) drawBatteryStatus(bat);
-
-    // Do not draw the app frame border here — that belongs in drawMainBorder.
-    // Status-only refreshes (e.g. WiFi-at-startup) must not paint an app border
-    // over the kvx main-menu grid.
-
-    // Clock / version: compact top-strip size (half of body FP).
-    // kvx top bar already shows HH:MM next to the battery — do not print a
-    // second full clock on the left (main screen + scanner apps share that bar).
-    const int clockSize = uiDenseFont();
-    const int clockY = max(4, (25 - clockSize * LH) / 2);
-    if (clock_set) {
-        tft.fillRect(12, clockY, max(60, 8 * clockSize * LW), clockSize * LH, kvxConfig.bgColor);
-    } else {
-        setTftDisplay(12, clockY, kvxConfig.priColor, clockSize, kvxConfig.bgColor);
-        tft.print(String("kvxputer v") + KVXPUTER_VERSION);
-    }
-
-    bool showSD = sdcardMounted;
-    bool showGPS = gpsConnected;
-    bool showWifi = (WiFi.getMode() != 0);
-    bool showWeb = isWebUIActive;
-    bool showBLE = BLEConnected;
-    bool showWG = isConnectedWireguard;
-
-    const int IW = 16;
-    const int IH = 16;
-    const int GAP = 6;
-    int iconCount = 0;
-    if (showSD) iconCount++;
-    if (showGPS) iconCount++;
-    if (showWifi) iconCount++;
-    if (showWeb) iconCount++;
-    if (showBLE) iconCount++;
-    if (showWG) iconCount++;
-
-    if (iconCount > 0) {
-        // Pack from the right: SD immediately left of battery (same as kvx top bar).
-        const int batReserve = (bat > 0) ? (42 + max(42, 4 * uiDenseFont() * LW + 4)) : 6;
-        int rightEdge = tftWidth - batReserve;
-        int x = rightEdge - (iconCount * IW + (iconCount - 1) * GAP);
-        int iy = 7;
-
-        if (showWG) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWireguardStatus(x, iy);
-            x += IW + GAP;
-        }
-        if (showBLE) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawBLESmall(x, iy);
-            x += IW + GAP;
-        }
-        if (showWeb) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWebUISmall(x, iy);
-            x += IW + GAP;
-        }
-        if (showWifi) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawWifiSmall(x, iy);
-            x += IW + GAP;
-        }
-        if (showGPS) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawGpsSmall(x, iy);
-            x += IW + GAP;
-        }
-        if (showSD) {
-            tft.fillRect(x, iy, IW, IH, kvxConfig.bgColor);
-            drawSdSmall(x, iy);
-        }
-    }
+    // Single top-bar implementation — do not draw a second icon pack here.
+    drawKvxTopBar(kvxTopBarAppName());
 }
 
 void drawMainBorder(bool clear) {
@@ -1048,18 +979,11 @@ void drawMainBorder(bool clear) {
         tft.drawPixel(0, 0, 0);
         tft.fillScreen(kvxConfig.bgColor);
     }
-    setTftDisplay(12, 12, kvxConfig.priColor, FP, kvxConfig.bgColor);
     tft.setTextDatum(0);
-
-    // App chrome border (theme). Kept out of drawStatusBar so background
-    // WiFi/status refreshes cannot stamp this frame onto the main menu.
-    if (kvxConfig.theme.border) {
-        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, kvxConfig.priColor);
-        tft.drawLine(5, 25, tftWidth - 6, 25, kvxConfig.priColor);
-    }
-
-    drawStatusBar();
-    tft.setTextSize(FP);
+    drawKvxTopBar(kvxTopBarAppName());
+    tft.setTextSize(uiBodyFont());
+    tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
 
 #if defined(HAS_TOUCH)
     TouchFooter();
@@ -1069,34 +993,38 @@ void drawMainBorder(bool clear) {
 void drawMainBorderWithTitle(const String &title, bool clear) {
     if (chargeModeActive) return;
     TftFrame frame;
-    drawMainBorder(clear);
+    if (clear) {
+        tft.drawPixel(0, 0, 0);
+        tft.fillScreen(kvxConfig.bgColor);
+    }
+    tft.setTextDatum(0);
     printTitle(title);
+    tft.setTextSize(uiBodyFont());
+    tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+
+#if defined(HAS_TOUCH)
+    TouchFooter();
+#endif
 }
 
 void printTitle(const String &title) {
-    String t = title;
-    t.toUpperCase();
+    // App name lives only in the top bar — never draw a body title copy.
+    drawKvxTopBar(title.c_str());
+    tft.setTextSize(uiBodyFont());
+    tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-
-    // Scale down title font if it doesn't fit the screen width
-    int titleSize = FM;
-    while (titleSize > FP && (int)(t.length() * titleSize * LW) > tftWidth - 2 * BORDER_PAD_X) {
-        titleSize--;
-    }
-
-    tft.setTextSize(titleSize);
-    tft.setCursor((tftWidth - (t.length() * titleSize * LW)) / 2, BORDER_PAD_Y);
-    tft.println(t);
-
-    tft.setTextSize(FP);
 }
 
 void printSubtitle(const String &subtitle, bool withLine) {
-    int16_t cursorX = (tftWidth - (subtitle.length() * FP * LW)) / 2;
+    // Mode / section label in the body (not a second app title).
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.setTextSize(FP);
+    tft.setTextSize(uiBodyFont());
+    const int charW = uiCharW(uiBodyFont());
+    int16_t cursorX = (tftWidth - (int)subtitle.length() * charW) / 2;
+    if (cursorX < BORDER_PAD_X) cursorX = BORDER_PAD_X;
 
-    tft.setCursor(cursorX, BORDER_PAD_Y + FM * LH);
+    tft.setCursor(cursorX, KVX_TOPBAR_H + 4);
     tft.println(subtitle);
 
     if (withLine) {
@@ -1109,26 +1037,27 @@ void printSubtitle(const String &subtitle, bool withLine) {
 }
 
 void printFootnote(const String &text) {
-    tft.setTextSize(FP);
-    tft.drawRightString(text, tftWidth - BORDER_PAD_X, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
+    const int sz = uiBodyFont();
+    tft.setTextSize(sz);
+    tft.drawRightString(text, tftWidth - BORDER_PAD_X, uiFooterY(sz), 1);
 }
 
 void printCenterFootnote(const String &text) {
-    tft.fillRect(10, tftHeight - BORDER_PAD_X - FP * LH, tftWidth - 20, FP * LH, kvxConfig.bgColor);
-    tft.setTextSize(FP);
-    tft.drawCentreString(text, tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
+    const int sz = uiBodyFont();
+    const int fy = uiFooterY(sz);
+    tft.fillRect(10, fy, tftWidth - 20, uiLineH(sz), kvxConfig.bgColor);
+    tft.setTextSize(sz);
+    tft.drawCentreString(text, tftWidth / 2, fy, 1);
 }
 
 void drawBatteryStatus(uint8_t bat) {
-    if (bat == 0) return;
-
     bool charging = isCharging();
 
     uint16_t color = kvxConfig.priColor;
     uint16_t barcolor = kvxConfig.priColor;
-    if (bat < 16) barcolor = color = TFT_RED;
+    if (bat > 0 && bat < 16) barcolor = color = TFT_RED;
 
-    // Percent / CHG: compact top-bar size (half of body FP).
+    // Percent / CHG: compact top-bar size.
     const int batSize = uiDenseFont();
     const int textY = max(4, (KVX_TOPBAR_H - batSize * LH) / 2);
     const int pctRight = tftWidth - 44;
@@ -1140,13 +1069,19 @@ void drawBatteryStatus(uint8_t bat) {
     if (charging) {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         tft.drawRightString("CHG", pctRight, textY, 1);
-    } else {
+    } else if (bat > 0) {
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         tft.drawRightString((bat == 100 ? "" : " ") + String(bat) + "%", pctRight, textY, 1);
+    } else {
+        // Unknown / unavailable: outline only, no fill — keeps the slot visible.
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+        tft.drawRightString("--", pctRight, textY, 1);
     }
-    tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
-    tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, kvxConfig.bgColor);
-    tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, kvxConfig.bgColor);
+    if (bat > 0) {
+        tft.fillRoundRect(tftWidth - 40, 9, 30 * bat / 100, 13, 2, barcolor);
+        tft.drawLine(tftWidth - 30, 9, tftWidth - 30, 9 + 13, kvxConfig.bgColor);
+        tft.drawLine(tftWidth - 20, 9, tftWidth - 20, 9 + 13, kvxConfig.bgColor);
+    }
 }
 
 void drawWireguardStatus(int x, int y) {

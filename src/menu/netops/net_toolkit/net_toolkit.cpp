@@ -170,7 +170,7 @@ void portScanMenu() {
              if (p > 0 && p <= 65535) ports.push_back((uint16_t)p);
          }},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "Port preset");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Port Pre");
     options.clear();
     if (ports.empty()) {
         displayInfo("No ports selected", true);
@@ -981,7 +981,7 @@ void netToolkitMenu() {
         {"Curl-lite",    curlMenu       },
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Net Toolkit");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Net Tools");
     options.clear();
 }
 

@@ -182,7 +182,7 @@ void showRfidWiringHelp() {
             {"Back", []() {}},
         };
 
-        int selected = loopOptions(options, MENU_TYPE_SUBMENU, "RFID wiring");
+        int selected = loopOptions(options, MENU_TYPE_SUBMENU, "RFID Wire");
         if (selected < 0 || selected == (int)options.size() - 1) return;
     }
 #else

@@ -2,6 +2,9 @@
 
 #if defined(USE_TFT_ESPI)
 #include <esp_heap_caps.h>
+#if defined(LOAD_GFXFF)
+#include "../../../src/root/ui/fonts/kvx_body_12.h"
+#endif
 // This library uses Mutex locally! don't need to rewrite the whole thing!!
 
 tft_display::tft_display(int16_t _W, int16_t _H) : TFT_eSPI(_W, _H) {}
@@ -467,8 +470,26 @@ int16_t tft_display::getCursorY() {
 }
 
 void tft_display::setTextSize(uint8_t s) {
-    TFT_eSPI::setTextSize(s);
-    if (_fb) _fb->setTextSize(s);
+#if defined(LOAD_GFXFF)
+    // UI_FONT_BODY (32): select the kvx mid body GFXfont. Native textsize stays 1
+    // so the face is not doubled. Any other size clears gfxFont and uses GLCD.
+    if (s == 32) {
+        TFT_eSPI::setFreeFont(&kvxBody12);
+        TFT_eSPI::setTextSize(1);
+        if (_fb) {
+            _fb->setFreeFont(&kvxBody12);
+            _fb->setTextSize(1);
+        }
+        _uiTextSize = 32;
+        return;
+    }
+    TFT_eSPI::setTextFont(1); // clears gfxFont
+    if (_fb) _fb->setTextFont(1);
+#endif
+    const uint8_t scale = s ? s : 1;
+    TFT_eSPI::setTextSize(scale);
+    if (_fb) _fb->setTextSize(scale);
+    _uiTextSize = scale;
 }
 
 void tft_display::setTextColor(uint16_t c) {
@@ -559,7 +580,7 @@ uint32_t tft_display::getTextBgColor() const {
 }
 
 uint8_t tft_display::getTextSize() const {
-    return (_buffering && _fb) ? _fb->textsize : TFT_eSPI::textsize;
+    return _uiTextSize ? _uiTextSize : 1;
 }
 
 uint8_t tft_display::getRotation() { return TFT_eSPI::getRotation(); }

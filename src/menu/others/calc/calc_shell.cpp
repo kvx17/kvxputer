@@ -22,10 +22,10 @@ static void consumeNavFlags() {
 
 static bool isWide() { return tftWidth >= 480; }
 
-// Labels: dense. Values: body. Row height follows the taller value text.
-static int calcLabelFont() { return uiDenseFont(); }
+// Labels and values share the mid body face. Hero results stay large.
+static int calcLabelFont() { return uiBodyFont(); }
 static int calcValueFont() { return uiBodyFont(); }
-static int calcHeroFont() { return uiBodyFont(); }
+static int calcHeroFont() { return uiHeroFont(); }
 static int rowH() { return uiLineH(calcValueFont()) + 2; }
 
 static void drawChip(int x, int y, const char *label, bool active) {

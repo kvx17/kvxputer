@@ -182,7 +182,7 @@ void nfcDictAttack() {
         {"Full dictionary", [&]() { mode = 0; }},
         {"Known keys only", [&]() { mode = 1; }},
     };
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "Dict attack") < 0) return;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "Dict Atk") < 0) return;
 
     NfcSession s;
     nfcTopBar("Dict");
@@ -199,7 +199,7 @@ void nfcDictAttack() {
         // Fallback: normal read (drivers already try dict internally).
         rc = s.rfid->read();
     }
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;
@@ -282,7 +282,7 @@ void nfcDumpEditor() {
         return;
     }
 
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;

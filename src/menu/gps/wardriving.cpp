@@ -839,7 +839,7 @@ void wardrivingConfigMenu() {
                      {"zero_gps", [&]() { cfg.gps_log_mode = "zero_gps"; }},
                      {"last_known", [&]() { cfg.gps_log_mode = "last_known"; }},
                  };
-                 loopOptions(options, MENU_TYPE_SUBMENU, "GPS log mode");
+                 loopOptions(options, MENU_TYPE_SUBMENU, "GPS Log");
              }},
             {"Scan: " + cfg.scan_mode,
              [&]() {

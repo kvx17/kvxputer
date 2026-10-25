@@ -98,7 +98,7 @@ void HostInfo::setup(const Host &host) {
     drawMainBorder();
     tft.setTextSize(FP);
 
-    ScrollableTextArea area = ScrollableTextArea("HOST INFO");
+    ScrollableTextArea area = ScrollableTextArea("Host Info");
 
     area.addLine("Host: " + host.ip.toString());
     area.addLine("Mac: " + host.mac);

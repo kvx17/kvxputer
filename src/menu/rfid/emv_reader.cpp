@@ -4,8 +4,10 @@
 #include "BerTlv.h"
 #include "root/hal/bus_HAL.h"
 #include "root/hal/pahub.h"
+#include "root/app/utils.h"
 #include "root/ui/display.h"
 #include <globals.h>
+#include <vector>
 
 EMVReader::~EMVReader() {
     delete _rfid;
@@ -404,11 +406,11 @@ std::string BinToAscii(uint8_t *BinData, size_t size)
 }
 
 void EMVReader::display_emv(EMVCard card) {
-    drawMainBorderWithTitle("Read EMV Card");
     std::string aid;
     std::string pan;
     std::string issuedate;
     std::string validto;
+    std::vector<String> lines;
 
     if (card.parsed) {
         bool found = false;
@@ -416,46 +418,44 @@ void EMVReader::display_emv(EMVCard card) {
             if (memcmp(card.aid, known_aid[i].aid, 7) == 0) {
                 found = true;
                 aid = known_aid[i].name;
-                padprintln(known_aid[i].name);
+                lines.push_back(known_aid[i].name);
                 break;
             }
         }
 
-        if (!found) { padprintln("Unknown card vendor"); }
+        if (!found) lines.push_back("Unknown card vendor");
         if (card.pan != nullptr) {
             pan = BinToAscii(card.pan, card.pan_len);
-            // Add some spacing
             size_t pad = 0;
             for (size_t i = 0; i < pan.size(); i++) {
                 if (i % 4 == 0 && i != 0) { pan.insert(pan.begin() + i + (pad++), ' '); }
             }
-
-            padprintln(pan.c_str());
+            lines.push_back(pan.c_str());
         } else {
-            padprintln("Unknown PAN");
+            lines.push_back("Unknown PAN");
         }
         if (card.validfrom != nullptr) {
             issuedate = BinToAscii(card.validfrom, 2);
             issuedate.insert(issuedate.begin() + 2, '/');
-            padprintln(issuedate.c_str());
+            lines.push_back(String("From: ") + issuedate.c_str());
         } else {
-            padprintln("Unknown issue date");
+            lines.push_back("Unknown issue date");
         }
 
         if (card.validto != nullptr) {
             validto = BinToAscii(card.validto, 2);
             validto.insert(validto.begin() + 2, '/');
-            padprintln(validto.c_str());
+            lines.push_back(String("To: ") + validto.c_str());
         } else {
-            padprintln("Unknown valid to date");
+            lines.push_back("Unknown valid to date");
         }
     } else {
-        padprintln("Failed to read EMV Card.");
+        lines.push_back("Failed to read EMV Card.");
     }
+    lines.push_back("");
+    lines.push_back("OK=continue");
 
-    padprintln("Press any key to continue...");
-
-    while (!AnyKeyPress) { delay(100); }
+    showScrollableBody("EMV Card", lines);
 
     options = {};
     options.emplace_back("Save", [this, aid, pan, issuedate, validto]() {

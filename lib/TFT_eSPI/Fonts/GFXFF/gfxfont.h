@@ -25,6 +25,8 @@ typedef struct { // Data stored for FONT AS A WHOLE:
 	uint8_t   yAdvance;    // Newline distance (y axis)
 } GFXfont;
 
+  // Adafruit free-font pack (skipped for kvxputer — we ship one body face only).
+#ifndef KVX_GFXFF_MINIMAL
   // Original Adafruit_GFX "Free Fonts"
   #include <Fonts/GFXFF/TomThumb.h>  // TT1
 
@@ -89,6 +91,7 @@ typedef struct { // Data stored for FONT AS A WHOLE:
   #include <Fonts/GFXFF/FreeSerifBoldItalic12pt7b.h> // FF46 or FSBI12
   #include <Fonts/GFXFF/FreeSerifBoldItalic18pt7b.h> // FF47 or FSBI18
   #include <Fonts/GFXFF/FreeSerifBoldItalic24pt7b.h> // FF48 or FSBI24
+#endif // !KVX_GFXFF_MINIMAL
 
 #endif // LOAD_GFXFF
 

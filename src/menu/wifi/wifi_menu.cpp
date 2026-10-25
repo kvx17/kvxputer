@@ -160,7 +160,7 @@ void WifiMenu::configMenu() {
                                evilOptions.push_back({"Allow /ssid access", setEvilAllowSetSsid});
                                evilOptions.push_back({"Display endpoints", setEvilAllowEndpointDisplay});
                                evilOptions.push_back({"Back", [this]() { configMenu(); }});
-                               loopOptions(evilOptions, MENU_TYPE_SUBMENU, "kvx Wifi Settings");
+                               loopOptions(evilOptions, MENU_TYPE_SUBMENU, "WiFi Set");
                            }});
 
     {
@@ -177,7 +177,7 @@ void WifiMenu::configMenu() {
         wifiOptions.push_back(opt);
     }
     wifiOptions.push_back({"Back", [this]() { optionsMenu(); }});
-    loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Config");
+    loopOptions(wifiOptions, MENU_TYPE_SUBMENU, "WiFi Cfg");
 }
 
 void WifiMenu::drawIcon(float scale) {

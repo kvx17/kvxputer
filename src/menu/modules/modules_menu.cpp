@@ -88,7 +88,7 @@ void ModulesMenu::companionBinsMenu() {
         return;
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Companion bins");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Companions");
 }
 
 static void waitGroveKeysIdle() {
@@ -216,7 +216,7 @@ void ModulesMenu::unitScrollMenu() {
             {"Back", []() {}},
         };
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Unit Scroll");
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Scroll");
         if (selected == -1 || selected == (int)localOptions.size() - 1) return;
     }
 }
@@ -240,7 +240,7 @@ void ModulesMenu::unitJoystick2Menu() {
             {"Back", []() {}},
         };
 
-        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Unit Joystick");
+        int selected = loopOptions(localOptions, MENU_TYPE_SUBMENU, "Joystick");
         if (selected == -1 || selected == (int)localOptions.size() - 1) return;
     }
 }
@@ -366,7 +366,7 @@ void ModulesMenu::pahubMenu() {
                      );
                  }
                  addrs.push_back({"Back", []() {}});
-                 loopOptions(addrs, MENU_TYPE_SUBMENU, "PaHub Address", idx);
+                 loopOptions(addrs, MENU_TYPE_SUBMENU, "PaHub Addr", idx);
              }},
         };
         for (uint8_t ch = 0; ch < PAHUB_CH_COUNT; ch++) {

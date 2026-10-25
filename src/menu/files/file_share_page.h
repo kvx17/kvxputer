@@ -12,29 +12,29 @@ static const char FILE_SHARE_PAGE[] = R"=====(<!DOCTYPE html>
 <title>kvxputer File Share</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,sans-serif;background:#111;color:#eee}
+html,body{margin:0;font-family:system-ui,sans-serif;background:#111;color:#eee;cursor:default}
 header{padding:12px 14px;background:#1a1a1a;border-bottom:1px solid #333;position:sticky;top:0;z-index:2}
 h1{margin:0;font-size:1.1rem}
 .meta{font-size:.75rem;color:#aaa;margin-top:4px}
 #login{max-width:360px;margin:40px auto;padding:16px}
-#login input{width:100%;padding:10px;margin:6px 0;border:1px solid #444;border-radius:6px;background:#222;color:#eee}
+#login input,#search{width:100%;padding:10px;margin:6px 0;border:1px solid #444;border-radius:6px;background:#222;color:#eee;cursor:text}
 button,select{padding:8px 12px;border:1px solid #555;border-radius:6px;background:#2a2a2a;color:#eee;cursor:pointer}
 button.primary{background:#3a5a3a;border-color:#4a7a4a}
 button.danger{background:#5a3a3a;border-color:#7a4a4a}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
 #app{display:none;padding:10px 14px 80px}
 #crumbs{font-size:.85rem;word-break:break-all;margin:6px 0}
-#crumbs a{color:#8cf;text-decoration:none}
-#search{flex:1;min-width:120px;padding:8px;border:1px solid #444;border-radius:6px;background:#222;color:#eee}
-#list{list-style:none;padding:0;margin:0}
-#list li{display:flex;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px solid #2a2a2a}
+#crumbs a{color:#8cf;text-decoration:none;cursor:pointer}
+#search{flex:1;min-width:120px;margin:0}
+#list{list-style:none;padding:0;margin:0;user-select:none;-webkit-user-select:none}
+#list li{display:flex;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px solid #2a2a2a;cursor:default}
 #list li:active{background:#222}
-.name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .dir .name{color:#8cf;font-weight:600}
 .size{font-size:.75rem;color:#888;white-space:nowrap}
-.ops button{padding:4px 8px;font-size:.75rem}
+.ops button{padding:4px 8px;font-size:.75rem;cursor:pointer}
 #status{font-size:.8rem;color:#8a8;min-height:1.2em;margin-top:6px}
-#drop{border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;color:#888;margin:10px 0}
+#drop{border:2px dashed #444;border-radius:8px;padding:16px;text-align:center;color:#888;margin:10px 0;cursor:copy}
 #drop.over{border-color:#6a6;background:#1a2a1a;color:#aea}
 .hidden{display:none!important}
 </style>
@@ -155,8 +155,17 @@ function render(){
   }
 }
 function download(name){
+  // Keep the SPA mounted: location.href aborts mid-transfer on many phones.
   const u='/api/download?vol='+encodeURIComponent(vol)+'&path='+encodeURIComponent((path==='/'?'':path)+'/'+name);
-  location.href=u;
+  const a=document.createElement('a');
+  a.href=u;
+  a.download=name;
+  a.rel='noopener';
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>a.remove(),1000);
+  $('status').textContent='Downloading '+name+'…';
 }
 async function doMkdir(){
   const name=prompt('Folder name');if(!name)return;

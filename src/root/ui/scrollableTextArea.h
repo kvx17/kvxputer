@@ -25,6 +25,12 @@ public:
     void addLine(const String &text, uint16_t color);
     void addLine(const String &text, uint16_t color, uint8_t fontSize);
 
+    /**
+     * One result row: label (priColor) left, value (secColor) right, body font.
+     * Overflow wraps onto following lines in secColor.
+     */
+    void addField(const String &label, const String &value);
+
     void clear();
 
     void fromString(const String &text);
@@ -53,6 +59,9 @@ public:
     std::vector<String> linesBuffer;
     std::vector<uint16_t> lineColors;
     std::vector<uint8_t> lineFontSizes;
+    /// Optional right-hand span (secColor value). Empty = single-color line.
+    std::vector<String> lineRightText;
+    std::vector<uint16_t> lineRightColors;
 
 private:
     bool _redraw;

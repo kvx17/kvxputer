@@ -191,7 +191,7 @@ void aircrackMenu() {
         opts.push_back({path.c_str(), [&chosen, path]() { chosen = path; }});
     }
     opts.push_back({"Cancel", []() {}});
-    int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Aircrack pcap");
+    int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Aircrack");
     if (sel < 0 || sel == (int)opts.size() - 1 || chosen.length() == 0) return;
     if (!chosen.startsWith("/"))
         chosen = String(kvx::paths::WIFI_CAPTURES_HANDSHAKES) + "/" +

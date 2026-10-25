@@ -118,7 +118,7 @@ void tagTinkerMenu() {
             {"ESL assets (SD)", showEslDir},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "TagTinker ESL");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "TagTinker");
         if (sel < 0 || sel == (int)opts.size() - 1) break;
     }
     ttIrDeinit();

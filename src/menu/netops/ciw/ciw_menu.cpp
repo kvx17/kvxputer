@@ -99,7 +99,7 @@ void ciwMenu() {
             {"Count " + String((int)all.size()), []() {}},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "CIW Zeroclick");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "CIW Zero");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }

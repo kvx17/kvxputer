@@ -39,19 +39,31 @@ while(1) {
 void backToMenu() { returnToMenu = true; }
 
 void showAppHelp(std::initializer_list<const char *> lines) {
+    showScrollableBody("Help", lines);
+}
+
+bool showScrollableBody(const String &title, const std::vector<String> &lines) {
     {
         TftFrame frame;
         tft.fillScreen(kvxConfig.bgColor);
-        drawKvxTopBar("Help");
+        drawKvxTopBar(title.c_str());
     }
     const int bodyY = KVX_TOPBAR_H + 4;
     const int bodyH = tftHeight - bodyY - 4;
-    ScrollableTextArea area(FP, BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false);
-    for (const char *line : lines) {
-        if (line) area.addLine(line);
-        else area.addLine("");
-    }
-    area.show(false);
+    ScrollableTextArea area(
+        uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false
+    );
+    for (const String &line : lines) area.addLine(line);
+    // Trailing blank so "last text + 1" is always reachable as a real line too.
+    if (!lines.empty()) area.addLine("");
+    return area.show(false);
+}
+
+bool showScrollableBody(const String &title, std::initializer_list<const char *> lines) {
+    std::vector<String> v;
+    v.reserve(lines.size());
+    for (const char *line : lines) v.push_back(line ? String(line) : String());
+    return showScrollableBody(title, v);
 }
 
 void addOptionToMainMenu() {
@@ -395,7 +407,7 @@ void updateTimeStr(struct tm timeInfo) {
 }
 
 void showDeviceInfo() {
-    ScrollableTextArea area = ScrollableTextArea("DEVICE INFO");
+    ScrollableTextArea area = ScrollableTextArea("Dev Info");
 
     area.addLine("kvxputer Version: " + String(KVXPUTER_VERSION));
     area.addLine("EEPROM size: " + String(EEPROMSIZE));

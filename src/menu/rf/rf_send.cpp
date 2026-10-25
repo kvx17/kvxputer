@@ -653,7 +653,7 @@ void rfProtocolLibrary() {
          }},
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Protocol Library");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Proto Lib");
     options.clear();
 }
 #endif

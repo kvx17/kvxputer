@@ -140,7 +140,7 @@ void probeAttack() {
          }},
         {"Cancel", []() {}},
     };
-    int sel = loopOptions(yn, MENU_TYPE_SUBMENU, "Probe Attack");
+    int sel = loopOptions(yn, MENU_TYPE_SUBMENU, "Probe Atk");
     if (sel < 0 || sel == 2) return;
     if (useCustom && custom.empty()) {
         displayError("No probes saved", true);
@@ -277,7 +277,7 @@ void selectProbe() {
         opts.push_back({ssid.c_str(), [ssid]() { displayInfo("Selected:\n" + ssid, true); }});
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Select Probe");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Sel Probe");
 }
 
 void deleteProbe() {
@@ -305,7 +305,7 @@ void deleteProbe() {
                         }});
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Delete Probe");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Del Probe");
 }
 
 void deleteAllProbes() {
@@ -322,7 +322,7 @@ void deleteAllProbes() {
          }},
         {"Cancel", []() {}},
     };
-    loopOptions(yn, MENU_TYPE_SUBMENU, "Delete All Probes");
+    loopOptions(yn, MENU_TYPE_SUBMENU, "Del Probes");
 }
 
 #endif

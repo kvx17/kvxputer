@@ -2778,7 +2778,7 @@ void karma_setup() {
             std::vector<Option> options = {
                 {"Enhanced Stats",
                  [&]() {
-                     ScrollableTextArea area = ScrollableTextArea("ADVANCED STATS");
+                     ScrollableTextArea area = ScrollableTextArea("Adv Stats");
                      area.addLine("Total: " + String(totalProbes));
                      area.addLine("Unique: " + String(uniqueClients));
                      area.addLine("Karma: " + String(karmaResponsesSent));
@@ -2985,7 +2985,7 @@ void karma_setup() {
                           }},
                          {"Database Info",
                  [&]() {
-                              ScrollableTextArea area = ScrollableTextArea("SSID DATABASE");
+                              ScrollableTextArea area = ScrollableTextArea("SSID DB");
                               size_t total = SSIDDatabase::getCount();
                               area.addLine("Total SSIDs: " + String(total));
                               area.addLine("Cached: streaming");
@@ -3250,7 +3250,7 @@ void karma_setup() {
                      int vulnCount = 0;
                      for (const auto &clientPair : clientBehaviors)
                          if (clientPair.second.isVulnerable) vulnCount++;
-                     ScrollableTextArea area = ScrollableTextArea("KARMA STATS");
+                     ScrollableTextArea area = ScrollableTextArea("Karma Stat");
                      area.addLine("Probes: " + String(totalProbes));
                      area.addLine("Uniq Clients: " + String(uniqueClients));
                      area.addLine("Responses: " + String(karmaResponsesSent));

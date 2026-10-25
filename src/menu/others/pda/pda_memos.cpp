@@ -20,7 +20,7 @@ static void pdaMemoView(const String &text) {
     }
     const int bodyY = KVX_TOPBAR_H + 4;
     const int bodyH = tftHeight - bodyY - FP * LH - 6;
-    ScrollableTextArea area(FM, BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false);
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false);
     area.fromString(text.length() ? text : String("(empty)"));
     area.draw(true);
     tft.setTextSize(FP);

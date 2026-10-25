@@ -238,7 +238,7 @@ void checkHandshakes() {
                         }});
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Check Handshakes");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Handshake");
 }
 
 #endif

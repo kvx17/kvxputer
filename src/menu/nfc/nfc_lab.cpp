@@ -32,7 +32,7 @@ void nfcApduScript() {
         {"Type lines", [&]() { src = 0; }},
         {"Load file",  [&]() { src = 1; }},
     };
-    if (loopOptions(options, MENU_TYPE_SUBMENU, "APDU script") < 0) return;
+    if (loopOptions(options, MENU_TYPE_SUBMENU, "APDU") < 0) return;
 
     std::vector<String> lines;
     if (src == 0) {
@@ -81,7 +81,7 @@ void nfcApduScript() {
     NfcSession s;
     if (!s.open(true)) return;
 
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;
@@ -145,7 +145,7 @@ void nfcCompareDumps() {
         return;
     }
 
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;

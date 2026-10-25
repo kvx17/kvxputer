@@ -794,7 +794,7 @@ static void _deviceActionMenu(int idx) {
 
         options.push_back({"Info", [idx]() {
                                NetCutDevice &d = s_devices[idx];
-                               ScrollableTextArea area = ScrollableTextArea("Device Info");
+                               ScrollableTextArea area = ScrollableTextArea("Dev Info");
                                area.addLine("IP:  " + d.ip.toString());
                                area.addLine("MAC: " + d.macStr);
                                area.addLine("VIP: " + String(d.isVip ? "Yes" : "No"));

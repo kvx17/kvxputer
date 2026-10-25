@@ -95,7 +95,7 @@ void printerMenu() {
              }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Printer Tools");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Printer");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }

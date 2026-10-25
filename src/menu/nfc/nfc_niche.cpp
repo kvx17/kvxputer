@@ -60,7 +60,7 @@ void nfcTransitParsers() {
     NfcSession s;
     if (!s.open(true)) return;
 
-    ScrollableTextArea area(FP, BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
+    ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, KVX_TOPBAR_H + 2, tftWidth - 2 * BORDER_PAD_X,
                             tftHeight - KVX_TOPBAR_H - 4, false, false);
     {
         TftFrame frame;

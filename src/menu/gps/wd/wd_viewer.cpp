@@ -465,7 +465,7 @@ void wardrivingViewCaptures() {
         }
         options.push_back({"Back", []() { returnToMenu = true; }});
         returnToMenu = false;
-        loopOptions(options, MENU_TYPE_SUBMENU, "WD Captures");
+        loopOptions(options, MENU_TYPE_SUBMENU, "WD Caps");
         if (returnToMenu) break;
     }
     returnToMenu = false;

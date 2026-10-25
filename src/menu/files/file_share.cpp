@@ -222,12 +222,11 @@ static bool ensureApDhcpRunning() {
         Serial.println("[FileShare] WIFI_AP_DEF missing");
         return false;
     }
-    esp_err_t e = esp_netif_dhcps_start(ap_netif);
-    if (e == ESP_OK || e == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) return true;
-    Serial.printf("[FileShare] dhcps_start: %s — restarting\n", esp_err_to_name(e));
+    // Stop+start so a half-failed softAPConfig cannot leave DHCPS dead
+    // (clients then fall back to 169.254.link-local).
     esp_netif_dhcps_stop(ap_netif);
-    e = esp_netif_dhcps_start(ap_netif);
-    Serial.printf("[FileShare] dhcps restart: %s\n", esp_err_to_name(e));
+    esp_err_t e = esp_netif_dhcps_start(ap_netif);
+    Serial.printf("[FileShare] dhcps_start: %s\n", esp_err_to_name(e));
     return e == ESP_OK || e == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED;
 }
 
@@ -261,36 +260,63 @@ static bool startShareAp() {
 #endif
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    // Exact same softAP bring-up as working WebUI `_setupAP()` (gateway
-    // 172.0.0.1, 3-arg config, ch6). Custom 5-arg configs and
-    // enableDhcpCaptivePortal() were leaving DHCPS stopped so phones could
-    // not associate/lease (169.254.* or fail to join).
     String ssid = kvxConfig.fileShare.ssid;
     String pwd = kvxConfig.fileShare.pwd;
     ssid.trim();
     if (ssid.length() == 0) ssid = "kvxputer";
     if (pwd.length() < 8) pwd = "kvxputer";
 
-    IPAddress apGw(172, 0, 0, 1);
-    if (!WiFi.softAPConfig(apGw, apGw, IPAddress(255, 255, 255, 0))) {
-        displayError("AP config failed", true);
-        wifiDisconnect();
-        return false;
-    }
+    // softAP FIRST so WIFI_EVENT_AP_START fires and DHCPS binds, then softAPConfig
+    // moves the AP onto 192.168.1.0/24. Config-before-softAP leaves clients on
+    // 169.254.link-local (no lease) on this Arduino-ESP32 stack.
     if (!WiFi.softAP(ssid.c_str(), pwd.c_str(), 6, 0, 4, false)) {
         displayError("softAP failed", true);
         wifiDisconnect();
         return false;
     }
-
     esp_wifi_set_ps(WIFI_PS_NONE);
-    (void)ensureApDhcpRunning();
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    IPAddress apIP(192, 168, 1, 1);
+    IPAddress netMsk(255, 255, 255, 0);
+    // dhcp_lease_start=0 → AP+1 (.2); dns=AP so phones get a resolver in-lease
+    // (same 5-arg pattern as Evil Portal).
+    if (!WiFi.softAPConfig(apIP, apIP, netMsk, IPAddress((uint32_t)0), apIP)) {
+        Serial.println("[FileShare] softAPConfig failed — retry 3-arg");
+        if (!WiFi.softAPConfig(apIP, apIP, netMsk)) {
+            displayError("AP config failed", true);
+            wifiDisconnect();
+            return false;
+        }
+    }
+
+    if (!ensureApDhcpRunning()) {
+        displayError("DHCP server failed", true);
+        wifiDisconnect();
+        return false;
+    }
+
+    IPAddress got = WiFi.softAPIP();
+    if (got != apIP) {
+        Serial.printf("[FileShare] softAPIP %s != %s — reconfig\n", got.toString().c_str(), apIP.toString().c_str());
+        WiFi.softAPConfig(apIP, apIP, netMsk, IPAddress((uint32_t)0), apIP);
+        ensureApDhcpRunning();
+        got = WiFi.softAPIP();
+    }
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
+    // DHCP option 114 — phones open the share page; restart DHCPS after.
+    if (!WiFi.AP.enableDhcpCaptivePortal()) {
+        Serial.println("[FileShare] DHCP captive portal URI failed");
+    }
+    ensureApDhcpRunning();
+#endif
 
     wifiConnected = true;
     wifiIP = WiFi.softAPIP().toString();
-    Serial.printf("[FileShare] AP '%s' IP %s (WebUI-compatible)\n", ssid.c_str(), wifiIP.c_str());
+    Serial.printf("[FileShare] AP '%s' IP %s (clients 192.168.1.2+)\n", ssid.c_str(), wifiIP.c_str());
 
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(pdMS_TO_TICKS(400));
 
     // DNS after AP is up (captive probes). Failure must not tear down the AP.
     IPAddress dnsIp = WiFi.softAPIP();
@@ -498,7 +524,7 @@ static void configureShareRoutes() {
             request->send(404, "text/plain", "not found");
             return;
         }
-        File f = fs->open(abs);
+        File f = fs->open(abs, "r");
         if (!f || f.isDirectory()) {
             if (f) f.close();
             request->send(400, "text/plain", "not a file");
@@ -506,8 +532,24 @@ static void configureShareRoutes() {
         }
         f.close();
         String base = abs.substring(abs.lastIndexOf('/') + 1);
+        // Keep path alive for the async FileResponse.
+        static String dlPath;
+        dlPath = abs;
+
+        AsyncWebServerResponse *response =
+            request->beginResponse(*fs, dlPath, "application/octet-stream");
+        if (!response) {
+            request->send(500, "text/plain", "download failed");
+            return;
+        }
+        // Attachment + Connection:close — location.href downloads often stall on
+        // STA Wi‑Fi when the SPA navigates away mid-stream.
+        String disp = "attachment; filename=\"" + base + "\"";
+        response->addHeader("Content-Disposition", disp);
+        response->addHeader("Connection", "close");
+        response->addHeader("Cache-Control", "no-store");
         noteTransfer('D', base, true);
-        request->send(*fs, abs, "application/octet-stream", true);
+        request->send(response);
     });
 
     auto denyIfReadOnly = [](AsyncWebServerRequest *request) -> bool {
@@ -1034,7 +1076,7 @@ static void startFileShare() {
         {"Use WiFi", startFileShareSta},
         {"Back", []() {}},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "File Share mode");
+    loopOptions(options, MENU_TYPE_SUBMENU, "File Share");
 }
 
 } // namespace

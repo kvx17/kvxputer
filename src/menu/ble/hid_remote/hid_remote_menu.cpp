@@ -467,7 +467,7 @@ static bool hidRemoteHostListScreen(bool fromSettings) {
         opts.push_back({"Connect to new device", []() { hidRemoteConnectNewDevice(); }});
         opts.push_back({"Back", []() {}});
 
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Select host");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Sel Host");
         // Leave this list once a host actually comes up. Rebuilding "Select host"
         // after pair/switch looked like the new connection was rejected.
         if (gHidRemoteSession.isConnected()) {
@@ -517,7 +517,7 @@ static void hidRemoteRenameHostsMenu() {
             return;
         }
         opts.push_back({"Back", []() {}});
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Rename hosts");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Ren Host");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }
@@ -644,7 +644,7 @@ static void hidRemoteSettingsMenu() {
              []() { kvxConfig.setHidRemotePttPreset((kvxConfig.hidRemotePttPreset + 1) % 5); }},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "HID Settings");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "HID Set");
         if (sel < 0 || sel == (int)opts.size() - 1) return;
     }
 }

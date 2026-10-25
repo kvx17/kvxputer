@@ -261,7 +261,7 @@ static void pdaContactCard(FS *fs, std::vector<Contact> &contacts, size_t index)
                              }},
                             {"Back", []() {}},
                         };
-                        loopOptions(opts, MENU_TYPE_SUBMENU, "Edit Contact");
+                        loopOptions(opts, MENU_TYPE_SUBMENU, "Edit Cont");
                         done = true;
                         break;
                     }

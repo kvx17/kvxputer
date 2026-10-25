@@ -350,7 +350,7 @@ void BLE_SnifferMenu() {
     std::vector<Option> snifferOptions;
     snifferOptions.push_back({"Start Sniffer", BLE_Sniffer});
     snifferOptions.push_back({"Back", []() { returnToMenu = true; }});
-    loopOptions(snifferOptions, MENU_TYPE_SUBMENU, "BLE Sniffer");
+    loopOptions(snifferOptions, MENU_TYPE_SUBMENU, "BLE Sniff");
 }
 
 #endif

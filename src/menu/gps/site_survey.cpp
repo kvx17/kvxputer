@@ -146,7 +146,7 @@ void siteSurveyMenu() {
         {"Start", siteSurveyRun },
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "Site Survey");
+    loopOptions(options, MENU_TYPE_SUBMENU, "Site Surv");
     options.clear();
 }
 

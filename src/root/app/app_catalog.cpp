@@ -1342,7 +1342,7 @@ static void pickShortcutApp() {
         opts.push_back({g, [group]() { pickShortcutInGroup(group); }});
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Bind Target");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Bind Tgt");
 }
 
 static void addShortcutBinding() {
@@ -1359,7 +1359,7 @@ static void addShortcutBinding() {
          }},
         {"Back", []() {}},
     };
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Binding type");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Bind Type");
 }
 
 void setMainscreenShortcutsMenu() {
@@ -1389,7 +1389,7 @@ void setMainscreenShortcutsMenu() {
                             kvxConfig.saveFile();
                         }});
         opts.push_back({"Back", []() {}});
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Mainscreen Shortcuts");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "Shortcuts");
         if (sel == -1 || sel == (int)opts.size() - 1 || forceHome) return;
     }
 }

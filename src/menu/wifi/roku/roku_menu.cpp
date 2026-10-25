@@ -276,7 +276,7 @@ bool emptyDiscoveryMenu() {
             {"Enter IP", []() {}},
         };
         addOptionToMainMenu();
-        int sel = loopOptions(options, MENU_TYPE_SUBMENU, "No Roku found");
+        int sel = loopOptions(options, MENU_TYPE_SUBMENU, "No Roku");
         options.clear();
         if (returnToMenu || forceHome) return false;
         if (sel == 0) return true; // rescan

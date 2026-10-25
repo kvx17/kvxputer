@@ -119,7 +119,7 @@ void fillInfo(ScrollableTextArea &area) {
 }
 
 void displayAPInfo() {
-    ScrollableTextArea area = ScrollableTextArea("AP INFO");
+    ScrollableTextArea area = ScrollableTextArea("AP Info");
     fillInfo(area);
     area.show();
 }

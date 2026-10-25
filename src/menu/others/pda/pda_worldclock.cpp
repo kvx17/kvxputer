@@ -105,7 +105,7 @@ void drawCitiesFace(int sel, bool full) {
     const City &selected = kCities[sel];
     String status = String(selected.name) + " " + formatHm(cityTm(selected.utcOffset)) + " " +
                     formatOffset(selected.utcOffset);
-    drawKvxTopBar("World Clock", status.c_str());
+    drawKvxTopBar("WorldClock", status.c_str());
 
     const int bodyY = KVX_TOPBAR_H + 2;
     if (full) tft.fillRect(0, bodyY, tftWidth, tftHeight - bodyY - FP * LH - 2, bg);
@@ -205,7 +205,7 @@ void drawFace(int face, int sel, bool full) {
         tft.fillRect(0, KVX_TOPBAR_H + 1, tftWidth, tftHeight - KVX_TOPBAR_H - 1, kvxConfig.bgColor);
     }
     // City name in top-bar status avoids overlapping the digital/charge face date.
-    drawKvxTopBar("World Clock", kCities[sel].name);
+    drawKvxTopBar("WorldClock", kCities[sel].name);
     if (face == FACE_CHARGE) drawChargeFace(sel);
     else drawDigitalFace(sel);
 }

@@ -409,6 +409,8 @@ int16_t tft_display::getCursorY() const {
 }
 
 void tft_display::setTextSize(uint8_t s) {
+    // UI_FONT_BODY (32): no GFXfont path on M5GFX — fall back to FP-scale GLCD.
+    if (s == 32) s = 2;
     _textSize = s ? s : 1;
     M5.Display.setTextSize(_textSize);
     if (_fb) _fb->setTextSize(_textSize);

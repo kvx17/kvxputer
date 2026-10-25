@@ -2,6 +2,8 @@
 #include "ibutton.h"
 #include "root/storage/paths.h"
 #include "root/ui/display.h"
+#include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/sd_functions.h"
 
@@ -29,25 +31,42 @@ static String bufferToHexStr(const byte *buf, int len, const char *sep = ":") {
 
 static bool bufferCrcValid() { return OneWire::crc8(keyBuffer, 7) == keyBuffer[7]; }
 
-static void displayStatus() {
-    drawMainBorderWithTitle("iButton");
-    if (keyLoaded) {
-        padprintln("UID: " + bufferToHexStr(keyBuffer, 8));
-        if (!bufferCrcValid()) {
-            tft.setTextColor(TFT_RED);
-            padprintln("CRC ERROR!");
-            tft.setTextColor(kvxConfig.priColor);
-        } else {
-            tft.setTextColor(TFT_GREEN);
-            padprintln("CRC OK");
-            tft.setTextColor(kvxConfig.priColor);
-        }
-    } else {
-        padprintln("No key in buffer");
+static ScrollableTextArea &ibuttonBody() {
+    static ScrollableTextArea area(
+        uiBodyFont(),
+        BORDER_PAD_X,
+        KVX_TOPBAR_H + 4,
+        tftWidth - 2 * BORDER_PAD_X,
+        tftHeight - (KVX_TOPBAR_H + 4) - 4,
+        false,
+        false
+    );
+    return area;
+}
+
+static void displayStatus(const char *extra = nullptr, uint16_t extraColor = 0) {
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("iButton");
     }
-    padprintln("");
-    padprintln("Waiting for iButton...");
-    padprintln("[NEXT] for options");
+    ScrollableTextArea &area = ibuttonBody();
+    area.clear();
+    if (keyLoaded) {
+        area.addField("UID:", bufferToHexStr(keyBuffer, 8));
+        if (!bufferCrcValid()) area.addLine("CRC ERROR!", TFT_RED);
+        else area.addLine("CRC OK", TFT_GREEN);
+    } else {
+        area.addLine("No key in buffer");
+    }
+    area.addLine("");
+    area.addLine("Waiting for iButton...");
+    area.addLine("[NEXT] for options");
+    if (extra && extra[0]) {
+        area.addLine("");
+        area.addLine(extra, extraColor ? extraColor : kvxConfig.secColor);
+    }
+    area.draw(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,12 +110,16 @@ static bool readKey(int maxRetries = 20) {
             return true;
         }
 
-        tft.fillScreen(kvxConfig.bgColor);
-        drawMainBorderWithTitle("iButton");
-        padprintln("Reading... attempt " + String(attempt + 2));
-        padprintln("CRC mismatch, retrying...");
-        padprintln("");
-        padprintln("Keep key on the contact!");
+        displayStatus();
+        {
+            ScrollableTextArea &area = ibuttonBody();
+            area.clear();
+            area.addLine("Reading... attempt " + String(attempt + 2));
+            area.addLine("CRC mismatch, retrying...");
+            area.addLine("");
+            area.addLine("Keep key on the contact!");
+            area.draw(true);
+        }
         delay(100);
     }
 
@@ -257,14 +280,23 @@ static void doWrite() {
         return;
     }
 
-    tft.fillScreen(kvxConfig.bgColor);
-    drawMainBorderWithTitle("Write iButton");
-    padprintln("UID: " + bufferToHexStr(keyBuffer, 8));
-    padprintln("");
-    padprintln("Touch blank key to writer...");
-    padprintln("[Esc] Cancel");
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar("iButton");
+    }
+    {
+        ScrollableTextArea &area = ibuttonBody();
+        area.clear();
+        area.addField("UID:", bufferToHexStr(keyBuffer, 8));
+        area.addLine("");
+        area.addLine("Touch blank key to writer...");
+        area.addLine("[Esc] Cancel");
+        area.draw(true);
+    }
 
     while (oneWire->reset() == 0) {
+        ibuttonBody().update(false);
         if (check(EscPress)) return;
         delay(50);
     }
@@ -393,6 +425,7 @@ Restart:
     displayStatus();
 
     for (;;) {
+        ibuttonBody().update(false);
         if (check(EscPress) || returnFromMenu) {
             returnToMenu = true;
             break;
@@ -409,34 +442,20 @@ Restart:
                 setiButtonPinMenu();
                 goto Restart;
             }
-            tft.fillScreen(kvxConfig.bgColor);
             displayStatus();
         }
 
         // Auto-read when iButton touches the probe
         if (oneWire->reset() != 0) {
             bool ok = readKey();
-            tft.fillScreen(kvxConfig.bgColor);
 
-            if (ok) {
-                displayStatus();
-                padprintln("");
-                tft.setTextColor(TFT_GREEN);
-                padprintln("Key read successfully!");
-                tft.setTextColor(kvxConfig.priColor);
-            } else if (keyLoaded) {
-                // Read failed CRC but we have data
-                displayStatus();
-                padprintln("");
-                tft.setTextColor(TFT_YELLOW);
-                padprintln("Read with CRC errors");
-                tft.setTextColor(kvxConfig.priColor);
-            } else {
-                displayStatus();
-            }
+            if (ok) displayStatus("Key read successfully!", TFT_GREEN);
+            else if (keyLoaded) displayStatus("Read with CRC errors", TFT_YELLOW);
+            else displayStatus();
 
             // Wait for key removal to avoid re-reading in a loop
             while (oneWire->reset() != 0) {
+                ibuttonBody().update(false);
                 if (check(EscPress)) break;
                 delay(100);
             }

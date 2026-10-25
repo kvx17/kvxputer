@@ -164,7 +164,7 @@ void mdnsPoisonMenu() {
         {"Start", mdnsPoisonRun },
     };
     addOptionToMainMenu();
-    loopOptions(options, MENU_TYPE_SUBMENU, "mDNS Poison");
+    loopOptions(options, MENU_TYPE_SUBMENU, "mDNS Pois");
     options.clear();
 }
 #endif

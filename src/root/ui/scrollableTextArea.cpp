@@ -1,17 +1,16 @@
 #include "root/ui/scrollableTextArea.h"
+#include "root/ui/kvx_ui.h"
 #define _scrollBuffer tft
 ScrollableTextArea::ScrollableTextArea(const String &title)
-    : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize(FP), _startX(BORDER_PAD_X),
-      _startY(BORDER_PAD_Y), _width(tftWidth - 2 * BORDER_PAD_X),
-      _height(tftHeight - 4 - BORDER_PAD_X - BORDER_PAD_Y) {
-    drawMainBorder();
-
-    if (!_title.isEmpty()) {
-        printTitle(_title);
-        _startY = tft.getCursorY();
-        _height -= (_startY - BORDER_PAD_Y);
+    : firstVisibleLine{0}, _redraw{true}, _title(title), _fontSize((uint8_t)uiBodyFont()),
+      _startX(BORDER_PAD_X), _startY(KVX_TOPBAR_H + 4), _width(tftWidth - 2 * BORDER_PAD_X),
+      _height(tftHeight - (KVX_TOPBAR_H + 4) - BORDER_PAD_X) {
+    {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        if (!_title.isEmpty()) drawKvxTopBar(_title.c_str());
+        else drawKvxTopBar(kvxTopBarAppName());
     }
-
     setup();
 }
 
@@ -19,9 +18,14 @@ ScrollableTextArea::ScrollableTextArea(
     uint8_t fontSize, int16_t startX, int16_t startY, int32_t width, int32_t height, bool drawBorders,
     bool indentWrappedLines
 )
-    : firstVisibleLine{0}, _redraw{true}, _title(""), _fontSize(fontSize), _startX(startX), _startY(startY),
+    : firstVisibleLine{0}, _redraw{true}, _title(""),
+      _fontSize(fontSize ? fontSize : (uint8_t)uiBodyFont()), _startX(startX), _startY(startY),
       _width(width), _height(height), _indentWrappedLines(indentWrappedLines) {
-    if (drawBorders) { drawMainBorder(); }
+    if (drawBorders) {
+        TftFrame frame;
+        tft.fillScreen(kvxConfig.bgColor);
+        drawKvxTopBar(kvxTopBarAppName());
+    }
     setup();
 }
 
@@ -30,16 +34,20 @@ ScrollableTextArea::~ScrollableTextArea() {
 }
 
 uint16_t ScrollableTextArea::maxCharsForFont(uint8_t fontSize) const {
-    int charW = LW * max(1, (int)fontSize);
-    int measured = _scrollBuffer.textWidth("W", fontSize);
+    int charW = uiCharW(fontSize);
+    // Measure with the active face. Do not pass UI_FONT_BODY as a TFT font index.
+    const uint8_t prev = tft.getTextSize();
+    _scrollBuffer.setTextSize(fontSize);
+    int measured = _scrollBuffer.textWidth("W");
+    _scrollBuffer.setTextSize(prev);
     if (measured > 0 && measured <= charW * 2) charW = measured;
-    return max(8, (int)(_width / charW));
+    return max(8, (int)(_width / max(1, charW)));
 }
 
 int32_t ScrollableTextArea::linePixels(size_t idx) const {
     uint8_t sz = (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
-    sz = max((uint8_t)1, sz);
-    return (int32_t)sz * LH + 2;
+    if (!sz) sz = (uint8_t)uiBodyFont();
+    return (int32_t)uiLineH(sz) + 2;
 }
 
 bool ScrollableTextArea::viewShowsLastLine() const {
@@ -49,7 +57,11 @@ bool ScrollableTextArea::viewShowsLastLine() const {
         y += linePixels(idx);
         if (y > _height) return false;
     }
-    return true;
+    // Require one blank pad row after the last text line before treating the
+    // view as "at the end" — scroll until last row of text + 1.
+    const uint8_t padSz = _fontSize ? _fontSize : (uint8_t)uiBodyFont();
+    y += uiLineH(padSz) + 2;
+    return y <= _height;
 }
 
 void ScrollableTextArea::setup() {
@@ -58,7 +70,7 @@ void ScrollableTextArea::setup() {
     _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
 
     _maxCharactersPerLine = maxCharsForFont(_fontSize);
-    _pixelsPerLine = max(LH * max(1, (int)_fontSize), (int)_scrollBuffer.fontHeight()) + 2;
+    _pixelsPerLine = max(uiLineH(_fontSize), (int)_scrollBuffer.fontHeight()) + 2;
     _maxVisibleLines = max(1, (int)(_height / _pixelsPerLine));
 }
 
@@ -71,21 +83,27 @@ void ScrollableTextArea::scrollUp() {
 
 void ScrollableTextArea::scrollDown() {
     if (linesBuffer.empty() || viewShowsLastLine()) return;
-    if (firstVisibleLine + 1 < linesBuffer.size()) {
-        firstVisibleLine++;
-        _redraw = true;
-    }
+    firstVisibleLine++;
+    _redraw = true;
 }
 
 void ScrollableTextArea::scrollToLine(size_t lineNumber) {
-    if (linesBuffer.empty()) return; // Ensure there's content to scroll
+    if (linesBuffer.empty()) return;
 
-    if (lineNumber > linesBuffer.size() - _maxVisibleLines) {
-        firstVisibleLine =
-            (linesBuffer.size() > _maxVisibleLines) ? linesBuffer.size() - _maxVisibleLines : 0;
-    } else {
-        firstVisibleLine = lineNumber;
+    // Clamp to the deepest scroll that still keeps last-text + 1 pad in view.
+    size_t maxFirst = 0;
+    firstVisibleLine = 0;
+    if (!viewShowsLastLine()) {
+        while (true) {
+            size_t next = firstVisibleLine + 1;
+            if (next >= linesBuffer.size()) break;
+            firstVisibleLine = next;
+            maxFirst = next;
+            if (viewShowsLastLine()) break;
+        }
     }
+    firstVisibleLine = (lineNumber > maxFirst) ? maxFirst : lineNumber;
+    _redraw = true;
 }
 
 String ScrollableTextArea::getLine(size_t lineNumber) {
@@ -95,6 +113,9 @@ String ScrollableTextArea::getLine(size_t lineNumber) {
 size_t ScrollableTextArea::getMaxLines() { return linesBuffer.size(); }
 
 bool ScrollableTextArea::show(bool force) {
+    // Guarantee a reachable blank after the last text row (last + 1).
+    if (!linesBuffer.empty() && !linesBuffer.back().isEmpty()) addLine("");
+
     draw(force);
 
     // Only the first paint may be forced. Passing force into the idle loop
@@ -192,6 +213,8 @@ void ScrollableTextArea::clear() {
     linesBuffer.clear();
     lineColors.clear();
     lineFontSizes.clear();
+    lineRightText.clear();
+    lineRightColors.clear();
 }
 
 void ScrollableTextArea::fromString(const String &text) {
@@ -223,10 +246,16 @@ void ScrollableTextArea::addLine(const String &text, uint16_t color, uint8_t fon
     const uint8_t sz = fontSize ? fontSize : _fontSize;
     const uint16_t maxChars = maxCharsForFont(sz);
 
-    if (text.isEmpty()) {
-        linesBuffer.emplace_back("");
+    auto pushLine = [&](const String &s) {
+        linesBuffer.emplace_back(s);
         lineColors.emplace_back(color);
         lineFontSizes.emplace_back(sz);
+        lineRightText.emplace_back("");
+        lineRightColors.emplace_back(0);
+    };
+
+    if (text.isEmpty()) {
+        pushLine("");
         _redraw = true;
         return;
     }
@@ -248,10 +277,60 @@ void ScrollableTextArea::addLine(const String &text, uint16_t color, uint8_t fon
         }
         if (buff.endsWith("\r")) buff.remove(buff.length() - 1);
 
-        linesBuffer.emplace_back(buff);
-        lineColors.emplace_back(color);
-        lineFontSizes.emplace_back(sz);
+        pushLine(buff);
         firstLine = false;
+    }
+
+    _redraw = true;
+}
+
+void ScrollableTextArea::addField(const String &label, const String &value) {
+    const uint8_t sz = _fontSize ? _fontSize : (uint8_t)uiBodyFont();
+    const uint16_t labelColor = kvxConfig.priColor;
+    const uint16_t valueColor = kvxConfig.secColor;
+
+    const uint8_t prev = tft.getTextSize();
+    _scrollBuffer.setTextSize(sz);
+    const int gap = uiCharW(sz);
+    const int labelPx = _scrollBuffer.textWidth(label);
+    int avail = _width - labelPx - gap;
+    if (avail < uiCharW(sz) * 2) avail = uiCharW(sz) * 2;
+
+    // Fit as many value characters as possible on the first row.
+    String remain = value;
+    String firstVal;
+    while (remain.length()) {
+        // Grow firstVal while it still fits in avail.
+        String trial = firstVal + remain.substring(0, 1);
+        if (_scrollBuffer.textWidth(trial) > avail && firstVal.length()) break;
+        if (_scrollBuffer.textWidth(trial) > avail && !firstVal.length()) {
+            // Single oversized char — take it anyway and clip visually.
+            firstVal = remain.substring(0, 1);
+            remain.remove(0, 1);
+            break;
+        }
+        firstVal = trial;
+        remain.remove(0, 1);
+        if (_scrollBuffer.textWidth(firstVal) >= avail) break;
+    }
+    _scrollBuffer.setTextSize(prev);
+
+    linesBuffer.emplace_back(label);
+    lineColors.emplace_back(labelColor);
+    lineFontSizes.emplace_back(sz);
+    lineRightText.emplace_back(firstVal);
+    lineRightColors.emplace_back(valueColor);
+
+    // Overflow continuation lines in accent color.
+    const uint16_t maxChars = maxCharsForFont(sz);
+    while (remain.length()) {
+        String chunk = remain.substring(0, maxChars);
+        remain.remove(0, chunk.length());
+        linesBuffer.emplace_back(chunk);
+        lineColors.emplace_back(valueColor);
+        lineFontSizes.emplace_back(sz);
+        lineRightText.emplace_back("");
+        lineRightColors.emplace_back(0);
     }
 
     _redraw = true;
@@ -275,8 +354,18 @@ void ScrollableTextArea::draw(bool force) {
         const uint8_t sz =
             (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
         tft.setTextSize(sz);
+        const int y = _startY + yOffset;
         _scrollBuffer.setTextColor(color);
-        _scrollBuffer.drawString(linesBuffer[idx], 0 + _startX, _startY + yOffset);
+        _scrollBuffer.drawString(linesBuffer[idx], _startX, y);
+
+        if (idx < lineRightText.size() && lineRightText[idx].length()) {
+            const uint16_t rc =
+                (idx < lineRightColors.size()) ? lineRightColors[idx] : kvxConfig.secColor;
+            const int lx = _startX + _scrollBuffer.textWidth(linesBuffer[idx]) + uiCharW(sz);
+            _scrollBuffer.setTextColor(rc);
+            _scrollBuffer.drawString(lineRightText[idx], lx, y);
+        }
+
         yOffset += rowH;
         lines++;
         idx++;

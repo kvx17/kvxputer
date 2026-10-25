@@ -6,6 +6,11 @@
 #include <WiFi.h>
 #include <interface.h>
 
+static String kvxTopBarTitle = "Menu";
+static String kvxTopBarStatus;
+
+const char *kvxTopBarAppName() { return kvxTopBarTitle.c_str(); }
+
 void drawKvxTopBar(const char *leftLabel) { drawKvxTopBar(leftLabel, nullptr); }
 
 void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
@@ -19,40 +24,43 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     const uint16_t purple = kvxConfig.priColor;
     const uint16_t green = kvxConfig.secColor;
 
+    if (leftLabel && leftLabel[0] != '\0') kvxTopBarTitle = leftLabel;
+    kvxTopBarStatus = (statusLabel && statusLabel[0]) ? String(statusLabel) : String();
+
     tft.fillRect(0, 0, tftWidth, KVX_TOPBAR_H, bg);
     tft.drawLine(0, KVX_TOPBAR_H, tftWidth, KVX_TOPBAR_H, purple);
 
     uint8_t bat = getBattery();
-    const bool showSD = sdcardMounted;
-    const bool showGPS = gpsConnected;
     const bool showWifi = (WiFi.getMode() != WIFI_MODE_NULL);
-    const bool showWeb = isWebUIActive;
+    const bool showGPS = gpsConnected;
     const bool showBLE = BLEConnected;
+    const bool showWeb = isWebUIActive;
     const bool showWG = isConnectedWireguard;
+    const bool showSD = sdcardMounted;
 
-    // Top-bar labels stay compact (half of body FP after the FP bump).
+    // Top-bar labels stay compact (GLCD dense).
     const int barSize = uiDenseFont();
     const int barTextY = max(4, (KVX_TOPBAR_H - barSize * LH) / 2);
 
     const int IW = 16;
     const int GAP = 4;
-    const int batReserve = (bat > 0) ? (42 + max(42, 4 * barSize * LW + 4)) : 6;
+    // Battery slot is always reserved so the layout does not jump when percent is 0.
+    const int batReserve = 42 + max(42, 4 * barSize * LW + 4);
     int rightEdge = tftWidth - batReserve;
 
     int iconCount = 0;
-    if (showSD) iconCount++;
-    if (showGPS) iconCount++;
     if (showWifi) iconCount++;
-    if (showWeb) iconCount++;
+    if (showGPS) iconCount++;
     if (showBLE) iconCount++;
+    if (showWeb) iconCount++;
     if (showWG) iconCount++;
+    if (showSD) iconCount++;
 
     int iconsWidth = 0;
     if (iconCount > 0) iconsWidth = iconCount * IW + (iconCount - 1) * GAP;
     int iconsLeft = rightEdge - iconsWidth;
 
     // Compact HH:MM immediately left of the icon pack / battery (right cluster).
-    // Do not draw a second clock on the left next to the app name.
     int statusRight = iconsLeft - 4;
     if (clock_set) {
 #if defined(HAS_RTC)
@@ -68,7 +76,7 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
         statusRight -= (int)strlen(hhmm) * barSize * LW + 6;
     }
 
-    String status = (statusLabel && statusLabel[0]) ? String(statusLabel) : String();
+    String status = kvxTopBarStatus;
     if (status.length()) {
         int maxStatusChars = max(4, (statusRight - 70) / (barSize * LW));
         if ((int)status.length() > maxStatusChars) {
@@ -85,18 +93,25 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
 
     tft.setTextSize(barSize);
     tft.setTextColor(green, bg);
-    String label = (leftLabel && leftLabel[0] != '\0') ? String(leftLabel) : String("Menu");
-    int maxChars = max(1, (titleMaxX - 8) / (barSize * LW));
+    String label = kvxTopBarTitle;
+    // Hard cap 10 characters, then clip further if icons leave less room.
+    if ((int)label.length() > 10) label = label.substring(0, 9) + ".";
+    int maxChars = max(1, min(10, (titleMaxX - 8) / (barSize * LW)));
     if ((int)label.length() > maxChars) {
         if (maxChars > 1) label = label.substring(0, maxChars - 1) + ".";
         else label = label.substring(0, maxChars);
     }
     tft.drawString(label, 8, barTextY, 1);
 
+    // Active modules packed against the battery. Order: Wi-Fi, GPS, BLE, Web, WG, SD.
     int x = iconsLeft;
     int iy = max(4, (KVX_TOPBAR_H - IW) / 2);
-    if (showWG) {
-        drawWireguardStatus(x, iy);
+    if (showWifi) {
+        drawWifiSmall(x, iy);
+        x += IW + GAP;
+    }
+    if (showGPS) {
+        drawGpsSmall(x, iy);
         x += IW + GAP;
     }
     if (showBLE) {
@@ -107,19 +122,15 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
         drawWebUISmall(x, iy);
         x += IW + GAP;
     }
-    if (showWifi) {
-        drawWifiSmall(x, iy);
-        x += IW + GAP;
-    }
-    if (showGPS) {
-        drawGpsSmall(x, iy);
+    if (showWG) {
+        drawWireguardStatus(x, iy);
         x += IW + GAP;
     }
     if (showSD) {
         drawSdSmall(x, iy);
     }
 
-    if (bat > 0) drawBatteryStatus(bat);
+    drawBatteryStatus(bat);
 
     if (ownFrame) tft.endFrame();
 }

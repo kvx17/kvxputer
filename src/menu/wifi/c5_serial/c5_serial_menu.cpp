@@ -318,7 +318,7 @@ void listCompanions() {
         return;
     }
     opts.push_back({"Back", []() {}});
-    loopOptions(opts, MENU_TYPE_SUBMENU, "Companion bins");
+    loopOptions(opts, MENU_TYPE_SUBMENU, "Companions");
 }
 
 } // namespace
@@ -411,7 +411,7 @@ void sniff154Menu() {
          }},
         {"Back", []() {}},
     };
-    loopOptions(options, MENU_TYPE_SUBMENU, "802.15.4 Sniff");
+    loopOptions(options, MENU_TYPE_SUBMENU, "802.15.4");
     options.clear();
 }
 
@@ -476,7 +476,7 @@ void c5SerialMenu() {
             {"Companion bins", listCompanions},
             {"Back", []() {}},
         };
-        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "ESP32C5 Serial");
+        int sel = loopOptions(opts, MENU_TYPE_SUBMENU, "C5 Serial");
         if (sel < 0 || sel == (int)opts.size() - 1) break;
         pollUart();
     }
