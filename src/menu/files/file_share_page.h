@@ -64,7 +64,8 @@ button.danger{background:#5a3a3a;border-color:#7a4a4a}
       <option value="name">Name</option>
       <option value="size">Size</option>
     </select>
-    <button onclick="loadList()">Refresh</button>
+    <button onclick="loadList(false)">Refresh</button>
+    <button id="moreBtn" class="hidden" onclick="loadList(true)">More</button>
   </div>
   <div id="writes" class="row">
     <button class="primary" onclick="document.getElementById('fileIn').click()">Upload</button>
@@ -76,7 +77,7 @@ button.danger{background:#5a3a3a;border-color:#7a4a4a}
   <ul id="list"></ul>
 </div>
 <script>
-let path='/', vol='sd', items=[], readOnly=false, q='';
+let path='/', vol='sd', items=[], readOnly=false, q='', listOffset=0, hasMore=false, listLimit=200;
 const $=id=>document.getElementById(id);
 function fmt(n){if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' kB';return (n/1048576).toFixed(1)+' MB'}
 async function api(url,opts){
@@ -107,25 +108,29 @@ async function boot(){
   if(!s.sd&&vol==='sd')vol='lfs';
   sel.value=vol;
   $('hdrMeta').textContent=(readOnly?'Read-only · ':'')+'clients '+s.clients;
-  await loadList();
+  await loadList(false);
 }
-function chgVol(){vol=$('vol').value;path='/';loadList()}
+function chgVol(){vol=$('vol').value;path='/';loadList(false)}
 function crumbs(){
   const parts=path.split('/').filter(Boolean);
   let html='<a href="#" data-p="/">/</a>',cur='';
   for(const p of parts){cur+='/'+p;html+=' / <a href="#" data-p="'+cur+'">'+p+'</a>'}
   $('crumbs').innerHTML=html;
-  $('crumbs').onclick=e=>{const a=e.target.closest('a');if(!a)return;e.preventDefault();path=a.dataset.p;loadList()}
+  $('crumbs').onclick=e=>{const a=e.target.closest('a');if(!a)return;e.preventDefault();path=a.dataset.p;loadList(false)}
 }
-async function loadList(){
-  $('status').textContent='Loading…';
-  const r=await api('/api/list?vol='+encodeURIComponent(vol)+'&path='+encodeURIComponent(path));
-  if(!r.ok){$('status').textContent=await r.text();items=[];render();return}
+async function loadList(append){
+  if(!append){listOffset=0;items=[];hasMore=false}
+  $('status').textContent=append?'Loading more…':'Loading…';
+  const r=await api('/api/list?vol='+encodeURIComponent(vol)+'&path='+encodeURIComponent(path)+'&offset='+listOffset+'&limit='+listLimit);
+  if(!r.ok){$('status').textContent=await r.text();if(!append)items=[];render();return}
   const j=await r.json();
-  items=j.items||[];
+  const page=j.items||[];
+  if(append)items=items.concat(page);else items=page;
   path=j.path||path;
+  hasMore=!!j.hasMore;
+  listOffset=items.length;
   crumbs();
-  $('status').textContent=items.length+' items';
+  $('status').textContent=items.length+' items'+(hasMore?' (more available)':'');
   render();
 }
 function render(){
@@ -142,7 +147,7 @@ function render(){
     const li=document.createElement('li');
     if(it.dir)li.className='dir';
     const nm=document.createElement('span');nm.className='name';nm.textContent=(it.dir?'📁 ':'')+it.name;
-    nm.onclick=()=>{if(it.dir){path=(path==='/'?'':path)+'/'+it.name;loadList()}else download(it.name)};
+    nm.onclick=()=>{if(it.dir){path=(path==='/'?'':path)+'/'+it.name;loadList(false)}else download(it.name)};
     li.appendChild(nm);
     if(!it.dir){const sz=document.createElement('span');sz.className='size';sz.textContent=fmt(it.size||0);li.appendChild(sz)}
     if(!readOnly){
@@ -153,6 +158,7 @@ function render(){
     }
     ul.appendChild(li);
   }
+  $('moreBtn').classList.toggle('hidden',!hasMore);
 }
 function download(name){
   // Keep the SPA mounted: location.href aborts mid-transfer on many phones.
@@ -172,21 +178,21 @@ async function doMkdir(){
   const body=new URLSearchParams({vol,path,name});
   const r=await api('/api/mkdir',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
   $('status').textContent=r.ok?'Created':await r.text();
-  if(r.ok)loadList();
+  if(r.ok)loadList(false);
 }
 async function doRename(old){
   const name=prompt('Rename to',old);if(!name||name===old)return;
   const body=new URLSearchParams({vol,path,old,name});
   const r=await api('/api/rename',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
   $('status').textContent=r.ok?'Renamed':await r.text();
-  if(r.ok)loadList();
+  if(r.ok)loadList(false);
 }
 async function doDelete(name,isDir){
   if(!confirm('Delete '+(isDir?'folder ':'')+name+'?'))return;
   const body=new URLSearchParams({vol,path,name});
   const r=await api('/api/delete',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
   $('status').textContent=r.ok?'Deleted':await r.text();
-  if(r.ok)loadList();
+  if(r.ok)loadList(false);
 }
 async function uploadFiles(files){
   if(readOnly||!files||!files.length)return;
@@ -198,7 +204,7 @@ async function uploadFiles(files){
   }
   $('status').textContent='Upload done';
   $('fileIn').value='';
-  loadList();
+  loadList(false);
 }
 const drop=$('drop');
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over')}));

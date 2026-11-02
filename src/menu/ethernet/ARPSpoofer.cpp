@@ -86,9 +86,9 @@ void ARPSpoofer::setup(const Host &host, IPAddress gateway) {
         // padprintln((String(kvx::paths::WIFI_CAPTURES) + "/ARP_session_") + String(nf) + ".pcap");
         Serial.println("Still in development");
     }
-    padprintln("Tgt:" + host.mac);
-    padprintln("Tgt: " + ipToString(victimIP));
-    padprintln("GTW:" + macToString(gatewayMAC));
+    padField("Tgt:", host.mac);
+    padField("Tgt:", ipToString(victimIP));
+    padField("GTW:", macToString(gatewayMAC));
     padprintln("");
     padprintln("Press Any key to STOP.");
 

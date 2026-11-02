@@ -337,7 +337,7 @@ void render() {
     tft.setTextColor(0x6DFC);
     if (!intlora) { tft.drawString("Lora Init Failed", 10, 13); }
     Serial.println(String(displayName));
-    tft.drawString("USRN: " + String(displayName), 10, 25);
+    drawKvRow(10, 25, "USRN:", String(displayName));
 
     int yPos = yStart;
     int endLine = scrollOffset + maxMessages;

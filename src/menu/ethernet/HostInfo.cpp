@@ -100,11 +100,11 @@ void HostInfo::setup(const Host &host) {
 
     ScrollableTextArea area = ScrollableTextArea("Host Info");
 
-    area.addLine("Host: " + host.ip.toString());
-    area.addLine("Mac: " + host.mac);
-    area.addLine("Manufacturer: " + getManufacturer(host.mac));
+    area.addField("Host:", host.ip.toString());
+    area.addField("Mac:", host.mac);
+    area.addField("Manufacturer:", getManufacturer(host.mac));
     area.addLine("Scanning Ports... Wait");
-    area.addLine("Open TCP Ports: ");
+    area.addLine("Open TCP Ports:");
 
     area.draw();
 

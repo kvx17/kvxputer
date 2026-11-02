@@ -363,12 +363,12 @@ void TagOMatic::set_state(RFID_State state) {
         case CHECK_MODE:
             _sourceUID = _rfid->printableUID.uid;
             _sourcePages = _rfid->strAllPages;
-            padprintln("Source UID: " + _sourceUID);
+            padField("Source UID:", _sourceUID);
             padprintln("");
             break;
         case CLONE_MODE:
-            padprintln("New UID: " + _rfid->printableUID.uid);
-            padprintln("SAK: " + _rfid->printableUID.sak);
+            padField("New UID:", _rfid->printableUID.uid);
+            padField("SAK:", _rfid->printableUID.sak);
             padprintln("");
             break;
         case WRITE_MODE:
@@ -694,11 +694,11 @@ void TagOMatic::emulate_with_details(bool ndefContent) {
 }
 
 void TagOMatic::dump_check_details() {
-    padprintln("Source UID: " + _sourceUID);
+    padField("Source UID:", _sourceUID);
     padprintln("");
 
-    padprintln("UID: " + String(_sourceUID == _rfid->printableUID.uid ? "OK" : "NOT OK"));
-    padprintln("Data: " + String(_sourcePages == _rfid->strAllPages ? "OK" : "NOT OK"));
+    padField("UID:", String(_sourceUID == _rfid->printableUID.uid ? "OK" : "NOT OK"));
+    padField("Data:", String(_sourcePages == _rfid->strAllPages ? "OK" : "NOT OK"));
     padprintln("");
 
     if (_rfid->pageReadStatus != RFIDInterface::SUCCESS)
@@ -710,7 +710,7 @@ void TagOMatic::dump_ndef_details() {
 
     if (!_rfid->rawNdefRecord.empty()) {
         padprintln("Payload type: MIME / raw");
-        padprintln("Payload size: " + String(_rfid->rawNdefRecord.size()) + " bytes");
+        padField("Payload size:", String(_rfid->rawNdefRecord.size()) + " bytes");
         return;
     }
 
@@ -720,8 +720,8 @@ void TagOMatic::dump_ndef_details() {
         case RFIDInterface::NDEF_TEXT: payload_type = "Text"; break;
     }
 
-    padprintln("Payload type: " + payload_type);
-    padprintln("Payload size: " + String(_rfid->ndefMessage.payloadSize) + " bytes");
+    padField("Payload type:", payload_type);
+    padField("Payload size:", String(_rfid->ndefMessage.payloadSize) + " bytes");
 }
 
 void TagOMatic::dump_scan_results() {

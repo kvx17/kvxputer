@@ -65,7 +65,7 @@ void findMyMenu() {
             bleBackend().advertiseMfg("", payload, plen);
             count++;
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Adv: " + String((unsigned)count), 10, uiStatusY(1));
+            drawKvRow(10, uiStatusY(1), "Adv:", String((unsigned)count));
         }
         delay(20);
     }
@@ -112,7 +112,7 @@ void findMyMenu() {
             adv->start();
             count++;
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Adv: " + String((unsigned)count), 10, uiStatusY(1));
+            drawKvRow(10, uiStatusY(1), "Adv:", String((unsigned)count));
         }
         delay(20);
     }

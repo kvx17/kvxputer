@@ -31,7 +31,7 @@ void honeypotMenu() {
         c.println(String(tag) + " honeypot");
         c.stop();
         tft.fillRect(10, uiStatusY(1), tftWidth - 20, uiLineH(FP), kvxConfig.bgColor);
-        tft.drawString("Hits: " + String(hits) + " last " + tag, 10, uiStatusY(1));
+        drawKvRow(10, uiStatusY(1), "Hits:", String(hits) + " last " + tag);
     };
     while (!check(EscPress) && !returnToMenu) {
         accept(ssh, "ssh");

@@ -110,8 +110,8 @@ void RFID125::set_state(RFID125_State state) {
             _tag_read = false;
             break;
         // case CLONE_MODE:
-        //     padprintln("New UID: " + printableUID.uid);
-        //     padprintln("SAK: " + printableUID.sak);
+        //     padField("New UID:", printableUID.uid);
+        //     padField("SAK:", printableUID.sak);
         //     padprintln("");
         //     break;
         // case WRITE_MODE:
@@ -178,7 +178,7 @@ void RFID125::display_banner() {
     padprintln("");
 }
 
-void RFID125::dump_card_details() { padprintln("Tag Data: " + _printable_data); }
+void RFID125::dump_card_details() { padField("Tag Data:", _printable_data); }
 
 void RFID125::read_card() {
     if (!read_card_data()) return;

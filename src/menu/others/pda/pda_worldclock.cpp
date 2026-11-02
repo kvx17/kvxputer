@@ -90,10 +90,8 @@ void drawChromeOnce() {
 }
 
 void drawFooter() {
-    tft.setTextSize(FP);
     tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.fillRect(0, tftHeight - FP * LH - 2, tftWidth, FP * LH + 2, kvxConfig.bgColor);
-    tft.drawCentreString("OK set TZ  [] face  ESC", tftWidth / 2, tftHeight - FP * LH - 2, 1);
+    printCenterFootnote("OK set TZ  [] face  ESC");
 }
 
 void drawCitiesFace(int sel, bool full) {

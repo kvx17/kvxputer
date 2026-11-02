@@ -91,7 +91,7 @@ void imsiEapMenu() {
             }
         }
         tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("IDs: " + String((int)seen.size()) + " ch " + String(ch), 10, uiStatusY(1));
+        drawKvRow(10, uiStatusY(1), "IDs:", String((int)seen.size()) + " ch " + String(ch));
         delay(40);
     }
     esp_wifi_set_promiscuous_rx_cb(nullptr);

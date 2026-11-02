@@ -497,7 +497,7 @@ void EvilPortal::drawScreen() {
         case HIDE_PASSWORD: passMode = "*hidden*"; break;
         case SAVE_LENGTH: passMode = "Length only"; break;
     }
-    padprintln("Pwd mode: " + passMode);
+    padField("Pwd mode:", passMode);
     printLastCapturedCredential();
     printDeauthStatus();
 }

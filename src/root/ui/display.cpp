@@ -551,6 +551,118 @@ void padprintln(double n, int digits, int16_t padx) {
     tft.println(n, digits);
 }
 
+void padField(const String &label, const String &value, int16_t padx) {
+    const int sz = uiBodyFont();
+    const uint16_t labelColor = kvxConfig.priColor;
+    const uint16_t valueColor = kvxConfig.secColor;
+    const uint16_t bg = kvxConfig.bgColor;
+    const int charW = uiCharW(sz);
+    const int startX = padx * BORDER_PAD_X;
+    const int maxW = tftWidth - startX - BORDER_PAD_X;
+
+    tft.setTextSize(sz);
+    const int labelPx = tft.textWidth(label);
+    int avail = maxW - labelPx - charW;
+    if (avail < charW * 2) avail = charW * 2;
+
+    String remain = value;
+    String firstVal;
+    while (remain.length()) {
+        String trial = firstVal + remain.substring(0, 1);
+        if (tft.textWidth(trial) > avail && firstVal.length()) break;
+        if (tft.textWidth(trial) > avail && !firstVal.length()) {
+            firstVal = remain.substring(0, 1);
+            remain.remove(0, 1);
+            break;
+        }
+        firstVal = trial;
+        remain.remove(0, 1);
+        if (tft.textWidth(firstVal) >= avail) break;
+    }
+
+    const int y = tft.getCursorY();
+    tft.setCursor(startX, y);
+    tft.setTextColor(labelColor, bg);
+    tft.print(label);
+    if (firstVal.length()) {
+        tft.setCursor(startX + labelPx + charW, y);
+        tft.setTextColor(valueColor, bg);
+        tft.print(firstVal);
+    }
+    tft.println();
+    tft.setTextColor(labelColor, bg);
+
+    // Overflow continuation lines in accent color.
+    while (remain.length()) {
+        String chunk;
+        while (remain.length()) {
+            String trial = chunk + remain.substring(0, 1);
+            if (tft.textWidth(trial) > maxW && chunk.length()) break;
+            if (tft.textWidth(trial) > maxW && !chunk.length()) {
+                chunk = remain.substring(0, 1);
+                remain.remove(0, 1);
+                break;
+            }
+            chunk = trial;
+            remain.remove(0, 1);
+            if (tft.textWidth(chunk) >= maxW) break;
+        }
+        tft.setCursor(startX, tft.getCursorY());
+        tft.setTextColor(valueColor, bg);
+        tft.println(chunk);
+    }
+    tft.setTextColor(labelColor, bg);
+}
+
+void drawKvRow(int16_t x, int16_t y, const String &label, const String &value) {
+    const int sz = uiBodyFont();
+    const uint16_t labelColor = kvxConfig.priColor;
+    const uint16_t valueColor = kvxConfig.secColor;
+    const uint16_t bg = kvxConfig.bgColor;
+    const int charW = uiCharW(sz);
+    const int maxW = tftWidth - x - BORDER_PAD_X;
+
+    tft.setTextSize(sz);
+    const int labelPx = tft.textWidth(label);
+    int avail = maxW - labelPx - charW;
+    if (avail < charW * 2) avail = charW * 2;
+
+    String remain = value;
+    String firstVal;
+    while (remain.length()) {
+        String trial = firstVal + remain.substring(0, 1);
+        if (tft.textWidth(trial) > avail && firstVal.length()) break;
+        if (tft.textWidth(trial) > avail && !firstVal.length()) {
+            firstVal = remain.substring(0, 1);
+            remain.remove(0, 1);
+            break;
+        }
+        firstVal = trial;
+        remain.remove(0, 1);
+        if (tft.textWidth(firstVal) >= avail) break;
+    }
+
+    // Clear the row strip so live HUDs can redraw without ghosting.
+    tft.fillRect(x, y, max(0, tftWidth - x), uiLineH(sz), bg);
+    tft.setTextColor(labelColor, bg);
+    tft.drawString(label, x, y, 1);
+    if (firstVal.length()) {
+        tft.setTextColor(valueColor, bg);
+        tft.drawString(firstVal, x + labelPx + charW, y, 1);
+    }
+}
+
+void progressHandler(int progress, size_t total, const String &message) {
+    const int clearTop = KVX_TOPBAR_H + 2;
+    int barWidth = map(progress, 0, total, 0, tftWidth - 40);
+    if (barWidth < 3) {
+        tft.fillRect(6, clearTop, tftWidth - 12, tftHeight - clearTop - 6, kvxConfig.bgColor);
+        tft.drawRect(18, tftHeight - 47, tftWidth - 36, 17, kvxConfig.priColor);
+        displayRedStripe(message, TFT_WHITE, kvxConfig.priColor);
+    }
+    tft.fillRect(20, tftHeight - 45, barWidth, 13, kvxConfig.priColor);
+}
+
 /*********************************************************************
 **  Function: loopOptions
 **  Where you choose among the options in menu
@@ -845,21 +957,6 @@ int loopOptions(
 }
 
 /***************************************************************************************
-** Function name: progressHandler
-** Description:   Função para manipular o progresso da atualização
-** Dependencia: prog_handler =>>    0 - Flash, 1 - LittleFS
-***************************************************************************************/
-void progressHandler(int progress, size_t total, const String &message) {
-    int barWidth = map(progress, 0, total, 0, tftWidth - 40);
-    if (barWidth < 3) {
-        tft.fillRect(6, 27, tftWidth - 12, tftHeight - 33, kvxConfig.bgColor);
-        tft.drawRect(18, tftHeight - 47, tftWidth - 36, 17, kvxConfig.priColor);
-        displayRedStripe(message, TFT_WHITE, kvxConfig.priColor);
-    }
-    tft.fillRect(20, tftHeight - 45, barWidth, 13, kvxConfig.priColor);
-}
-
-/***************************************************************************************
 ** Function name: drawOptions
 ** Description:   Função para desenhar e mostrar as opçoes de contexto
 ***************************************************************************************/
@@ -876,25 +973,23 @@ Opt_Coord drawOptions(
     // Uncomment to update the statusBar (causes flickering)
     // drawStatusBar();
 
-    int32_t optionsTopY = tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5;
+    const int menuFont = uiMenuFont();
+    const int rowH = uiRowH(menuFont);
+    const int linePx = uiLineH(menuFont);
+    const int charW = uiCharW(menuFont);
+    int32_t optionsTopY = tftHeight / 2 - menuSize * rowH / 2 - 5;
     TftFrame frame;
     tft.drawPixel(0, 0, kvxConfig.bgColor);
     if (firstRender) {
-        tft.fillRoundRect(
-            tftWidth * 0.10, optionsTopY, tftWidth * 0.8, uiRowH(FM) * menuSize + 10, 5, bgcolor
-        );
+        tft.fillRoundRect(tftWidth * 0.10, optionsTopY, tftWidth * 0.8, rowH * menuSize + 10, 5, bgcolor);
         tft.drawRoundRect(
-            tftWidth * 0.10,
-            tftHeight / 2 - menuSize * uiRowH(FM) / 2 - 5,
-            tftWidth * 0.8,
-            uiRowH(FM) * menuSize + 10,
-            5,
+            tftWidth * 0.10, tftHeight / 2 - menuSize * rowH / 2 - 5, tftWidth * 0.8, rowH * menuSize + 10, 5,
             fgcolor
         );
     }
     tft.setTextColor(fgcolor, bgcolor);
-    tft.setTextSize(FM);
-    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * uiRowH(FM) / 2);
+    tft.setTextSize(menuFont);
+    tft.setCursor(tftWidth * 0.10 + 5, tftHeight / 2 - menuSize * rowH / 2);
 
     int i = 0;
     int init = 0;
@@ -914,13 +1009,13 @@ Opt_Coord drawOptions(
             // Erase previously highlited element,
             if (i == last_index) {
                 tft.fillRoundRect(
-                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, FM * LH + 2, 3, kvxConfig.bgColor
+                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, linePx + 2, 3, kvxConfig.bgColor
                 );
             }
-            // Draw selection highlight bar
+            // Draw selection highlight bar (accent fill, matching scanner/submenu)
             if (i == index) {
                 tft.fillRoundRect(
-                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, FM * LH + 2, 3, kvxConfig.priColor
+                    tftWidth * 0.10 + 2, cursorY + 2, tftWidth * 0.8 - 4, linePx + 2, 3, kvxConfig.secColor
                 );
             }
 
@@ -931,18 +1026,18 @@ Opt_Coord drawOptions(
             String text = "";
             if (i == index) {
                 text += ">";
-                coord.x = tftWidth * 0.10 + 5 + FM * LW;
+                coord.x = tftWidth * 0.10 + 5 + charW;
                 coord.y = tft.getCursorY() + 4;
-                coord.size = (tftWidth * 0.8 - 10) / (LW * FM) - 1;
+                coord.size = (tftWidth * 0.8 - 10) / charW - 1;
                 coord.fgcolor = fgcolor;
                 coord.bgcolor = bgcolor;
             } else text += " ";
             text += String(options[i].label) + "              ";
             tft.setCursor(tftWidth * 0.10 + 5, tft.getCursorY() + 4);
 
-            // Draw text with appropriate colors for selection
-            if (i == index) { tft.setTextColor(bgcolor, kvxConfig.priColor); }
-            tft.println(text.substring(0, (tftWidth * 0.8 - 10) / (LW * FM) - 1));
+            // Selected row: bg text on accent fill
+            if (i == index) { tft.setTextColor(kvxConfig.bgColor, kvxConfig.secColor); }
+            tft.println(text.substring(0, (tftWidth * 0.8 - 10) / charW - 1));
 
             // Reset text color for next item
             tft.setTextColor(fgcolor, bgcolor);

@@ -139,8 +139,8 @@ void wg_setup() {
     padprintln(local_ip.toString());
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
     padprintln("");
-    padprintln("Endpoint: " + String(endpoint_address));
-    padprintln("Port: " + String(endpoint_port));
+    padField("Endpoint:", String(endpoint_address));
+    padField("Port:", String(endpoint_port));
     padprintln("");
     printFootnote("Press any key to return");
 

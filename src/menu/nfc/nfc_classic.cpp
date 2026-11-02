@@ -111,7 +111,7 @@ void nfcMfkey() {
     nfcTopBar("MFKey");
     tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
     padprintln("Cracking " + files[pick]);
-    padprintln("Size: " + String(sz) + " bytes");
+    padField("Size:", String(sz) + " bytes");
     padprintln("This can take minutes...");
     padprintln("Esc = cancel");
 
@@ -208,13 +208,13 @@ void nfcDictAttack() {
     }
     if (rc == RFIDInterface::SUCCESS) {
         area.addLine("Read OK");
-        area.addLine("UID: " + s.rfid->printableUID.uid);
-        area.addLine("Type: " + s.rfid->printableUID.picc_type);
+        area.addField("UID:", s.rfid->printableUID.uid);
+        area.addField("Type:", s.rfid->printableUID.picc_type);
         if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
     } else if (rc == RFIDInterface::TAG_AUTH_ERROR) {
         area.addLine("Auth failed on sectors.");
         area.addLine("Add keys (Config) or MFKey.");
-        area.addLine("UID: " + s.rfid->printableUID.uid);
+        area.addField("UID:", s.rfid->printableUID.uid);
         if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
     } else {
         area.addLine("Dict read failed.");
@@ -289,7 +289,7 @@ void nfcDumpEditor() {
         tft.fillScreen(kvxConfig.bgColor);
         drawKvxTopBar("NFC", "Edit");
     }
-    area.addLine("UID: " + s.rfid->printableUID.uid);
+    area.addField("UID:", s.rfid->printableUID.uid);
     area.addLine("OK = edit one line");
     area.addLine("");
     area.fromString(dump);

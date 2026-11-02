@@ -409,84 +409,83 @@ void updateTimeStr(struct tm timeInfo) {
 void showDeviceInfo() {
     ScrollableTextArea area = ScrollableTextArea("Dev Info");
 
-    area.addLine("kvxputer Version: " + String(KVXPUTER_VERSION));
-    area.addLine("EEPROM size: " + String(EEPROMSIZE));
+    area.addField("kvxputer Version:", String(KVXPUTER_VERSION));
+    area.addField("EEPROM size:", String(EEPROMSIZE));
     area.addLine("");
     area.addLine("[MEMORY]");
-    area.addLine("Total heap: " + formatBytes(ESP.getHeapSize()));
-    area.addLine("Free heap: " + formatBytes(ESP.getFreeHeap()));
+    area.addField("Total heap:", formatBytes(ESP.getHeapSize()));
+    area.addField("Free heap:", formatBytes(ESP.getFreeHeap()));
     if (psramFound()) {
-        area.addLine("Total PSRAM: " + formatBytes(ESP.getPsramSize()));
-        area.addLine("Free PSRAM: " + formatBytes(ESP.getFreePsram()));
+        area.addField("Total PSRAM:", formatBytes(ESP.getPsramSize()));
+        area.addField("Free PSRAM:", formatBytes(ESP.getFreePsram()));
     }
     area.addLine("");
     area.addLine("[NETWORK]");
-    area.addLine("MAC addr: " + String(WiFi.macAddress()));
+    area.addField("MAC addr:", String(WiFi.macAddress()));
     String localIP = WiFi.localIP().toString();
     String softAPIP = WiFi.softAPIP().toString();
     String ipStatus = (WiFi.isConnected()) ? (localIP != "0.0.0.0"    ? localIP
                                               : softAPIP != "0.0.0.0" ? softAPIP
                                                                       : "No valid IP")
                                            : "Not connected";
-    area.addLine("IP address: " + ipStatus);
+    area.addField("IP address:", ipStatus);
     area.addLine("");
     area.addLine("[STORAGE]");
-    area.addLine("LittleFS total: " + formatBytes(LittleFS.totalBytes()));
-    area.addLine("LittleFS used: " + formatBytes(LittleFS.usedBytes()));
-    area.addLine("LittleFS free: " + formatBytes(LittleFS.totalBytes() - LittleFS.usedBytes()));
+    area.addField("LittleFS total:", formatBytes(LittleFS.totalBytes()));
+    area.addField("LittleFS used:", formatBytes(LittleFS.usedBytes()));
+    area.addField("LittleFS free:", formatBytes(LittleFS.totalBytes() - LittleFS.usedBytes()));
     area.addLine("");
-    area.addLine("SD Card total: " + formatBytes(SD.totalBytes()));
-    area.addLine("SD Card used: " + formatBytes(SD.usedBytes()));
-    area.addLine("SD Card free: " + formatBytes(SD.totalBytes() - SD.usedBytes()));
+    area.addField("SD Card total:", formatBytes(SD.totalBytes()));
+    area.addField("SD Card used:", formatBytes(SD.usedBytes()));
+    area.addField("SD Card free:", formatBytes(SD.totalBytes() - SD.usedBytes()));
     area.addLine("");
 
 #ifdef HAS_SCREEN
     area.addLine("[SCREEN]");
-    area.addLine("Rotation: " + String(ROTATION));
-    area.addLine("Width: " + String(tftWidth) + "px");
-    area.addLine("Height: " + String(tftHeight) + "px");
-    area.addLine("Brightness: " + String(kvxConfig.bright) + "%");
+    area.addField("Rotation:", String(ROTATION));
+    area.addField("Width:", String(tftWidth) + "px");
+    area.addField("Height:", String(tftHeight) + "px");
+    area.addField("Brightness:", String(kvxConfig.bright) + "%");
     area.addLine("");
 #endif
 
     area.addLine("[GPIO]");
-    area.addLine("GROVE_SDA: " + String(kvxConfigPins.i2c_bus.sda));
-    area.addLine("GROVE_SCL: " + String(kvxConfigPins.i2c_bus.scl));
-    area.addLine("SYS_I2C_SDA: " + String(kvxConfigPins.sys_i2c.sda));
-    area.addLine("SYS_I2C_SCL: " + String(kvxConfigPins.sys_i2c.scl));
-    area.addLine("SERIAL TX: " + String(kvxConfigPins.uart_bus.tx));
-    area.addLine("SERIAL RX: " + String(kvxConfigPins.uart_bus.rx));
-    area.addLine("SPI_SCK_PIN: " + String(SPI_SCK_PIN));
-    area.addLine("SPI_MOSI_PIN: " + String(SPI_MOSI_PIN));
-    area.addLine("SPI_MISO_PIN: " + String(SPI_MISO_PIN));
-    area.addLine("SPI_SS_PIN: " + String(SPI_SS_PIN));
-    area.addLine("IR TX: " + String(TXLED));
-    area.addLine("IR RX: " + String(RXLED));
+    area.addField("GROVE_SDA:", String(kvxConfigPins.i2c_bus.sda));
+    area.addField("GROVE_SCL:", String(kvxConfigPins.i2c_bus.scl));
+    area.addField("SYS_I2C_SDA:", String(kvxConfigPins.sys_i2c.sda));
+    area.addField("SYS_I2C_SCL:", String(kvxConfigPins.sys_i2c.scl));
+    area.addField("SERIAL TX:", String(kvxConfigPins.uart_bus.tx));
+    area.addField("SERIAL RX:", String(kvxConfigPins.uart_bus.rx));
+    area.addField("SPI_SCK_PIN:", String(SPI_SCK_PIN));
+    area.addField("SPI_MOSI_PIN:", String(SPI_MOSI_PIN));
+    area.addField("SPI_MISO_PIN:", String(SPI_MISO_PIN));
+    area.addField("SPI_SS_PIN:", String(SPI_SS_PIN));
+    area.addField("IR TX:", String(TXLED));
+    area.addField("IR RX:", String(RXLED));
     area.addLine("");
 
     area.addLine("[BAT]");
-    area.addLine("Charge: " + String(getBattery()) + "%");
+    area.addField("Charge:", String(getBattery()) + "%");
 #ifdef USE_BQ27220_VIA_I2C
-    area.addLine("BQ27220 ADDR: " + String(BQ27220_I2C_ADDRESS));
-    area.addLine("Curr Capacity: " + String(bq.getRemainCap()) + "mAh");
-    area.addLine("Full Capacity: " + String(bq.getFullChargeCap()) + "mAh");
-    area.addLine("Design Capacity: " + String(bq.getDesignCap()) + "mAh");
-    area.addLine("Charging: " + String(bq.getIsCharging()));
-    area.addLine(
-        "Charging Voltage: " + String(((double)bq.getVolt(VOLT_MODE::VOLT_CHARGING) / 1000.0)) + "V"
+    area.addField("BQ27220 ADDR:", String(BQ27220_I2C_ADDRESS));
+    area.addField("Curr Capacity:", String(bq.getRemainCap()) + "mAh");
+    area.addField("Full Capacity:", String(bq.getFullChargeCap()) + "mAh");
+    area.addField("Design Capacity:", String(bq.getDesignCap()) + "mAh");
+    area.addField("Charging:", String(bq.getIsCharging()));
+    area.addField("Charging Voltage:", String(((double)bq.getVolt(VOLT_MODE::VOLT_CHARGING) / 1000.0)) + "V");
+    area.addField("Charging Current:", String(bq.getCurr(CURR_MODE::CURR_CHARGING)) + "mA");
+    area.addField(
+        "Time to Empty:",
+        String((bq.getTimeToEmpty() / 1440)) + " days " +
+            String(((bq.getTimeToEmpty() % 1440) / 60)) + " hrs " +
+            String(((bq.getTimeToEmpty() % 1440) % 60)) + " mins"
     );
-    area.addLine("Charging Current: " + String(bq.getCurr(CURR_MODE::CURR_CHARGING)) + "mA");
-    area.addLine(
-        "Time to Empty: " + String((bq.getTimeToEmpty() / 1440)) + " days " +
-        String(((bq.getTimeToEmpty() % 1440) / 60)) + " hrs " + String(((bq.getTimeToEmpty() % 1440) % 60)) +
-        " mins"
-    );
-    area.addLine("Avg Power Use: " + String(bq.getAvgPower()) + "mW");
-    area.addLine("Voltage: " + String(((double)bq.getVolt(VOLT_MODE::VOLT) / 1000.0)) + "V");
-    area.addLine("Raw Voltage: " + String(bq.getVolt(VOLT_MODE::VOLT_RWA)) + "mV");
-    area.addLine("Curr Current: " + String(bq.getCurr(CURR_INSTANT)) + "mA");
-    area.addLine("Avg Current: " + String(bq.getCurr(CURR_MODE::CURR_AVERAGE)) + "mA");
-    area.addLine("Raw Current: " + String(bq.getCurr(CURR_MODE::CURR_RAW)) + "mA");
+    area.addField("Avg Power Use:", String(bq.getAvgPower()) + "mW");
+    area.addField("Voltage:", String(((double)bq.getVolt(VOLT_MODE::VOLT) / 1000.0)) + "V");
+    area.addField("Raw Voltage:", String(bq.getVolt(VOLT_MODE::VOLT_RWA)) + "mV");
+    area.addField("Curr Current:", String(bq.getCurr(CURR_INSTANT)) + "mA");
+    area.addField("Avg Current:", String(bq.getCurr(CURR_MODE::CURR_AVERAGE)) + "mA");
+    area.addField("Raw Current:", String(bq.getCurr(CURR_MODE::CURR_RAW)) + "mA");
 #endif
 
     area.show();

@@ -220,6 +220,11 @@ void padprintln(long long n, int base = DEC, int16_t padx = 1);
 void padprintln(unsigned long long n, int base = DEC, int16_t padx = 1);
 void padprintln(double n, int digits, int16_t padx = 1);
 
+/** Key/value row via pad cursor: label priColor, value secColor, body font. */
+void padField(const String &label, const String &value, int16_t padx = 1);
+/** Key/value row at a fixed pixel position (live HUDs). */
+void drawKvRow(int16_t x, int16_t y, const String &label, const String &value);
+
 // loopOptions will now return the last index used in the function
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index = 0,

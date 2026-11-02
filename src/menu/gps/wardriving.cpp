@@ -397,14 +397,14 @@ void Wardriving::endSession() {
     clearInputFlags();
 
     ScrollableTextArea area("WD Summary");
-    area.addLine("File: " + (sessionName.length() ? sessionName : String("(none)")));
-    area.addLine("Rows: " + String(rowsDone));
-    area.addLine("WiFi: " + String(stats.wifiLogged) + "  BLE: " + String(stats.bleLogged));
-    area.addLine("Unique: " + String(uniqueDone));
-    area.addLine("Sweeps: " + String(sweepsDone));
-    area.addLine("Dist: " + String(stats.distance_m / 1000.0, 2) + " km");
-    if (writeErrs) area.addLine("Write errs: " + String(writeErrs));
-    area.addLine("On disk: " + String((unsigned)onDisk) + " B");
+    area.addField("File:", (sessionName.length() ? sessionName : String("(none)")));
+    area.addField("Rows:", String(rowsDone));
+    area.addField("WiFi:", String(stats.wifiLogged) + "  BLE: " + String(stats.bleLogged));
+    area.addField("Unique:", String(uniqueDone));
+    area.addField("Sweeps:", String(sweepsDone));
+    area.addField("Dist:", String(stats.distance_m / 1000.0, 2) + " km");
+    if (writeErrs) area.addField("Write errs:", String(writeErrs));
+    area.addField("On disk:", String((unsigned)onDisk) + " B");
     if (rowsDone == 0) {
         area.addLine("");
         area.addLine("No networks logged.");

@@ -52,7 +52,7 @@ void nameFloodMenu() {
             count++;
             tft.fillRect(10, 40, tftWidth - 20, 40, kvxConfig.bgColor);
             tft.drawString(names[idx], 10, uiStatusY(1));
-            tft.drawString("Ads: " + String((unsigned)count), 10, uiStatusY(2));
+            drawKvRow(10, uiStatusY(2), "Ads:", String((unsigned)count));
         }
         delay(10);
     }
@@ -82,7 +82,7 @@ void nameFloodMenu() {
             count++;
             tft.fillRect(10, 40, tftWidth - 20, 32, kvxConfig.bgColor);
             tft.drawString(names[idx], 10, uiStatusY(0));
-            tft.drawString("Ads: " + String((unsigned)count), 10, uiStatusY(1));
+            drawKvRow(10, uiStatusY(1), "Ads:", String((unsigned)count));
         }
         delay(10);
     }

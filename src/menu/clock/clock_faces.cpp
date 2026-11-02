@@ -147,21 +147,23 @@ void clockFaceDrawChargeStyle(
     const int kBarH = 10;
     int barY = tftHeight - kBarH - 4;
 
+    const int dateFont = uiMenuFont();
+    const int dateH = uiLineH(dateFont);
     if (showCalendar) {
         if (layoutChange || dateChanged) {
-            tft.fillRect(0, topY, tftWidth, FM * LH + 4, bg);
-            tft.setTextSize(FM);
+            tft.fillRect(0, topY, tftWidth, dateH + 4, bg);
+            tft.setTextSize(dateFont);
             tft.setTextColor(color, bg);
             tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
             strncpy(s_chargeLastDate, dateBuf, sizeof(s_chargeLastDate) - 1);
             s_chargeLastDate[sizeof(s_chargeLastDate) - 1] = '\0';
         }
 
-        uint8_t clockSize = 3;
+        uint8_t clockSize = (uint8_t)uiHeroFont();
         int clockLen = (int)strlen(s);
         if (clockLen < 1) clockLen = 8;
         while (clockSize > 1 && clockSize * 6 * clockLen > tftWidth - 56) clockSize--;
-        int clockY = topY + FM * LH + 4;
+        int clockY = topY + dateH + 4;
         if (layoutChange || timeChanged) {
             tft.fillRect(0, clockY, tftWidth - 54, clockSize * 8 + 2, bg);
             tft.setTextSize(clockSize);
@@ -171,8 +173,8 @@ void clockFaceDrawChargeStyle(
             s_chargeLastTime[sizeof(s_chargeLastTime) - 1] = '\0';
         }
         if (layoutChange || pctChanged) {
-            tft.fillRect(tftWidth - 54, clockY, 54, FM * LH + 2, bg);
-            tft.setTextSize(FM);
+            tft.fillRect(tftWidth - 54, clockY, 54, dateH + 2, bg);
+            tft.setTextSize(dateFont);
             tft.setTextColor(color, bg);
             tft.drawRightString(pctBuf, tftWidth - 4, clockY + 2, 1);
             s_chargeLastPct = pct;
@@ -187,19 +189,19 @@ void clockFaceDrawChargeStyle(
         }
     } else {
         if (layoutChange || dateChanged) {
-            tft.fillRect(0, topY, tftWidth, FM * LH + 4, bg);
-            tft.setTextSize(FM);
+            tft.fillRect(0, topY, tftWidth, dateH + 4, bg);
+            tft.setTextSize(dateFont);
             tft.setTextColor(color, bg);
             tft.drawCentreString(dateBuf, tftWidth / 2, topY + 2, 1);
             strncpy(s_chargeLastDate, dateBuf, sizeof(s_chargeLastDate) - 1);
             s_chargeLastDate[sizeof(s_chargeLastDate) - 1] = '\0';
         }
 
-        uint8_t clockSize = 4;
+        uint8_t clockSize = (uint8_t)uiHeroFont();
         int clockLen = (int)strlen(s);
         if (clockLen < 1) clockLen = 8;
         while (clockSize > 1 && clockSize * 6 * clockLen > tftWidth - 8) clockSize--;
-        int clockY = topY + FM * LH + 6;
+        int clockY = topY + dateH + 6;
         if (layoutChange || timeChanged) {
             tft.fillRect(0, clockY, tftWidth, clockSize * 8 + 2, bg);
             tft.setTextSize(clockSize);
@@ -210,8 +212,8 @@ void clockFaceDrawChargeStyle(
         }
         if (layoutChange || pctChanged) {
             int pctY = clockY + clockSize * 8 + 4;
-            tft.fillRect(0, pctY, tftWidth, FM * LH + 2, bg);
-            tft.setTextSize(FM);
+            tft.fillRect(0, pctY, tftWidth, dateH + 2, bg);
+            tft.setTextSize(dateFont);
             tft.setTextColor(color, bg);
             tft.drawCentreString(pctBuf, tftWidth / 2, pctY, 1);
             s_chargeLastPct = pct;

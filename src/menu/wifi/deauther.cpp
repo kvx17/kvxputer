@@ -434,12 +434,12 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
 
     drawMainBorderWithTitle("Station Deauth");
     tft.setTextSize(FP);
-    padprintln("Target: " + host.mac);
-    padprintln("AP: " + macToString(apBSSID));
+    padField("Target:", host.mac);
+    padField("AP:", macToString(apBSSID));
     String bandStr = (band == 1) ? "5GHz" : (band == 2) ? "6GHz" : "2.4GHz";
-    padprintln("CH:" + String(channel) + " (" + bandStr + ")");
+    padField("CH:", String(channel) + " (" + bandStr + ")");
     padprintln("Mode: AP");
-    if (useMultipleAPs) { padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs"); }
+    if (useMultipleAPs) { padField("Mesh:", String(sameSSID_APs.size()) + " APs"); }
     padprintln("");
     padprintln("Press BACK to STOP.");
 
@@ -686,8 +686,8 @@ void stationDeauth(Host host, const uint8_t *apBssidIn) {
 
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
-    padprintln("Frames sent: " + String(total_frames));
-    padprintln("Bursts: " + String(burst_counter));
+    padField("Frames sent:", String(total_frames));
+    padField("Bursts:", String(burst_counter));
     if (is_5ghz) { padprintln("5GHz/6GHz mode used"); }
     if (has_multiple_bands) { padprintln("Multi-band attack used"); }
 
@@ -713,9 +713,9 @@ void runDeauthAll(uint8_t *targetMAC, int channel) {
     tft.setTextSize(FP);
     padprintln("Deauthing all clients...");
     String bandStr = (band == 1) ? "5GHz" : (band == 2) ? "6GHz" : "2.4GHz";
-    padprintln("Channel: " + String(channel) + " (" + bandStr + ")");
+    padField("Channel:", String(channel) + " (" + bandStr + ")");
     padprintln("Mode: AP");
-    if (useMultipleAPs) { padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs"); }
+    if (useMultipleAPs) { padField("Mesh:", String(sameSSID_APs.size()) + " APs"); }
     padprintln("");
     padprintln("Press BACK to STOP.");
 
@@ -800,7 +800,7 @@ void runDeauthAll(uint8_t *targetMAC, int channel) {
     delay(500);
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
-    padprintln("Frames sent: " + String(total_frames));
+    padField("Frames sent:", String(total_frames));
 
     if (savedState.was_connected) {
         padprintln("Restoring WiFi...");
@@ -908,9 +908,9 @@ void runDeauthTargetList(const std::vector<Host> &targets, uint8_t *targetMAC, i
     tft.setTextSize(FP);
     padprintln("Deauthing " + String(targets.size()) + " targets...");
     String bandStr = (band == 1) ? "5GHz" : (band == 2) ? "6GHz" : "2.4GHz";
-    padprintln("Channel: " + String(channel) + " (" + bandStr + ")");
+    padField("Channel:", String(channel) + " (" + bandStr + ")");
     padprintln("Mode: AP");
-    if (useMultipleAPs) { padprintln("Mesh: " + String(sameSSID_APs.size()) + " APs"); }
+    if (useMultipleAPs) { padField("Mesh:", String(sameSSID_APs.size()) + " APs"); }
     padprintln("");
     padprintln("Press BACK to STOP.");
 
@@ -989,7 +989,7 @@ void runDeauthTargetList(const std::vector<Host> &targets, uint8_t *targetMAC, i
     delay(500);
     tft.fillRect(0, tftHeight - 60, tftWidth, 60, TFT_BLACK);
     padprintln("Attack stopped.");
-    padprintln("Frames sent: " + String(total_frames));
+    padField("Frames sent:", String(total_frames));
 
     if (savedState.was_connected) {
         padprintln("Restoring WiFi...");
@@ -1126,7 +1126,7 @@ void scanClientsOnAP(uint8_t *targetMAC, int channel) {
             tft.setCursor(10, 80);
             padprintln("Scanning... (" + String(scanCount) + "s)");
             padprintln("");
-            padprintln("Clients found: " + String(detectedClients.size()));
+            padField("Clients found:", String(detectedClients.size()));
             padprintln("");
 
             String spinner = "|/-\\";

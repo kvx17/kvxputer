@@ -655,7 +655,7 @@ void display_signal_data(RfCodes received, bool headless) {
     // if (kvxConfigPins.rfModule == CC1101_SPI_MODULE) {
     //     int rssi = ELECHOUSE_cc1101.getRssi();
     //     tft.drawPixel(0, 0, 0);
-    //     padprintln("Rssi: " + String(rssi));
+    //     padField("Rssi:", String(rssi));
     // }
 
     // if (!received.indexed_durations.empty()) {
@@ -665,10 +665,10 @@ void display_signal_data(RfCodes received, bool headless) {
     //             tft.print(String(received.indexed_durations[i]) + "us, ");
     //         else tft.println(String(received.indexed_durations[i]) + "us");
     //     }
-    // } else if (received.te) padprintln("PulseLenght: " + String(received.te) + "us");
+    // } else if (received.te) padField("PulseLenght:", String(received.te) + "us");
     // else padprintln("PulseLenght: unknown");
 
-    // padprintln("Frequency: " + String(received.frequency) + " Hz");
+    // padField("Frequency:", String(received.frequency) + " Hz");
     rf_info_line(headless, "");
 }
 

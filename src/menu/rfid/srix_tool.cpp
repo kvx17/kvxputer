@@ -86,7 +86,7 @@ void SRIXTool::setup() {
         uint8_t fw_minor = (ver >> 8) & 0xFF;
 
         padprintln("Chip: PN5" + String(chip, HEX));
-        padprintln("FW: " + String(fw_major) + "." + String(fw_minor));
+        padField("FW:", String(fw_major) + "." + String(fw_minor));
     }
     delay(1000);
 #ifdef T_EMBED_1101
@@ -284,7 +284,7 @@ void SRIXTool::read_tag() {
         if (i < 7) uid_str += " ";
     }
     uid_str.toUpperCase();
-    padprintln("UID: " + uid_str);
+    padField("UID:", uid_str);
     padprintln("");
 
     // Read 128 blocks
@@ -422,16 +422,16 @@ void SRIXTool::write_tag() {
     } else if (blocks_written > 0) {
         displayWarning("Partial write!", true);
         padprintln("");
-        padprintln("Written: " + String(blocks_written) + "/128");
-        padprintln("Failed: " + String(blocks_failed));
+        padField("Written:", String(blocks_written) + "/128");
+        padField("Failed:", String(blocks_failed));
         padprintln("");
         tft.setTextSize(FP);
 
         // Over 10 failed block add "..."
         if (blocks_failed > 10) {
-            padprintln("Failed blocks: " + failed_blocks + "...");
+            padField("Failed blocks:", failed_blocks + "...");
         } else {
-            padprintln("Failed blocks: " + failed_blocks);
+            padField("Failed blocks:", failed_blocks);
         }
 
     } else {
@@ -534,7 +534,7 @@ void SRIXTool::show_pn_info() {
 
     padprintln("Chip: PN5" + String(chip, HEX));
     padprintln("");
-    padprintln("Firmware: " + String(fw_major) + "." + String(fw_minor));
+    padField("Firmware:", String(fw_major) + "." + String(fw_minor));
     padprintln("");
 
     if (_has_hardware_pins) {
@@ -646,7 +646,7 @@ void SRIXTool::save_file() {
 
     displaySuccess("File saved!");
     padprintln("");
-    padprintln("Path: " + filepath);
+    padField("Path:", filepath);
 
     delayWithReturn(2500);
     set_state(IDLE_MODE);
@@ -724,7 +724,7 @@ void SRIXTool::load_file_data(FS *fs, const String &filepath) {
     }
 
     display_banner();
-    padprintln("Loading: " + filepath);
+    padField("Loading:", filepath);
     padprintln("");
 
     File file = (*fs).open(filepath, FILE_READ);
@@ -830,9 +830,9 @@ void SRIXTool::load_file_data(FS *fs, const String &filepath) {
     padprintln("File:");
     padprintln(filename); // Rewrite for long filename
     padprintln("");
-    padprintln("UID: " + uid_from_file);
+    padField("UID:", uid_from_file);
     padprintln("");
-    padprintln("Blocks: " + String(blocks_loaded));
+    padField("Blocks:", String(blocks_loaded));
     padprintln("");
     tft.setTextSize(FP);
 

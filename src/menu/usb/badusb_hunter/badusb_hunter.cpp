@@ -280,7 +280,7 @@ static void drawDevice(const UsbDeviceInfo &device) {
     y += lh;
     tft.drawString(String("Class: ") + className(device.deviceClass), x0, y, 1);
     y += lh;
-    tft.drawString("Interfaces: " + String(device.numInterfaces), x0, y, 1);
+    drawKvRow(x0, y, "Interfaces:", String(device.numInterfaces));
     y += lh;
     for (int i = 0; i < device.numInterfaces && i < 8; i++) {
         tft.drawString(" " + String(i) + ": " + className(device.interfaceClasses[i]), x0, y, 1);

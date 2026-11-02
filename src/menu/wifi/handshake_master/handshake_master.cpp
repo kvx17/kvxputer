@@ -203,7 +203,7 @@ void handshakeMasterRun() {
             }
         }
         tft.fillRect(10, 58, tftWidth - 20, 16, kvxConfig.bgColor);
-        tft.drawString("Frames: " + String((unsigned)gRxCount), 10, 58);
+        drawKvRow(10, 58, "Frames:", String((unsigned)gRxCount));
         delay(40);
     }
 

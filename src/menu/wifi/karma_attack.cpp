@@ -2448,16 +2448,16 @@ void updateKarmaDisplay() {
         padprint("Total:" + String(totalProbes));
         padprint("Uniq:" + String(uniqueClients), 7);
         padprint("Act:" + String(activeNetworks.size()), 13);
-        padprintln("Pend:" + String(pendingPortals.size()), 19);
+        padField("Pend:", String(pendingPortals.size()), 19);
 
         padprint("Queue:" + String(responseQueue.size()));
         padprint("Beac:" + String(beaconsSent), 7);
         padprint("Karma:" + String(karmaResponsesSent), 13);
-        padprintln("Clone:" + String(cloneAttacksLaunched), 19);
+        padField("Clone:", String(cloneAttacksLaunched), 19);
 
         padprint("Port:" + String(autoPortalsLaunched) + "/" + String(activePortalCount()));
         padprint("HS:" + String(handshakeBuffer.size()), 10);
-        padprintln("PMKID:" + String(pmkidCaptured), 16);
+        padField("PMKID:", String(pmkidCaptured), 16);
 
         padprint("Ch:" + String(pgm_read_byte(&karma_channels[channl % 14])));
         String hopStatus = String(auto_hopping ? "Auto:" : "Man:") + String(hop_interval) + "ms";
@@ -2502,7 +2502,7 @@ void updateKarmaDisplay() {
         }
 
         if (broadcastAttack.isActive()) {
-            padprintln("Broadcast:" + broadcastAttack.getProgressString());
+            padField("Broadcast:", broadcastAttack.getProgressString());
         } else {
             padprintln("");
         }
@@ -2779,16 +2779,16 @@ void karma_setup() {
                 {"Enhanced Stats",
                  [&]() {
                      ScrollableTextArea area = ScrollableTextArea("Adv Stats");
-                     area.addLine("Total: " + String(totalProbes));
-                     area.addLine("Unique: " + String(uniqueClients));
-                     area.addLine("Karma: " + String(karmaResponsesSent));
-                     area.addLine("Beacons: " + String(beaconsSent));
-                     area.addLine("Active: " + String(activeNetworks.size()));
-                     area.addLine("Pending: " + String(pendingPortals.size()));
-                     area.addLine("Portals: " + String(activePortalCount()));
-                     area.addLine("Blacklist: " + String(macBlacklist.size()));
-                     area.addLine("PMKID: " + String(pmkidCaptured));
-                     area.addLine("Handshakes: " + String(handshakeBuffer.size()));
+                     area.addField("Total:", String(totalProbes));
+                     area.addField("Unique:", String(uniqueClients));
+                     area.addField("Karma:", String(karmaResponsesSent));
+                     area.addField("Beacons:", String(beaconsSent));
+                     area.addField("Active:", String(activeNetworks.size()));
+                     area.addField("Pending:", String(pendingPortals.size()));
+                     area.addField("Portals:", String(activePortalCount()));
+                     area.addField("Blacklist:", String(macBlacklist.size()));
+                     area.addField("PMKID:", String(pmkidCaptured));
+                     area.addField("Handshakes:", String(handshakeBuffer.size()));
                      area.show();
                      screenNeedsRedraw = true;
                  }                   },
@@ -2987,9 +2987,9 @@ void karma_setup() {
                  [&]() {
                               ScrollableTextArea area = ScrollableTextArea("SSID DB");
                               size_t total = SSIDDatabase::getCount();
-                              area.addLine("Total SSIDs: " + String(total));
+                              area.addField("Total SSIDs:", String(total));
                               area.addLine("Cached: streaming");
-                              area.addLine("Progress: " + broadcastAttack.getProgressString());
+                              area.addField("Progress:", broadcastAttack.getProgressString());
                               area.show();
                           }},
                          {"Set Speed",
@@ -3251,17 +3251,17 @@ void karma_setup() {
                      for (const auto &clientPair : clientBehaviors)
                          if (clientPair.second.isVulnerable) vulnCount++;
                      ScrollableTextArea area = ScrollableTextArea("Karma Stat");
-                     area.addLine("Probes: " + String(totalProbes));
-                     area.addLine("Uniq Clients: " + String(uniqueClients));
-                     area.addLine("Responses: " + String(karmaResponsesSent));
-                     area.addLine("Portals: " + String(autoPortalsLaunched));
-                     area.addLine("Clone Atks: " + String(cloneAttacksLaunched));
-                     area.addLine("Deauth Pkt: " + String(deauthPacketsSent));
-                     area.addLine("Vulnerable: " + String(vulnCount));
-                     area.addLine("Pend Atks: " + String(pendingPortals.size()));
-                     area.addLine("Act Portal: " + String(activePortalCount()));
-                     area.addLine("PMKID Capt: " + String(pmkidCaptured));
-                     area.addLine("Handshakes: " + String(handshakeBuffer.size()));
+                     area.addField("Probes:", String(totalProbes));
+                     area.addField("Uniq Clients:", String(uniqueClients));
+                     area.addField("Responses:", String(karmaResponsesSent));
+                     area.addField("Portals:", String(autoPortalsLaunched));
+                     area.addField("Clone Atks:", String(cloneAttacksLaunched));
+                     area.addField("Deauth Pkt:", String(deauthPacketsSent));
+                     area.addField("Vulnerable:", String(vulnCount));
+                     area.addField("Pend Atks:", String(pendingPortals.size()));
+                     area.addField("Act Portal:", String(activePortalCount()));
+                     area.addField("PMKID Capt:", String(pmkidCaptured));
+                     area.addField("Handshakes:", String(handshakeBuffer.size()));
                      area.show();
                      screenNeedsRedraw = true;
                  }},
@@ -3278,7 +3278,7 @@ void karma_setup() {
             tft.setTextSize(FP);
             tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
             padprintln("Saved to " + FileSys);
-            if (templateSelected) padprintln("Template: " + selectedTemplate.name);
+            if (templateSelected) padField("Template:", selectedTemplate.name);
             else padprintln("Template: None");
             padprintln("SEL/ESC: Menu | Prev/Next: Channel");
 

@@ -18,6 +18,9 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - **Wireless toolkit** — WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID, NFC, GPS, FM, LoRa
 - **Customization** — shortcuts, SD themes, RGB LED, UI colors/brightness, startup app (**Config**)
 - **NetOps** — scanning, rogue DHCP/DNS, NTLM, WPAD, SIP, CCTV, SSH, tunnels, and related lab tools
+- **PC Connect** — drive WiFi/BLE/IR/RF/RFID/NFC tools from a Linux or macOS PC over one USB cable ([PC Connect](PCConnect/README.md))
+- **Meshtastic** — chat on Meshtastic (EU868) and list nearby nodes from the Cardputer Adv LoRa Cap
+- **Quick search** — press **Space** on the home grid to find any app or file
 - **HID & BadUSB** — USB/Bluetooth HID via [kvxkeyboard](docs/HID_REMOTE.md)
 - **Universal remote** — learn/replay Flipper-style `.ir` profiles with [kremote](docs/KREMOTE.md)
 - **Grove ecosystem** — Scroll, Joystick, PaHub, RFID, RF, IR, GPS, and more on PORT.A
@@ -132,19 +135,30 @@ Copy the **contents** of `[tools/sd_pack/](tools/sd_pack/README.md)` to the micr
   netops/              ciw, cctv, crawler, printer, responder
   infrared/profiles/   Flipper-style .ir library
   infrared/esl/        ESL bitmaps
+  rf/library/          sample .sub presets (RF → Protocol Library)
   ble/  rfid/  media/
 /root/themes/
 /menu/scripts/         BadUSB / interpreter samples
+/PCConnect/            optional: PC-side scripts to copy to any PC
 ```
 
 
 | Source                            | Goes where                        |
 | --------------------------------- | --------------------------------- |
 | `tools/sd_pack/` contents         | SD card root                      |
+| `PCConnect/` folder (recommended) | SD card root → `/PCConnect/`      |
 | Companion `.bin`                  | SD → `/support_files/companions/` |
 | `tools/build/data/support_files/` | LittleFS via `uploadfs`           |
 | `kvxputer-*.bin`                  | Flash over USB                    |
 
+
+**Tip: also copy the `PCConnect/` folder to the SD card.** Then the Cardputer carries its own PC-side scripts. On any computer:
+
+1. Plug in the Cardputer and open **USB → Mass Storage**. The SD card appears as a USB drive.
+2. Copy `PCConnect/` from the drive to the PC, then eject and exit Mass Storage.
+3. Open **PC Connect** on the Cardputer and run `python3 pcconnect.py` on the PC (needs `pip install pyserial`).
+
+You don't need the repo or an internet connection on that PC. Full guide: [PC Connect](PCConnect/README.md).
 
 Details: [SD pack](tools/sd_pack/README.md), [Reference / storage](docs/REFERENCE.md).
 
@@ -242,7 +256,7 @@ On-device setup lives under **Modules**. Domain-specific pin/module picks live u
 | GPS module                                                            | UART on Grove         | **GPS** wardriving / tracker           | **GPS → Config**                         |
 | Adafruit Si4713                                                       | I2C                   | **FM** broadcast                       | Board flag `FM_SI4713`                   |
 | W5500 Ethernet                                                        | SPI                   | **Ethernet**                           | SPI CS shared with Grove SPI stack       |
-| Cardputer Adv LoRa Cap                                                | Onboard SX1262        | **LoRa** chat                          | Present when `HAS_LORA_CAP`              |
+| Cardputer Adv LoRa Cap                                                | Onboard SX1262 + GPS  | **LoRa** chat, Meshtastic; **GPS**     | Present when `HAS_LORA_CAP`              |
 | Mic (SPM1423 / INMP441)                                               | Onboard / board pins  | **Tools → Microphone**                 | Board mic flags                          |
 | Chameleon Ultra                                                       | BLE                   | **RFID → Chameleon**                   | Power on companion, then open app        |
 | Amiibolink                                                            | BLE                   | **RFID → Amiibolink**                  | Power on companion, then open app        |
@@ -409,12 +423,31 @@ SPI Ethernet module on the shared SPI CS line.
 Bundled SX1262 LoRa when `HAS_LORA_CAP` is set.
 
 
-| Serves   | Apps                                |
-| -------- | ----------------------------------- |
-| **LoRa** | Chat, settings, username, frequency |
+| Serves   | Apps                                                               |
+| -------- | ------------------------------------------------------------------ |
+| **LoRa** | Chat, Meshtastic, Antenna Check, settings, username, frequency     |
 
 
-GPS Config can also expose LoRa Cap options on Adv.
+The LoRa Cap also carries a GPS. **GPS → Config → GPS Source** picks **Auto (Cap then Grove)**, **Cap LoRa-1262**, or **Unit GPS (Grove)**; **Configure LoRa Cap** sets GPS 115200 baud (RX15/TX13), the SX1262 at 868 MHz, and turns the antenna switch on.
+
+#### Meshtastic
+
+**LoRa → Meshtastic** talks to real Meshtastic devices (phones, T-Beams, Heltecs, …) on the same channel.
+
+| Entry        | What it does                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**     | Channel chat. **Enter** types a message, `;` / `.` scroll, **Esc** leaves. "Send failed / duty" means the radio is busy or the duty-cycle limit was hit; wait and retry. |
+| **Nodes**    | Nodes heard so far: short name / ID, SNR, seconds since last heard. The top line shows your own name, node ID, frequency, and preset.          |
+| **Settings** | Modem preset (**LongFast** default, LongSlow, MediumSlow, MediumFast), channel name, PSK (**Default (AQ==)** or a hex key), short name (4 chars), long name. **Apply radio** restarts the radio with the new values. |
+
+- Region is fixed to **EU868** in this release.
+- With the default channel and PSK you join the public LongFast mesh. To talk privately, set the same channel name and hex PSK on every device.
+- Your node announces itself periodically so it shows up in other nodes' lists. The default name is `kvxputer xxxx` (last bytes of the MAC).
+- Settings are saved to the LoRa settings file on LittleFS.
+
+#### Antenna Check
+
+**LoRa → Antenna Check** samples RSSI with the Cap's antenna switch on and off and reports **Antenna connected**, **RF energy present**, or **Antenna looks open**. Use it before transmitting to make sure an antenna is attached.
 
 ### Microphone
 
@@ -445,7 +478,7 @@ No Grove required — BLE/UART companions:
 
 ### Companion ESP firmwares
 
-Separate sketches in `[tools/companions/](tools/companions/README.md)`. **Not** part of Cardputer flash. Build/upload from a PC, copy `.bin` to SD `/support_files/companions/`, list under **Modules → Companion bins**.
+Separate sketches in `[tools/companions/](tools/companions/README.md)`. **Not** part of Cardputer flash. Build/upload from a PC, copy `.bin` to SD `/support_files/companions/`, list under **Modules → Companions**.
 
 
 | Env                        | Hardware | Serves                    |
@@ -454,7 +487,9 @@ Separate sketches in `[tools/companions/](tools/companions/README.md)`. **Not** 
 | `companion-findmy`         | ESP32-S3 | **BLE → FindMyEvil**      |
 | `companion-chatmesh-relay` | ESP32    | **NetOps → EvilChatMesh** |
 | `companion-c5-unified`     | ESP32-C5 | **WiFi → ESP32C5 Serial** |
+| `companion-c5-802154`      | ESP32-C5 | **WiFi → ESP32C5 Serial → 802.15.4 Sniff** (Zigbee/Thread channels) |
 
+`companion-c5-802154` is a separate image from `companion-c5-unified`; flash the one that matches the submenu you want to use.
 
 ```bash
 pio run -e companion-csi-beacon
@@ -587,6 +622,7 @@ Needs RF433 and/or CC1101 — see [Modules & Add-ons](#modules--add-ons).
 | **Scan/copy**                                   | Capture and replay remotes.            |
 | **Record RAW** *(lite off)*                     | Raw Sub-GHz captures.                  |
 | **Custom SubGhz** *(lite off)*                  | Send presets from storage.             |
+| **Protocol Library** *(lite off)*               | Browse and send known `.sub` presets from `support_files/rf/library/` (samples: gate, car fob, doorbell) and your own `rf/presets`. |
 | **Spectrum**                                    | Live spectrum.                         |
 | **RSSI / SquareWave / Spectogram** *(lite off)* | Alternate visualizations.              |
 | **Listen** *(lite off)*                         | Audio listen path when speaker exists. |
@@ -666,11 +702,24 @@ Post-read Tag-O-Matic actions (NFC domain) also offer Compare, Magic write, Dete
 
 | Tool                          | Purpose                                                              |
 | ----------------------------- | -------------------------------------------------------------------- |
-| **Wardriving**                | Log WiFi and/or BLE with GPS to CSV.                                 |
+| **Wardriving**                | Scan WiFi, BLE, or both with GPS and log WiGLE-format CSV. Submenu also has **View Captures** and **WD Config**. |
 | **Site Survey** *(lite off)*  | Channel airtime × GPS CSV under `/kvxputer/app/WdBoth/survey_*.csv`. |
 | **Wardriving Master** *(ext)* | Multi-device collector mode.                                         |
 | **GPS Tracker** *(lite off)*  | Tracks / simple map HTML.                                            |
-| **Config**                    | Baud rate and UART pins.                                             |
+| **Config**                    | GPS Source (Auto / LoRa Cap / Grove), baud rate, UART pins, Configure LoRa Cap. |
+
+**Wardriving details**
+
+- **Live screen:** GPS status (`not connected` / `detecting location` / `fix OK`), rows logged, WiFi/BLE counts, unique devices, sweeps, distance. Logs go to SD if present, otherwise LittleFS.
+- **Summary** on exit: file name, rows, unique count, distance, bytes on disk, and a warning if the file looks too small (SD write problem).
+- **View Captures:** browse saved sessions in `/kvxputer/app/WdBoth/` and open any network for SSID, BSSID, auth, and first-seen details.
+- **WD Config** (saved per device):
+  - *GPS & quality:* GPS log mode, minimum satellites, accuracy threshold (m), GMT offset.
+  - *Scanning:* scan mode, active/passive dwell, scan delay, country code, TX power.
+  - *Privacy:* MAC rotate interval, MAC OUI spoof.
+  - *Alerts:* beep on new AP, on blocked (excluded) device, on geofence hit.
+  - *WiGLE upload:* auto-upload on launch when your **Upload SSID** (home Wi‑Fi) is in range, Wi‑Fi password, gzip, delete after upload, minimum sweeps before a session counts (thin sessions are quarantined).
+  - *Other:* stats CSV, **Clear exclude lists**, **Save**.
 
 
 
@@ -678,13 +727,17 @@ Post-read Tag-O-Matic actions (NFC domain) also offer Compare, Magic write, Dete
 ### USB
 
 
-| Tool                                             | Purpose                   |
-| ------------------------------------------------ | ------------------------- |
-| **kvxkeyboard HID** *(lite off)*                 | USB HID remote.           |
-| **BadUSB** *(lite off)*                          | DuckyScript over USB.     |
-| **USB Keyboard / Clicker (legacy)** *(lite off)* | Older HID helpers.        |
-| **USB U2F** *(when USB_as_HID)*                  | U2F gadget experiments.   |
-| **Mass Storage** *(OTG)*                         | Expose SD/FS as USB disk. |
+| Tool                                             | Purpose                                                                                       |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| **PC Connect** *(lite off)*                      | Control radio tools from a PC over USB with `PCConnect/pcconnect.py`. [Docs](PCConnect/README.md). Also a home-grid tile. |
+| **kvxkeyboard HID** *(lite off)*                 | USB HID remote.                                                                               |
+| **BadUSB** *(lite off)*                          | DuckyScript over USB.                                                                         |
+| **USB Keyboard / Clicker (legacy)** *(lite off)* | Older HID helpers.                                                                            |
+| **USB U2F** *(when USB_as_HID)*                  | U2F gadget experiments.                                                                       |
+| **BadUSB Hunter** *(OTG, lite off)*              | USB host profiler: plug a suspicious USB device into the Cardputer to see if it acts like a BadUSB keyboard. |
+| **Mass Storage** *(OTG)*                         | Expose SD/FS as a USB disk (handy for copying `PCConnect/` to a PC).                          |
+
+**PC Connect in short:** open **PC Connect** on the Cardputer (screen shows `Link: waiting`), then on a Linux/macOS PC run `python3 pcconnect.py` from the `PCConnect/` folder. The script finds the device and offers WiFi analyzer, BLE scan, IR receive/send, Sub-GHz RX/RSSI, RFID read, a full NFC toolkit, GPIO console, and Jam Detect (plus Wall of Flipper / Airtag / Skimmer on full builds). Results stream to the PC terminal and logs land in `PCConnect/logs/`. **Esc** on the Cardputer ends the session.
 
 
 
@@ -696,9 +749,28 @@ Post-read Tag-O-Matic actions (NFC domain) also offer Compare, Magic write, Dete
 | ------------------------ | -------------------------------------- |
 | **SD Card / LittleFS**   | Browse and manage files.               |
 | **WebUI**                | HTTP file manager over Wi‑Fi.          |
-| **File Share**           | WPA2 AP file browser for phones/PCs.   |
-| **Connect** *(lite off)* | Peer file/command sharing over serial. |
+| **File Share**           | Browser-based file manager for phones/PCs, password-protected. |
+| **Connect** *(lite off)* | Send/receive files and commands between two kvxputer devices over ESP-NOW. |
 | **Mass Storage**         | Same MSC expose as USB.                |
+
+**File Share** lets any phone or PC browse, download, and upload files on the SD card / LittleFS from a web browser, with no app needed.
+
+1. **Files → File Share** (or **WiFi → File Share**). First set credentials if you like: **Set AP SSID**, **Set AP password** (min 8 chars), **Set portal user**, **Set portal pwd** (min 4 chars).
+2. **Start**, then pick a mode:
+   - **Create AP** — the Cardputer makes its own WPA2 network. Scan the QR on screen to join from a phone.
+   - **Use WiFi** — share over the Wi‑Fi you are already connected to (connect first under **WiFi → Connect to Wifi**).
+3. Open the URL shown on screen and log in with the portal user/password.
+
+On the share screen:
+
+| Key                  | Action                                                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| **Space**            | Show / hide the passwords                                                                      |
+| **Enter**            | Open the transfer log (uploads, downloads, logins)                                             |
+| Next (`/` or `.`)    | Cycle screens: info → Wi‑Fi join QR → URL QR (**Use WiFi** mode has only info → URL QR)        |
+| **Esc**              | Stop sharing. During an upload it asks first: **Enter** stops the upload, **Esc** keeps going |
+
+The info screen shows the SSID, URL, portal user, connected clients, and the last transfer. WebUI and File Share cannot run at the same time.
 
 
 
@@ -713,6 +785,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 | Tool                            | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Calculator**                  | Scientific calculator: `+ - * / ^ %`, trig/logs, `pi`/`e`/`ans`, DEG/RAD; letter shortcuts (`s`/`c`/`t`…), Fn overlay; Esc/`clear, fn+Ok exit;`*`multiplies (drawn as green`x`),` x `solves linear equations (`2x=4`).                                                                                                                                                                                                                            |
+| **Calculators**                 | Quick engineering/IT calculators: Subnet, Base converter, Byte units, Resistor color, LED resistor, Voltage divider, Baud bit-time, dBm and power, Epoch, Temp/Length/AWG, Bitmask, CRC, Units, Ohm's law, Voltage drop, Motor, Gas law, Flow and pipe. |
 | **Media Player** *(speaker)*    | Browse audio on SD/`support_files/media/audio` and play via the built-in audio pipeline (MP3/WAV/FLAC/AAC/OPUS/MOD/RTTTL).                                                                                                                                                                                                                                                                                                                        |
 | **PDA** *(lite off)*            | Pocket Device Assistant with a Wii-style channel hub: Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, and Calculator. Data lives under `support_files/pda/`. Cardputer uses a physical-keyboard caret editor; boards without a keyboard keep the on-screen pad. Calendar: `[]` / Fn+←→ month, Fn+↑↓ year, arrows day. Settings (timezone, shortcuts, LED, …) mirror to SD `/kvxputer/userSettings.json` when an SD card is mounted. |
 | **QRCodes**                     | Built-in and custom QR codes. Defaults lead with [https://github.com/kvx17/kvxputer](https://github.com/kvx17/kvxputer), then softAP Wi‑Fi and Rickroll.                                                                                                                                                                                                                                                                                          |
@@ -762,7 +835,7 @@ Run `.bjs` scripts from `/menu/scripts/` (SD preferred). **Load…** to browse. 
 
 | Menu         | Needs                 | Tools                                  |
 | ------------ | --------------------- | -------------------------------------- |
-| **LoRa**     | LoRa Cap / board LoRa | Chat, settings, username, frequency    |
+| **LoRa**     | LoRa Cap / board LoRa | Chat, Meshtastic *(LoRa Cap)*, Antenna Check, settings, username, frequency |
 | **FM**       | Si4713                | Broadcast, spectrum, Hijack TA         |
 | **Ethernet** | W5500                 | Scan hosts, DHCP starvation, MAC flood |
 
@@ -820,6 +893,7 @@ Pin matrix: `[tools/porting/boards/m5stack-tab5/connections.md](tools/porting/bo
 | `docs/`                                           | Architecture, feature maps, HID/IR guides |
 | `tools/sd_pack/`                                  | Copy-to-SD assets                         |
 | `tools/companions/`                               | Extra-ESP companion sketches              |
+| `PCConnect/`                                      | PC-side Python host for **PC Connect**    |
 | `resources/`                                      | Gitignored local reference only           |
 
 
@@ -833,6 +907,7 @@ Pin matrix: `[tools/porting/boards/m5stack-tab5/connections.md](tools/porting/bo
 - [Feature map](docs/EVIL_FEATURE_MAP.md)
 - [Reference / storage](docs/REFERENCE.md)
 - [SD pack](tools/sd_pack/README.md)
+- [PC Connect](PCConnect/README.md)
 - [Companion firmware](tools/companions/README.md)
 - [WiFi / raw frames](docs/WIFI_P0_AND_RAW_FRAMES.md)
 - [kvxkeyboard HID](docs/HID_REMOTE.md)

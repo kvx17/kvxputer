@@ -194,8 +194,8 @@ void nfcFieldPoll() {
             nfcTopBar("Field");
             tft.setCursor(BORDER_PAD_X, KVX_TOPBAR_H + 4);
             padprintln(present ? "TAG PRESENT" : "no tag");
-            if (s.rfid->printableUID.uid.length()) padprintln("UID: " + s.rfid->printableUID.uid);
-            if (lastHit) padprintln("Last hit: " + String(millis() - lastHit) + " ms ago");
+            if (s.rfid->printableUID.uid.length()) padField("UID:", s.rfid->printableUID.uid);
+            if (lastHit) padField("Last hit:", String(millis() - lastHit) + " ms ago");
             padprintln("");
             padprintln("Esc = stop");
             wasPresent = present;

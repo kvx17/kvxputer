@@ -47,7 +47,7 @@ void wpadMenu() {
             c.print(body);
             c.stop();
             tft.fillRect(10, 72, tftWidth - 20, 14, kvxConfig.bgColor);
-            tft.drawString("Hits: " + String(hits), 10, uiStatusY(2));
+            drawKvRow(10, uiStatusY(2), "Hits:", String(hits));
             (void)req;
         }
         delay(10);

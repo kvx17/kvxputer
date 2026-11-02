@@ -190,7 +190,7 @@ void IrRead::begin() {
 
     display_banner();
     if (quickloop) {
-        padprintln("Waiting for signal of button: " + String(quickButtons[button_pos]));
+        padField("Waiting for signal of button:", String(quickButtons[button_pos]));
         padprintln("Button " + String(button_pos + 1) + " of " + String(quickButtons.size()));
     } else {
         padprintln("Waiting for signal...");
@@ -215,7 +215,7 @@ void IrRead::display_banner() {
 
     tft.setTextSize(FP);
     padprintln("--------------");
-    padprintln("Signals: " + String(signals_read));
+    padField("Signals:", String(signals_read));
 }
 
 void IrRead::display_btn_options() {
@@ -243,8 +243,8 @@ void IrRead::read_signal() {
 
     if (!raw) {
         String proto = getParsedProtocolName(results);
-        padprintln("Protocol: " + (proto.length() ? proto : "UNKNOWN"));
-        padprintln("Bits: " + String(results.bits));
+        padField("Protocol:", (proto.length() ? proto : "UNKNOWN"));
+        padField("Bits:", String(results.bits));
     }
 
     padprint("RAW Data Captured:");

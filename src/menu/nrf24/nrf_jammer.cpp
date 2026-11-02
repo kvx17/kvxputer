@@ -136,11 +136,11 @@ void nrf_jammer() {
             if (redraw) {
                 drawMainBorderWithTitle("NRF JAMMER", false);
                 printSubtitle("NRF function Jammer");
-                padprintln("STATUS : " + String(NRFOnline) + " ACTIVE");
+                padField("STATUS:", String(NRFOnline) + " ACTIVE");
                 String _modeName = String(modes[modeIndex].name) + "            ";
                 _modeName = _modeName.substring(0, 13);
-                padprintln("MODE : " + _modeName);
-                padprintln("HOP  : " + String(hopping_mode == 0 ? "Sequential " : "FHSS        "));
+                padField("MODE:", _modeName);
+                padField("HOP:", String(hopping_mode == 0 ? "Sequential " : "FHSS        "));
                 padprintln("");
                 padprintln("> Switch Mode: Next/Prev");
                 padprintln("> Hop Mode: Sel");

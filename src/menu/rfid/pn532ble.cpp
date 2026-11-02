@@ -270,7 +270,7 @@ void Pn532ble::displayBanner() {
 
 void Pn532ble::showDeviceInfo() {
     displayBanner();
-    padprintln("Devices: " + String(pn532_ble.getName().c_str()));
+    padField("Devices:", String(pn532_ble.getName().c_str()));
     pn532_ble.setNormalMode();
     bool res = pn532_ble.getVersion();
     if (!res) {
@@ -303,19 +303,19 @@ void Pn532ble::hf14aScan() {
         displayError("Not ISO14443A Tag");
     } else {
         padprintln("------------");
-        padprintln("Type: " + tagInfo.type);
-        padprintln("UID:  " + tagInfo.uid_hex);
-        padprintln("ATQA: " + tagInfo.atqa_hex);
-        padprintln("SAK:  " + tagInfo.sak_hex);
+        padField("Type:", tagInfo.type);
+        padField("UID:", tagInfo.uid_hex);
+        padField("ATQA:", tagInfo.atqa_hex);
+        padField("SAK:", tagInfo.sak_hex);
         if (tagInfo.sak == 0x00) {
             padprintln("------------");
         } else if (tagInfo.sak == 0x08 || tagInfo.sak == 0x09 || tagInfo.sak == 0x18) {
             bool isGen1A = pn532_ble.isGen1A();
-            padprintln("Gen1A: " + String(isGen1A ? "Yes" : "No"));
+            padField("Gen1A:", String(isGen1A ? "Yes" : "No"));
             bool isGen3 = pn532_ble.isGen3();
-            padprintln("Gen3:  " + String(isGen3 ? "Yes" : "No"));
+            padField("Gen3:", String(isGen3 ? "Yes" : "No"));
             bool isGen4 = pn532_ble.isGen4(gen4pwd);
-            padprintln("Gen4:  " + String(isGen4 ? "Yes" : "No"));
+            padField("Gen4:", String(isGen4 ? "Yes" : "No"));
         }
     }
 }
@@ -336,12 +336,12 @@ void Pn532ble::hf15Scan() {
         displayError("Not ISO15693 Tag");
     } else {
         padprintln("------------");
-        padprintln("UID:  " + tagInfo.uid_hex);
+        padField("UID:", tagInfo.uid_hex);
         tagInfo = pn532_ble.hf15Info();
-        padprintln("DSFID: " + String(tagInfo.dsfid, HEX));
-        padprintln("AFI:   " + String(tagInfo.afi, HEX));
-        padprintln("ICRef: " + String(tagInfo.icRef, HEX));
-        padprintln("BlockSize: " + String(tagInfo.blockSize));
+        padField("DSFID:", String(tagInfo.dsfid, HEX));
+        padField("AFI:", String(tagInfo.afi, HEX));
+        padField("ICRef:", String(tagInfo.icRef, HEX));
+        padField("BlockSize:", String(tagInfo.blockSize));
     }
 }
 
@@ -360,8 +360,8 @@ void Pn532ble::lfScan() {
         displayError("No tag found");
     } else {
         padprintln("------------");
-        padprintln("UID: " + tagInfo.uid_hex);
-        padprintln("ID:  " + String(abs(tagInfo.id_dec)));
+        padField("UID:", tagInfo.uid_hex);
+        padField("ID:", String(abs(tagInfo.id_dec)));
     }
 }
 
@@ -385,17 +385,17 @@ void Pn532ble::hf14aMfReadDumpMode() {
         return;
     }
     mfd.clear();
-    padprintln("UID:  " + tagInfo.uid_hex);
+    padField("UID:", tagInfo.uid_hex);
     delay(200);
     drawMainBorder(true);
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
 
     if (tagInfo.sak == 0x08 || tagInfo.sak == 0x09 || tagInfo.sak == 0x18) {
         if (pn532_ble.isGen1A()) {
-            area.addLine("TYPE: " + tagInfo.type);
+            area.addField("TYPE:", tagInfo.type);
             area.scrollDown();
             area.draw();
-            area.addLine("UID:  " + tagInfo.uid_hex);
+            area.addField("UID:", tagInfo.uid_hex);
             area.scrollDown();
             area.draw();
             area.addLine("MAGI: Gen1A");
@@ -430,10 +430,10 @@ void Pn532ble::hf14aMfReadDumpMode() {
             area.draw();
         } else if (pn532_ble.isGen4(gen4pwd)) {
             delay(200);
-            area.addLine("TYPE: " + tagInfo.type);
+            area.addField("TYPE:", tagInfo.type);
             area.scrollDown();
             area.draw();
-            area.addLine("UID:  " + tagInfo.uid_hex);
+            area.addField("UID:", tagInfo.uid_hex);
             area.scrollDown();
             area.draw();
             area.addLine("MAGI: Gen4");
@@ -472,10 +472,10 @@ void Pn532ble::hf14aMfReadDumpMode() {
             area.draw();
         } else {
             tagInfo = pn532_ble.hf14aScan();
-            area.addLine("TYPE: " + tagInfo.type);
+            area.addField("TYPE:", tagInfo.type);
             area.scrollDown();
             area.draw();
-            area.addLine("UID:  " + tagInfo.uid_hex);
+            area.addField("UID:", tagInfo.uid_hex);
             area.scrollDown();
             area.draw();
             area.addLine("------------");
@@ -565,7 +565,7 @@ void Pn532ble::hf14aMfuReadDumpMode() {
         return;
     }
     mfd.clear();
-    padprintln("UID:  " + tagInfo.uid_hex);
+    padField("UID:", tagInfo.uid_hex);
     delay(200);
     drawMainBorder(true);
 
@@ -573,10 +573,10 @@ void Pn532ble::hf14aMfuReadDumpMode() {
 
     if (tagInfo.sak == 0x00) {
         mfud.clear();
-        area.addLine("TYPE: " + tagInfo.type);
+        area.addField("TYPE:", tagInfo.type);
         area.scrollDown();
         area.draw();
-        area.addLine("UID:  " + tagInfo.uid_hex);
+        area.addField("UID:", tagInfo.uid_hex);
         area.scrollDown();
         area.draw();
 
@@ -587,7 +587,7 @@ void Pn532ble::hf14aMfuReadDumpMode() {
             if (res.size() == 17) { res.erase(res.begin()); }
             if (block == 0 && res.size() == 16) {
                 max_block = res[14] * 2 + 9;
-                area.addLine("PAGE: " + String(max_block));
+                area.addField("PAGE:", String(max_block));
                 area.addLine("------------");
                 area.scrollDown();
                 area.draw();
@@ -659,8 +659,8 @@ void Pn532ble::hf14aMfuWriteDumpMode() {
         displayError("No tag found");
         return;
     }
-    padprintln("UID:  " + tagInfo.uid_hex);
-    padprintln("Type: " + tagInfo.type);
+    padField("UID:", tagInfo.uid_hex);
+    padField("Type:", tagInfo.type);
     delay(200);
     drawMainBorder(true);
 
@@ -723,8 +723,8 @@ void Pn532ble::hf14aMfWriteDumpMode() {
         displayError("No tag found");
         return;
     }
-    padprintln("UID:  " + tagInfo.uid_hex);
-    padprintln("Type: " + tagInfo.type);
+    padField("UID:", tagInfo.uid_hex);
+    padField("Type:", tagInfo.type);
     delay(200);
     drawMainBorder(true);
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
@@ -915,18 +915,18 @@ void Pn532ble::hf15ReadDumpMode() {
         displayError("No tag found");
         return;
     }
-    padprintln("UID:  " + tagInfo.uid_hex);
+    padField("UID:", tagInfo.uid_hex);
     padprintln("Checking Tag...");
     tagInfo = pn532_ble.hf15Info();
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
 
     iso15dump.clear();
     if (tagInfo.blockSize > 0) {
-        area.addLine("UID:  " + tagInfo.uid_hex);
-        area.addLine("DSFID: " + String(tagInfo.dsfid, HEX));
-        area.addLine("AFI:   " + String(tagInfo.afi, HEX));
-        area.addLine("ICRef: " + String(tagInfo.icRef, HEX));
-        area.addLine("BlockSize: " + String(tagInfo.blockSize));
+        area.addField("UID:", tagInfo.uid_hex);
+        area.addField("DSFID:", String(tagInfo.dsfid, HEX));
+        area.addField("AFI:", String(tagInfo.afi, HEX));
+        area.addField("ICRef:", String(tagInfo.icRef, HEX));
+        area.addField("BlockSize:", String(tagInfo.blockSize));
         area.addLine("------------");
         area.scrollDown();
         area.draw();
@@ -971,18 +971,18 @@ void Pn532ble::hf15WriteDumpMode() {
         displayError("No tag found");
         return;
     }
-    padprintln("UID:  " + tagInfo.uid_hex);
+    padField("UID:", tagInfo.uid_hex);
     padprintln("Checking Tag...");
     tagInfo = pn532_ble.hf15Info();
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
 
     iso15dump.clear();
     if (tagInfo.blockSize > 0) {
-        area.addLine("UID:  " + tagInfo.uid_hex);
-        area.addLine("DSFID: " + String(tagInfo.dsfid, HEX));
-        area.addLine("AFI:   " + String(tagInfo.afi, HEX));
-        area.addLine("ICRef: " + String(tagInfo.icRef, HEX));
-        area.addLine("BlockSize: " + String(tagInfo.blockSize));
+        area.addField("UID:", tagInfo.uid_hex);
+        area.addField("DSFID:", String(tagInfo.dsfid, HEX));
+        area.addField("AFI:", String(tagInfo.afi, HEX));
+        area.addField("ICRef:", String(tagInfo.icRef, HEX));
+        area.addField("BlockSize:", String(tagInfo.blockSize));
         area.addLine("------------");
         area.scrollDown();
         area.draw();
@@ -1043,15 +1043,15 @@ void Pn532ble::loadMifareClassicDumpFile() {
     file.close();
     // check dump size if is 320, 1024 or 4096
     if (mfd.size() != 320 && mfd.size() != 1024 && mfd.size() != 4096) {
-        padprintln("Invalid dump size: " + String(mfd.size()));
+        padField("Invalid dump size:", String(mfd.size()));
         return;
     }
 
     displayBanner();
 
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
-    area.addLine("Dump: " + filePath);
-    area.addLine("Size: " + String(mfd.size()));
+    area.addField("Dump:", filePath);
+    area.addField("Size:", String(mfd.size()));
     area.addLine("------------");
     area.scrollDown();
     area.draw();
@@ -1107,8 +1107,8 @@ void Pn532ble::loadMifareUltralightDumpFile() {
     displayBanner();
 
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
-    area.addLine("Dump: " + filePath);
-    area.addLine("Size: " + String(mfd.size()));
+    area.addField("Dump:", filePath);
+    area.addField("Size:", String(mfd.size()));
     area.addLine("------------");
     area.scrollDown();
     area.draw();
@@ -1164,8 +1164,8 @@ void Pn532ble::loadIso15693DumpFile() {
     displayBanner();
 
     ScrollableTextArea area(uiBodyFont(), 10, KVX_TOPBAR_H + 4, tftWidth - 20, tftHeight - (KVX_TOPBAR_H + 4) - 8);
-    area.addLine("Dump: " + filePath);
-    area.addLine("Size: " + String(iso15dump.size()));
+    area.addField("Dump:", filePath);
+    area.addField("Size:", String(iso15dump.size()));
     area.addLine("------------");
     area.scrollDown();
     area.draw();

@@ -3953,7 +3953,7 @@ void BLE_Sniffer() {
             drawMainBorderWithTitle("BLE SNIFFER");
             padprintln("");
             padprintln("Status: DONE");
-            padprintln("Captured: " + String(snifferPacketCount) + " packets");
+            padField("Captured:", String(snifferPacketCount) + " packets");
             padprintln("");
             padprintln("[SEL]  - view packets");
             padprintln("[NEXT] - save to SD/LittleFS");
@@ -3979,10 +3979,7 @@ void BLE_Sniffer() {
                     tft.fillScreen(kvxConfig.bgColor);
                     drawMainBorderWithTitle("CAPTURED PACKETS");
 
-                    tft.setTextSize(FP);
-                    tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-                    tft.setCursor(10, y);
-                    tft.println("Packets: " + String(snifferPacketCount));
+                    drawKvRow(10, y, "Packets:", String(snifferPacketCount));
                     y += lineH;
 
                     for (int i = 0; i < visibleItems && (scrollOffset + i) < snifferPacketCount && i < 5;
@@ -4042,43 +4039,20 @@ void BLE_Sniffer() {
                 if (check(SelPress)) {
                     SnifferPacket &pkt = snifferPackets[selected];
 
-                    drawMainBorderWithTitle("PACKET DETAILS");
-                    int dy = BORDER_PAD_Y + FM * LH + 4;
-                    int dlh = max(12, tftHeight / 14);
-                    tft.setTextSize(FP);
-                    tft.setTextColor(TFT_WHITE, kvxConfig.bgColor);
-
-                    tft.setCursor(10, dy);
-                    tft.println("Device: " + pkt.name);
-                    dy += dlh;
-                    tft.println("Address: " + pkt.address);
-                    dy += dlh;
-                    tft.println("RSSI: " + String(pkt.rssi) + " dBm");
-                    dy += dlh;
-                    tft.println("Channel: " + String(pkt.channel));
-                    dy += dlh;
-                    tft.println("Timestamp: " + pkt.timestamp + "s");
-                    dy += dlh;
-                    tft.println("Payload (" + String(pkt.payload.size()) + " bytes):");
-                    dy += dlh;
-
-                    String parsed = parseManufacturerData(pkt.payload);
-                    tft.setTextColor(TFT_CYAN, kvxConfig.bgColor);
-                    tft.println(parsed);
-                    dy += dlh;
-
-                    tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
+                    ScrollableTextArea detail("PACKET DETAILS");
+                    detail.addField("Device:", pkt.name);
+                    detail.addField("Address:", pkt.address);
+                    detail.addField("RSSI:", String(pkt.rssi) + " dBm");
+                    detail.addField("Channel:", String(pkt.channel));
+                    detail.addField("Timestamp:", pkt.timestamp + "s");
+                    detail.addField("Payload:", String(pkt.payload.size()) + " bytes");
+                    detail.addLine(parseManufacturerData(pkt.payload));
                     String hexDump = pkt.payloadHex;
-                    if (hexDump.length() > 400) hexDump = hexDump.substring(0, 400) + "...\n(truncated)";
-                    tft.println(hexDump);
-
-                    tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
-                    tft.setCursor(10, tftHeight - 20);
-                    tft.drawString("Press any key to continue", 10, tftHeight - 20, 1);
-
-                    while (!check(EscPress) && !check(SelPress) && !check(PrevPress) && !check(NextPress)) {
-                        delay(50);
-                    }
+                    if (hexDump.length() > 400) hexDump = hexDump.substring(0, 400) + "...";
+                    detail.addLine(hexDump);
+                    detail.addLine("");
+                    detail.addLine("OK/Esc back");
+                    detail.show();
                     redraw = true; // view screen
                 }
                 delay(100);
@@ -4900,22 +4874,10 @@ static bool welcomeShown = false;
 void showWelcomeScreen() {
     if (welcomeShown) return;
 
-    tft.fillScreen(kvxConfig.bgColor);
-    TouchFooter();
-    tft.setTextSize(4);
-    tft.setTextColor(TFT_PURPLE, kvxConfig.bgColor);
-    tft.setCursor((tftWidth - tft.textWidth("BRUCE")) / 2, 35);
-    tft.print("BRUCE");
-
-    tft.setTextColor(TFT_BLUE, kvxConfig.bgColor);
-    tft.setTextSize(2);
-    tft.setCursor((tftWidth - tft.textWidth("BLE SUITE")) / 2, 80);
-    tft.print("BLE SUITE");
-
-    tft.setTextColor(TFT_LIGHTGREY, kvxConfig.bgColor);
-    tft.setTextSize(1.5);
-    tft.setCursor((tftWidth - tft.textWidth("v3.1")) / 2, 100);
-    tft.print("v3.1");
+    drawMainBorderWithTitle("BLE Suite");
+    tft.setTextSize(uiBodyFont());
+    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    tft.drawCentreString("v3.1", tftWidth / 2, uiStatusY(1), 1);
     delay(2000);
 
     welcomeShown = true;

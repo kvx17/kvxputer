@@ -1066,18 +1066,18 @@ static void drawClickerPanel(bool running, unsigned long clicks, bool full) {
         hidClearContentArea();
         tft.setTextSize(uiDenseFont()) /* HID clicker/jiggler panel stays dense */;
         tft.setTextColor(0x07E0, 0x0841);
-        tft.drawString("Delay (-/=): " + String(kvxConfig.hidRemoteClickerDelay) + "ms", 8, 32);
+        drawKvRow(8, 32, "Delay (-/=):", String(kvxConfig.hidRemoteClickerDelay) + "ms");
         const char *btn = "LEFT";
         if (kvxConfig.hidRemoteClickerButton == 1) btn = "RIGHT";
         else if (kvxConfig.hidRemoteClickerButton == 2) btn = "MID";
-        tft.drawString("Button (b): " + String(btn), 8, 48);
+        drawKvRow(8, 48, "Button (b):", String(btn));
         tft.drawString("Space: start/stop", 8, 64);
     }
     tft.fillRect(8, 78, tftWidth - 16, 28, 0x0841);
     tft.setTextColor(running ? 0x9818 : 0x07E0, 0x0841);
     tft.drawString(running ? "RUNNING" : "STOPPED", 8, 80);
     tft.setTextColor(0x07E0, 0x0841);
-    tft.drawString("Clicks: " + String(clicks), 8, 94);
+    drawKvRow(8, 94, "Clicks:", String(clicks));
 }
 
 static bool runClicker(HidRemoteTransportSession &s) {
@@ -1166,15 +1166,15 @@ static void drawJigglerPanel(bool stealth, bool running, bool full) {
         tft.setTextColor(0x07E0, 0x0841);
         int y = 32;
         if (stealth) {
-            tft.drawString("Min (-/=): " + String(kvxConfig.hidRemoteStealthMin) + "s", 8, y);
+            drawKvRow(8, y, "Min (-/=):", String(kvxConfig.hidRemoteStealthMin) + "s");
             y += 14;
-            tft.drawString("Max ([ ]): " + String(kvxConfig.hidRemoteStealthMax) + "s", 8, y);
+            drawKvRow(8, y, "Max ([ ]):", String(kvxConfig.hidRemoteStealthMax) + "s");
             y += 14;
         } else {
-            tft.drawString("Interval (-/=): " + String(kvxConfig.hidRemoteJigglerInterval) + "s", 8, y);
+            drawKvRow(8, y, "Interval (-/=):", String(kvxConfig.hidRemoteJigglerInterval) + "s");
             y += 14;
         }
-        tft.drawString("Amount (,/): " + String(kvxConfig.hidRemoteJigglerAmount) + "px", 8, y);
+        drawKvRow(8, y, "Amount (,/):", String(kvxConfig.hidRemoteJigglerAmount) + "px");
         y += 14;
         tft.drawString(String("Dir (d): ") + jigglerDirLabel(kvxConfig.hidRemoteJigglerDir), 8, y);
         y += 14;

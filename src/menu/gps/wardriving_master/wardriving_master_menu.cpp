@@ -81,7 +81,7 @@ void wardrivingMasterMenu() {
             last = String((char *)item.data).substring(0, item.len);
         }
         tft.fillRect(10, 56, tftWidth - 20, 32, kvxConfig.bgColor);
-        tft.drawString("Rows: " + String(lines), 10, uiStatusY(1));
+        drawKvRow(10, uiStatusY(1), "Rows:", String(lines));
         tft.drawString(last.substring(0, 28), 10, 72);
         delay(40);
     }

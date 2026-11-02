@@ -233,27 +233,27 @@ void display_info(RfCodes &data) {
 
     drawMainBorderWithTitle("RF Emulate");
 
-    padprintln("Frequency: " + String(data.frequency / 1000000.0) + "MHz");
+    padField("Frequency:", String(data.frequency / 1000000.0) + "MHz");
 
     if (data.serial != 0) {
         padprintln("Protocol: KeeLoq");
-        padprintln("Manufacture: " + data.mf_name);
+        padField("Manufacture:", data.mf_name);
 
         decimalToHexString(data.serial, hexString);
-        padprintln("Serial: " + String(hexString));
+        padField("Serial:", String(hexString));
 
-        padprintln("Btn: " + String(data.btn));
-        padprintln("Counter: " + String(data.cnt));
+        padField("Btn:", String(data.btn));
+        padField("Counter:", String(data.cnt));
         padprintln("\n");
 
         decimalToHexString(data.key, hexString);
-        padprintln("Payload: " + String(hexString));
+        padField("Payload:", String(hexString));
     } else {
-        padprintln("Protocol: " + String(data.protocol) + "(" + data.preset + ")");
+        padField("Protocol:", String(data.protocol) + "(" + data.preset + ")");
 
         for (uint64_t key : keyList) {
             decimalToHexString(key, hexString);
-            padprintln("Key: " + String(hexString));
+            padField("Key:", String(hexString));
         }
     }
 

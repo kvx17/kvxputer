@@ -31,6 +31,12 @@ include/current_year.h
 src/root/ui/bootimage_embed.S
 bruce.conf
 
+# PC Connect host (Python cache + session logs)
+__pycache__/
+*.pyc
+PCConnect/logs/*
+!PCConnect/logs/.gitkeep
+
 # Reference / inspiration (local only — not part of firmware)
 resources/
 

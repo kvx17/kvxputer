@@ -119,7 +119,7 @@ void ipv6RaMenu() {
                  if (sendRouterAdvertisement()) n++;
                  if (n != painted) {
                      tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-                     tft.drawString("RAs sent: " + String(n), 10, 40);
+                     drawKvRow(10, 40, "RAs sent:", String(n));
                      painted = n;
                  }
                  delay(1000);

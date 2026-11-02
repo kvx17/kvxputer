@@ -269,8 +269,8 @@ int netcutScanDevices() {
     drawMainBorderWithTitle("NetCut Scan");
     padprintln("");
     padprintln("Scanning network...");
-    padprintln("SSID: " + WiFi.SSID());
-    padprintln("GW: " + IPAddress(ip_info.gw.addr).toString());
+    padField("SSID:", WiFi.SSID());
+    padField("GW:", IPAddress(ip_info.gw.addr).toString());
     padprintln("");
 
     LOCK_TCPIP_CORE();
@@ -479,7 +479,7 @@ static void _activeLoop() {
     drawMainBorderWithTitle("NETCUT ACTIVE");
     padprintln("");
     padprintln("Attack running...");
-    padprintln("Targets: " + String(countActive()));
+    padField("Targets:", String(countActive()));
     padprintln("");
     padprintln("Press Esc/Back to STOP");
 
@@ -600,18 +600,11 @@ static void _activeLoop() {
                 );
             }
 
-            tft.setTextColor(TFT_RED, kvxConfig.bgColor);
-            tft.drawString(
-                "CUT:" + String(cutN) + " Dev:" + String(s_deviceCount), 10, tftHeight - 5 * _lh, 1
+            drawKvRow(10, tftHeight - 5 * _lh, "CUT:", String(cutN) + " Dev:" + String(s_deviceCount));
+            drawKvRow(
+                10, tftHeight - 4 * _lh, "TRL:", String(trollOff) + "off/" + String(trollOn) + "on"
             );
-            tft.setTextColor(TFT_MAGENTA, kvxConfig.bgColor);
-            tft.drawString(
-                "TRL:" + String(trollOff) + "off/" + String(trollOn) + "on", 10, tftHeight - 4 * _lh, 1
-            );
-
-            // Draw SNIPER count
-            for (int i = 0; i < s_deviceCount; i++) tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
-            tft.drawString("Pkts:" + String(packetCount), 10, tftHeight - 3 * _lh, 1);
+            drawKvRow(10, tftHeight - 3 * _lh, "Pkts:", String(packetCount));
 
             tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
             tft.drawString("Esc=Stop", 10, tftHeight - 2 * _lh, 1);
@@ -795,11 +788,11 @@ static void _deviceActionMenu(int idx) {
         options.push_back({"Info", [idx]() {
                                NetCutDevice &d = s_devices[idx];
                                ScrollableTextArea area = ScrollableTextArea("Dev Info");
-                               area.addLine("IP:  " + d.ip.toString());
-                               area.addLine("MAC: " + d.macStr);
-                               area.addLine("VIP: " + String(d.isVip ? "Yes" : "No"));
-                               area.addLine("Cut: " + String(d.isCut ? "Yes" : "No"));
-                               area.addLine("Troll: " + String(d.isTroll ? "Yes" : "No"));
+                               area.addField("IP:", d.ip.toString());
+                               area.addField("MAC:", d.macStr);
+                               area.addField("VIP:", String(d.isVip ? "Yes" : "No"));
+                               area.addField("Cut:", String(d.isCut ? "Yes" : "No"));
+                               area.addField("Troll:", String(d.isTroll ? "Yes" : "No"));
                                area.show();
                            }});
 

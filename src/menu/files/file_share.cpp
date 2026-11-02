@@ -21,9 +21,15 @@
 #include <esp_netif.h>
 #include <esp_wifi.h>
 #include <esp32-hal-psram.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <cstdarg>
 #include <globals.h>
 #include <vector>
+
+#ifndef FILESHARE_DIAG
+#define FILESHARE_DIAG 1
+#endif
 
 namespace {
 
@@ -32,6 +38,11 @@ static constexpr size_t kNameMax = 48;
 static constexpr size_t kLogCap = 48;
 static constexpr size_t kLogLine = 52;
 static constexpr size_t kUploadUiStride = 16 * 1024;
+static constexpr size_t kListPageDefault = 200;
+static constexpr size_t kListPageMax = 500;
+static constexpr uint32_t kFsCacheIntervalMs = 5000;
+static constexpr uint32_t kUploadStaleMs = 60000;
+static constexpr uint8_t kShareSdMaxFiles = 6;
 
 static AsyncWebServer *shareServer = nullptr;
 static DNSServer shareDns;
@@ -41,18 +52,35 @@ static bool shareModeAp = true;      // true = softAP, false = STA on existing W
 static bool shareOwnedWifi = false;  // we brought WiFi up for this session
 static bool sharePwdVisible = false;
 static bool shareUploadBusy = false;
+static bool shareUploadActive = false;
 static uint8_t shareScreen = 0; // 0 info, 1 url QR, 2 wifi QR (AP only)
 static bool shareQrInvert = true;
+static bool shareCorsAdded = false;
 
 static volatile size_t shareUploadReceived = 0;
 static volatile size_t shareUploadTotal = 0; // 0 = unknown
 static volatile uint32_t shareUiSeq = 0;
 static char shareUploadName[kNameMax] = {};
 static size_t shareUploadUiMark = 0;
+static uint32_t shareUploadGen = 0;
+static uint32_t shareUploadLastProgressMs = 0;
 
 static char shareLogLines[kLogCap][kLogLine];
 static uint8_t shareLogCount = 0;
 static uint8_t shareLogNext = 0;
+static portMUX_TYPE shareMux = portMUX_INITIALIZER_UNLOCKED;
+
+struct FsSizeCache {
+    bool sdOk = false;
+    uint64_t sdFree = 0;
+    uint64_t sdUsed = 0;
+    uint64_t sdTotal = 0;
+    uint64_t lfsFree = 0;
+    uint64_t lfsUsed = 0;
+    uint64_t lfsTotal = 0;
+    uint32_t lastMs = 0;
+};
+static FsSizeCache shareFsCache;
 
 static void saveShareConfig() {
     kvxConfig.setFileShareSettings(
@@ -75,6 +103,22 @@ static File shareUploadFile;
 static bool shareUploadFailed = false;
 static int shareUploadFailCode = 500; // 409 busy, 507 no space, else 500
 
+#if FILESHARE_DIAG
+static void shareDiag(const char *where) {
+    UBaseType_t stack = uxTaskGetStackHighWaterMark(NULL);
+    Serial.printf(
+        "[FileShare][diag] %s stackHWM=%u heap=%u largest=%u\n",
+        where,
+        (unsigned)stack,
+        (unsigned)esp_get_free_heap_size(),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)
+    );
+}
+#define SHARE_DIAG(w) shareDiag(w)
+#else
+#define SHARE_DIAG(w) ((void)0)
+#endif
+
 static void closeShareUploadFile() {
     if (shareUploadFile) {
         shareUploadFile.close();
@@ -92,10 +136,12 @@ static TransferEvent shareEvent;
 
 static void appendShareLog(const char *msg) {
     if (!msg || !msg[0]) return;
+    portENTER_CRITICAL(&shareMux);
     snprintf(shareLogLines[shareLogNext], kLogLine, "%s", msg);
     shareLogNext = (shareLogNext + 1) % kLogCap;
     if (shareLogCount < kLogCap) shareLogCount++;
-    shareUiSeq++;
+    shareUiSeq = shareUiSeq + 1;
+    portEXIT_CRITICAL(&shareMux);
 }
 
 static void appendShareLogf(const char *fmt, ...) {
@@ -108,31 +154,79 @@ static void appendShareLogf(const char *fmt, ...) {
 }
 
 static void noteTransfer(char direction, const String &name, bool ok) {
+    portENTER_CRITICAL(&shareMux);
     shareEvent.direction = direction;
     shareEvent.ok = ok;
     size_t n = name.length();
     if (n >= kNameMax) n = kNameMax - 1;
     memcpy(shareEvent.name, name.c_str(), n);
     shareEvent.name[n] = 0;
-    shareEvent.seq++;
-    shareUiSeq++;
+    shareEvent.seq = shareEvent.seq + 1;
+    shareUiSeq = shareUiSeq + 1;
+    portEXIT_CRITICAL(&shareMux);
 }
 
 static void resetUploadProgress() {
     shareUploadReceived = 0;
     shareUploadTotal = 0;
     shareUploadUiMark = 0;
+    portENTER_CRITICAL(&shareMux);
     shareUploadName[0] = 0;
+    portEXIT_CRITICAL(&shareMux);
 }
 
 static void bumpUploadProgress(size_t received, size_t total, bool force = false) {
     shareUploadReceived = received;
     if (total) shareUploadTotal = total;
+    shareUploadLastProgressMs = millis();
     if (force || received >= shareUploadUiMark + kUploadUiStride ||
         (shareUploadTotal && received >= shareUploadTotal)) {
         shareUploadUiMark = received;
-        shareUiSeq++;
+        shareUiSeq = shareUiSeq + 1;
     }
+}
+
+static void setShareUploadName(const String &name) {
+    size_t n = name.length();
+    if (n >= kNameMax) n = kNameMax - 1;
+    portENTER_CRITICAL(&shareMux);
+    memcpy(shareUploadName, name.c_str(), n);
+    shareUploadName[n] = 0;
+    portEXIT_CRITICAL(&shareMux);
+}
+
+static String getShareUploadNameCopy() {
+    char tmp[kNameMax];
+    portENTER_CRITICAL(&shareMux);
+    memcpy(tmp, shareUploadName, kNameMax);
+    portEXIT_CRITICAL(&shareMux);
+    return String(tmp);
+}
+
+static String humanSize(uint64_t bytes);
+
+static void abortShareUpload(const char *reason, bool removePartial) {
+    if (!shareUploadActive && !shareUploadBusy) return;
+    size_t got = shareUploadReceived;
+    String name = getShareUploadNameCopy();
+    if (name.length() == 0 && shareUploadPath.length()) {
+        int slash = shareUploadPath.lastIndexOf('/');
+        name = slash >= 0 ? shareUploadPath.substring(slash + 1) : shareUploadPath;
+    }
+    closeShareUploadFile();
+    if (removePartial && shareUploadFs && shareUploadPath.length()) {
+        shareUploadFs->remove(shareUploadPath);
+    }
+    appendShareLogf("UP abort %s @%s", reason ? reason : "?", humanSize(got).c_str());
+    noteTransfer('U', name.length() ? name : String("(upload)"), false);
+    shareUploadBusy = false;
+    shareUploadActive = false;
+    shareUploadFailed = false;
+    shareUploadFailCode = 500;
+    shareUploadFs = nullptr;
+    shareUploadPath = "";
+    resetUploadProgress();
+    shareUploadGen++;
 }
 
 static String makeToken(int length = 24) {
@@ -217,7 +311,7 @@ static bool resolveSharePath(
     if (absOut.length() == 0) absOut = "/";
 
     if (vol == "sd") {
-        if (!setupSdCard()) {
+        if (!setupSdCard(kShareSdMaxFiles)) {
             if (sdMissing) *sdMissing = true;
             return false;
         }
@@ -251,13 +345,134 @@ static uint64_t freeBytes(FS &fs, bool isSd) {
     return LittleFS.totalBytes() - LittleFS.usedBytes();
 }
 
+static void escapeJsonTo(Print &out, const String &s) {
+    for (size_t i = 0; i < s.length(); i++) {
+        char c = s[i];
+        if (c == '"' || c == '\\') out.print('\\');
+        out.print(c);
+    }
+}
+
+static String entryBaseName(const String &fullPath) {
+    int slash = fullPath.lastIndexOf('/');
+    if (slash < 0) return fullPath;
+    return fullPath.substring(slash + 1);
+}
+
+// Iterative delete — avoids recursive stack growth on the AsyncTCP task.
+static bool deleteSharePathIter(FS &fs, const String &path) {
+    File probe = fs.open(path);
+    if (!probe) return false;
+    if (!probe.isDirectory()) {
+        probe.close();
+        return fs.remove(path);
+    }
+    probe.close();
+
+    std::vector<String> pending;
+    std::vector<String> dirsToRemove;
+    pending.reserve(16);
+    dirsToRemove.reserve(16);
+    pending.push_back(path);
+
+    while (!pending.empty()) {
+        String cur = pending.back();
+        pending.pop_back();
+        dirsToRemove.push_back(cur);
+
+        File dir = fs.open(cur);
+        if (!dir || !dir.isDirectory()) {
+            if (dir) dir.close();
+            continue;
+        }
+        File e = dir.openNextFile();
+        while (e) {
+            const char *cp = e.path();
+            String child = cp ? String(cp) : String();
+            bool isDir = e.isDirectory();
+            e.close();
+            if (child.length() == 0) {
+                e = dir.openNextFile();
+                continue;
+            }
+            if (isDir) {
+                pending.push_back(child);
+            } else if (!fs.remove(child)) {
+                dir.close();
+                return false;
+            }
+            e = dir.openNextFile();
+            delay(0);
+        }
+        dir.close();
+    }
+
+    for (int i = (int)dirsToRemove.size() - 1; i >= 0; --i) {
+        if (!fs.rmdir(dirsToRemove[(size_t)i]) && fs.exists(dirsToRemove[(size_t)i])) {
+            return false;
+        }
+    }
+    return !fs.exists(path);
+}
+
+static void refreshFsSizeCache(bool force = false) {
+    uint32_t now = millis();
+    if (!force && shareFsCache.lastMs != 0 && (now - shareFsCache.lastMs) < kFsCacheIntervalMs) {
+        return;
+    }
+    SHARE_DIAG("fsCache.begin");
+    shareFsCache.lfsTotal = LittleFS.totalBytes();
+    shareFsCache.lfsUsed = LittleFS.usedBytes();
+    shareFsCache.lfsFree =
+        shareFsCache.lfsTotal > shareFsCache.lfsUsed ? shareFsCache.lfsTotal - shareFsCache.lfsUsed : 0;
+
+    // Remount with enough handles if needed (setupSdCard early-outs when already mounted).
+    if (sdcardMounted) {
+        // already mounted — assume handle count is OK once remounted at share start
+        shareFsCache.sdOk = true;
+    } else {
+        shareFsCache.sdOk = setupSdCard(kShareSdMaxFiles);
+    }
+    if (shareFsCache.sdOk) {
+        shareFsCache.sdTotal = SD.totalBytes();
+        shareFsCache.sdUsed = SD.usedBytes();
+        shareFsCache.sdFree =
+            shareFsCache.sdTotal > shareFsCache.sdUsed ? shareFsCache.sdTotal - shareFsCache.sdUsed : 0;
+    } else {
+        shareFsCache.sdFree = shareFsCache.sdUsed = shareFsCache.sdTotal = 0;
+    }
+    shareFsCache.lastMs = now;
+    SHARE_DIAG("fsCache.end");
+}
+
+static bool ensureShareSdHandles() {
+    // Remount so maxFiles=kShareSdMaxFiles even if already mounted with the default of 3.
+    if (sdcardMounted) closeSdCard();
+    bool ok = setupSdCard(kShareSdMaxFiles);
+    Serial.printf("[FileShare] SD remount maxFiles=%u ok=%d\n", (unsigned)kShareSdMaxFiles, (int)ok);
+    return ok;
+}
+
 static void stopShareServer() {
     if (shareDnsRunning) {
         shareDns.stop();
         shareDnsRunning = false;
     }
+    // Close upload first so async handlers don't write into a half-torn-down server.
+    closeShareUploadFile();
+    shareUploadBusy = false;
+    shareUploadActive = false;
+    shareUploadFs = nullptr;
+    shareUploadPath = "";
+    shareUploadFailed = false;
+    shareUploadFailCode = 500;
+    resetUploadProgress();
+    shareUploadGen++;
+
     if (shareServer) {
         shareServer->end();
+        // Brief pause so in-flight AsyncTCP work can drain before destructor.
+        vTaskDelay(pdMS_TO_TICKS(100));
         shareServer->~AsyncWebServer();
         free(shareServer);
         shareServer = nullptr;
@@ -267,13 +482,6 @@ static void stopShareServer() {
         shareMdns = false;
     }
     shareSessions.clear();
-    shareUploadBusy = false;
-    shareUploadFs = nullptr;
-    shareUploadPath = "";
-    closeShareUploadFile();
-    shareUploadFailed = false;
-    shareUploadFailCode = 500;
-    resetUploadProgress();
 }
 
 static bool ensureApDhcpRunning() {
@@ -427,7 +635,10 @@ static void addCaptiveProbeRoutes() {
 }
 
 static void configureShareRoutes() {
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    if (!shareCorsAdded) {
+        DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+        shareCorsAdded = true;
+    }
 
     if (shareModeAp) addCaptiveProbeRoutes();
 
@@ -439,6 +650,7 @@ static void configureShareRoutes() {
     });
 
     shareServer->on("/login", HTTP_POST, [](AsyncWebServerRequest *request) {
+        SHARE_DIAG("login");
         String user = request->hasParam("username", true) ? request->getParam("username", true)->value() : "";
         String pwd = request->hasParam("password", true) ? request->getParam("password", true)->value() : "";
         if (user == kvxConfig.fileShare.user && pwd == kvxConfig.fileShare.portalPwd) {
@@ -467,37 +679,56 @@ static void configureShareRoutes() {
     });
 
     shareServer->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+        SHARE_DIAG("status");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
         }
-        bool sdOk = setupSdCard();
-        String json = "{";
-        json += "\"readOnly\":";
-        json += kvxConfig.fileShare.readOnly ? "true" : "false";
-        json += ",\"clients\":";
-        json += String(WiFi.softAPgetStationNum());
-        json += ",\"sd\":";
-        if (sdOk) {
-            json += "{\"free\":\"" + humanSize(SD.totalBytes() - SD.usedBytes()) + "\",\"used\":\"" +
-                    humanSize(SD.usedBytes()) + "\",\"total\":\"" + humanSize(SD.totalBytes()) + "\"}";
+        // Cached sizes only — never call SD.usedBytes()/totalBytes() on AsyncTCP stack.
+        String out;
+        out.reserve(320);
+        out += "{\"readOnly\":";
+        out += kvxConfig.fileShare.readOnly ? "true" : "false";
+        out += ",\"clients\":";
+        out += String(shareModeAp ? WiFi.softAPgetStationNum() : 0);
+        out += ",\"sd\":";
+        if (shareFsCache.sdOk) {
+            out += "{\"free\":\"";
+            out += humanSize(shareFsCache.sdFree);
+            out += "\",\"used\":\"";
+            out += humanSize(shareFsCache.sdUsed);
+            out += "\",\"total\":\"";
+            out += humanSize(shareFsCache.sdTotal);
+            out += "\"}";
         } else {
-            json += "null";
+            out += "null";
         }
-        json += ",\"lfs\":{\"free\":\"" + humanSize(LittleFS.totalBytes() - LittleFS.usedBytes()) +
-                "\",\"used\":\"" + humanSize(LittleFS.usedBytes()) + "\",\"total\":\"" +
-                humanSize(LittleFS.totalBytes()) + "\"}";
-        json += "}";
-        request->send(200, "application/json", json);
+        out += ",\"lfs\":{\"free\":\"";
+        out += humanSize(shareFsCache.lfsFree);
+        out += "\",\"used\":\"";
+        out += humanSize(shareFsCache.lfsUsed);
+        out += "\",\"total\":\"";
+        out += humanSize(shareFsCache.lfsTotal);
+        out += "\"}}";
+        request->send(200, "application/json", out);
+        SHARE_DIAG("status.done");
     });
 
     shareServer->on("/api/list", HTTP_GET, [](AsyncWebServerRequest *request) {
+        SHARE_DIAG("list");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
         }
         String vol = request->hasParam("vol") ? request->getParam("vol")->value() : "sd";
         String path = request->hasParam("path") ? request->getParam("path")->value() : "/";
+        size_t offset = 0;
+        size_t limit = kListPageDefault;
+        if (request->hasParam("offset")) offset = (size_t)request->getParam("offset")->value().toInt();
+        if (request->hasParam("limit")) limit = (size_t)request->getParam("limit")->value().toInt();
+        if (limit == 0) limit = kListPageDefault;
+        if (limit > kListPageMax) limit = kListPageMax;
+
         FS *fs = nullptr;
         String abs;
         bool sdMissing = false;
@@ -516,57 +747,80 @@ static void configureShareRoutes() {
             return;
         }
 
-        String json = "{\"path\":\"";
-        // escape path for JSON
+        AsyncResponseStream *response = request->beginResponseStream("application/json", 3072);
+        if (!response) {
+            root.close();
+            request->send(500, "text/plain", "list alloc failed");
+            return;
+        }
+
         String showPath = path;
         if (showPath.length() == 0) showPath = "/";
-        for (size_t i = 0; i < showPath.length(); i++) {
-            char c = showPath[i];
-            if (c == '"' || c == '\\') json += '\\';
-            json += c;
-        }
-        json += "\",\"items\":[";
+        response->print("{\"path\":\"");
+        escapeJsonTo(*response, showPath);
+        response->printf("\",\"offset\":%u,\"limit\":%u,\"items\":[", (unsigned)offset, (unsigned)limit);
+
+        size_t seen = 0;
+        size_t emitted = 0;
         bool first = true;
-        while (true) {
-            if (esp_get_free_heap_size() < 8192) break;
-            bool isDir = false;
-            String fullPath = root.getNextFileName(&isDir);
-            if (fullPath.length() == 0) break;
-            String name = fullPath.substring(fullPath.lastIndexOf('/') + 1);
-            if (name.length() == 0) continue;
-            uint64_t sz = 0;
-            time_t mtime = 0;
-            if (!isDir) {
-                File f = fs->open(fullPath);
-                if (f) {
-                    sz = f.size();
-                    mtime = f.getLastWrite();
-                    f.close();
-                }
+        bool hasMore = false;
+        File entry = root.openNextFile();
+        while (entry) {
+            if (esp_get_free_heap_size() < 6144) {
+                hasMore = true;
+                entry.close();
+                break;
             }
-            if (!first) json += ',';
+            bool isDir = entry.isDirectory();
+            const char *ep = entry.path();
+            String fullPath = ep ? String(ep) : String();
+            String name = entryBaseName(fullPath);
+            uint64_t sz = isDir ? 0 : (uint64_t)entry.size();
+            time_t mtime = entry.getLastWrite();
+            entry.close();
+
+            if (name.length() == 0) {
+                entry = root.openNextFile();
+                continue;
+            }
+
+            if (seen < offset) {
+                seen++;
+                entry = root.openNextFile();
+                delay(0);
+                continue;
+            }
+            if (emitted >= limit) {
+                hasMore = true;
+                break;
+            }
+
+            if (!first) response->print(',');
             first = false;
-            json += "{\"name\":\"";
-            for (size_t i = 0; i < name.length(); i++) {
-                char c = name[i];
-                if (c == '"' || c == '\\') json += '\\';
-                json += c;
-            }
-            json += "\",\"dir\":";
-            json += isDir ? "true" : "false";
-            json += ",\"size\":";
-            json += String((unsigned long)sz);
-            json += ",\"mtime\":";
-            json += String((unsigned long)mtime);
-            json += '}';
-            delay(1);
+            response->print("{\"name\":\"");
+            escapeJsonTo(*response, name);
+            response->print("\",\"dir\":");
+            response->print(isDir ? "true" : "false");
+            response->print(",\"size\":");
+            response->print((unsigned long)sz);
+            response->print(",\"mtime\":");
+            response->print((unsigned long)mtime);
+            response->print('}');
+            emitted++;
+            seen++;
+            entry = root.openNextFile();
+            delay(0);
         }
         root.close();
-        json += "]}";
-        request->send(200, "application/json", json);
+        response->print("],\"hasMore\":");
+        response->print(hasMore ? "true" : "false");
+        response->print('}');
+        request->send(response);
+        SHARE_DIAG("list.done");
     });
 
     shareServer->on("/api/download", HTTP_GET, [](AsyncWebServerRequest *request) {
+        SHARE_DIAG("download");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
@@ -591,27 +845,21 @@ static void configureShareRoutes() {
             return;
         }
         size_t sz = f.size();
-        f.close();
+        // Pass open File into response — path is only used for Content-Disposition.
         String base = abs.substring(abs.lastIndexOf('/') + 1);
-        // Keep path alive for the async FileResponse.
-        static String dlPath;
-        dlPath = abs;
-
         AsyncWebServerResponse *response =
-            request->beginResponse(*fs, dlPath, "application/octet-stream");
+            request->beginResponse(f, abs, "application/octet-stream", true);
         if (!response) {
+            f.close();
             request->send(500, "text/plain", "download failed");
             return;
         }
-        // Attachment + Connection:close — location.href downloads often stall on
-        // STA Wi‑Fi when the SPA navigates away mid-stream.
-        String disp = "attachment; filename=\"" + base + "\"";
-        response->addHeader("Content-Disposition", disp);
         response->addHeader("Connection", "close");
         response->addHeader("Cache-Control", "no-store");
         appendShareLogf("DN start %s (%s)", base.c_str(), humanSize(sz).c_str());
         noteTransfer('D', base, true);
         request->send(response);
+        SHARE_DIAG("download.sent");
     });
 
     auto denyIfReadOnly = [](AsyncWebServerRequest *request) -> bool {
@@ -623,6 +871,7 @@ static void configureShareRoutes() {
     };
 
     shareServer->on("/api/mkdir", HTTP_POST, [denyIfReadOnly](AsyncWebServerRequest *request) {
+        SHARE_DIAG("mkdir");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
@@ -651,6 +900,7 @@ static void configureShareRoutes() {
     });
 
     shareServer->on("/api/rename", HTTP_POST, [denyIfReadOnly](AsyncWebServerRequest *request) {
+        SHARE_DIAG("rename");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
@@ -683,6 +933,7 @@ static void configureShareRoutes() {
     });
 
     shareServer->on("/api/delete", HTTP_POST, [denyIfReadOnly](AsyncWebServerRequest *request) {
+        SHARE_DIAG("delete");
         if (!checkShareAuth(request)) {
             sendUnauthorized(request);
             return;
@@ -703,17 +954,19 @@ static void configureShareRoutes() {
             return;
         }
         String full = (abs == "/") ? ("/" + name) : (abs + "/" + name);
-        if (!fs->exists(full) || !deleteFromSd(*fs, full)) {
+        if (!fs->exists(full) || !deleteSharePathIter(*fs, full)) {
             request->send(500, "text/plain", "delete failed");
             return;
         }
         request->send(200, "text/plain", "ok");
+        SHARE_DIAG("delete.done");
     });
 
     shareServer->on(
         "/api/upload",
         HTTP_POST,
         [](AsyncWebServerRequest *request) {
+            SHARE_DIAG("upload.done");
             closeShareUploadFile();
             size_t got = shareUploadReceived;
             if (shareUploadFailed) {
@@ -724,27 +977,38 @@ static void configureShareRoutes() {
                 else if (code == 403) msg = "read-only";
                 else if (code == 401) msg = "Unauthorized";
                 else if (code == 400) msg = "bad path";
-                appendShareLogf("UP fail %s @%s", shareUploadName, humanSize(got).c_str());
-                noteTransfer('U', shareUploadPath.length() ? shareUploadPath : String(shareUploadName), false);
+                String uname = getShareUploadNameCopy();
+                appendShareLogf("UP fail %s @%s", uname.c_str(), humanSize(got).c_str());
+                noteTransfer(
+                    'U', shareUploadPath.length() ? shareUploadPath : uname, false
+                );
+                // Remove partial on failure (except busy, which never opened a file).
+                if (code != 409 && shareUploadFs && shareUploadPath.length()) {
+                    shareUploadFs->remove(shareUploadPath);
+                }
                 shareUploadBusy = false;
+                shareUploadActive = false;
                 shareUploadFailed = false;
                 shareUploadFailCode = 500;
                 shareUploadFs = nullptr;
                 shareUploadPath = "";
                 resetUploadProgress();
+                shareUploadGen++;
                 request->send(code, "text/plain", msg);
                 return;
             }
             String base = shareUploadPath;
             int slash = base.lastIndexOf('/');
             if (slash >= 0) base = base.substring(slash + 1);
-            if (base.length() == 0) base = shareUploadName;
+            if (base.length() == 0) base = getShareUploadNameCopy();
             appendShareLogf("UP done %s (%s)", base.c_str(), humanSize(got).c_str());
             noteTransfer('U', base, true);
             shareUploadBusy = false;
+            shareUploadActive = false;
             shareUploadFs = nullptr;
             shareUploadPath = "";
             resetUploadProgress();
+            shareUploadGen++;
             request->send(200, "text/plain", "ok");
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len,
@@ -762,7 +1026,8 @@ static void configureShareRoutes() {
                 return;
             }
             if (!index) {
-                if (shareUploadBusy) {
+                SHARE_DIAG("upload.start");
+                if (shareUploadBusy || shareUploadActive) {
                     failUpload(409);
                     return;
                 }
@@ -788,9 +1053,14 @@ static void configureShareRoutes() {
                     return;
                 }
                 // Never call SD.usedBytes()/totalBytes() here — they walk the FAT from the
-                // AsyncTCP task (4K stack) and crash. LittleFS metadata is cheap.
+                // AsyncTCP task and crash. LittleFS metadata is cheap; SD uses the cache.
                 if (request->contentLength() > 0 && fs == &LittleFS) {
                     if (request->contentLength() > freeBytes(*fs, false)) {
+                        failUpload(507);
+                        return;
+                    }
+                } else if (request->contentLength() > 0 && fs == &SD && shareFsCache.sdOk) {
+                    if (request->contentLength() > shareFsCache.sdFree) {
                         failUpload(507);
                         return;
                     }
@@ -798,16 +1068,12 @@ static void configureShareRoutes() {
                 String unique = uniqueUploadName(*fs, abs, filename);
                 String full = (abs == "/") ? ("/" + unique) : (abs + "/" + unique);
                 shareUploadBusy = true;
+                shareUploadActive = true;
                 shareUploadFailed = false;
                 shareUploadFailCode = 500;
                 shareUploadFs = fs;
                 shareUploadPath = full;
-                size_t n = unique.length();
-                if (n >= kNameMax) n = kNameMax - 1;
-                memcpy(shareUploadName, unique.c_str(), n);
-                shareUploadName[n] = 0;
-                // Prefer client file size — Content-Length is the multipart body
-                // (boundaries + headers), so progress would stall around ~80%.
+                setShareUploadName(unique);
                 size_t total = 0;
                 if (request->hasParam("size")) {
                     total = (size_t)request->getParam("size")->value().toInt();
@@ -816,9 +1082,10 @@ static void configureShareRoutes() {
                 }
                 resetUploadProgress();
                 shareUploadTotal = total;
+                shareUploadLastProgressMs = millis();
                 appendShareLogf(
                     "UP start %s%s%s",
-                    shareUploadName,
+                    unique.c_str(),
                     total ? " /" : "",
                     total ? humanSize(total).c_str() : ""
                 );
@@ -827,11 +1094,26 @@ static void configureShareRoutes() {
                 if (!shareUploadFile) {
                     failUpload(500);
                     shareUploadBusy = false;
+                    shareUploadActive = false;
                     shareUploadFs = nullptr;
                     shareUploadPath = "";
                     resetUploadProgress();
                     return;
                 }
+
+                shareUploadGen++;
+                uint32_t gen = shareUploadGen;
+                // POD tag freed by AsyncWebServerRequest destructor via free().
+                auto *tag = (uint32_t *)malloc(sizeof(uint32_t));
+                if (tag) {
+                    *tag = gen;
+                    request->_tempObject = tag;
+                }
+                request->onDisconnect([gen]() {
+                    if (shareUploadActive && shareUploadGen == gen) {
+                        abortShareUpload("disconnect", true);
+                    }
+                });
                 bumpUploadProgress(0, total, true);
             }
             if (shareUploadFailed) return;
@@ -851,10 +1133,11 @@ static void configureShareRoutes() {
             size_t got = index + len;
             size_t total = shareUploadTotal;
             if (final) {
-                // Snap to 100% even if client omitted size=.
                 if (!total || got > total) total = got;
                 bumpUploadProgress(got, total, true);
-                appendShareLogf("UP write %s (%s)", shareUploadName, humanSize(got).c_str());
+                appendShareLogf(
+                    "UP write %s (%s)", getShareUploadNameCopy().c_str(), humanSize(got).c_str()
+                );
                 closeShareUploadFile();
             } else {
                 bumpUploadProgress(got, total, false);
@@ -883,9 +1166,13 @@ static String maskPwd(const String &pwd, bool show) {
 }
 
 static String lastTransferLine() {
-    if (shareEvent.seq == 0 || shareEvent.direction == 0) return "Last: -";
-    String d = (shareEvent.direction == 'U') ? "UP " : "DN ";
-    return "Last: " + d + String(shareEvent.name) + (shareEvent.ok ? " ok" : " fail");
+    TransferEvent ev;
+    portENTER_CRITICAL(&shareMux);
+    ev = shareEvent;
+    portEXIT_CRITICAL(&shareMux);
+    if (ev.seq == 0 || ev.direction == 0) return "Last: -";
+    String d = (ev.direction == 'U') ? "UP " : "DN ";
+    return "Last: " + d + String(ev.name) + (ev.ok ? " ok" : " fail");
 }
 
 static int shareLineY(int line) {
@@ -935,11 +1222,18 @@ static void showShareLogs() {
     if (shareLogCount == 0) {
         area.addLine("(no transfers yet)");
     } else {
-        const uint8_t start =
-            (shareLogCount < kLogCap) ? 0 : shareLogNext; // oldest in ring
-        for (uint8_t i = 0; i < shareLogCount; i++) {
+        char lines[kLogCap][kLogLine];
+        uint8_t count = 0;
+        uint8_t next = 0;
+        portENTER_CRITICAL(&shareMux);
+        count = shareLogCount;
+        next = shareLogNext;
+        memcpy(lines, shareLogLines, sizeof(lines));
+        portEXIT_CRITICAL(&shareMux);
+        const uint8_t start = (count < kLogCap) ? 0 : next;
+        for (uint8_t i = 0; i < count; i++) {
             uint8_t idx = (start + i) % kLogCap;
-            area.addLine(shareLogLines[idx]);
+            area.addLine(lines[idx]);
         }
         area.scrollToLine(area.getMaxLines());
     }
@@ -1008,7 +1302,8 @@ static void drawInfoScreen() {
             const char *upLab = "UP: ";
             tft.setCursor(padX, y);
             tft.print(upLab);
-            String name = shareUploadName[0] ? String(shareUploadName) : String("upload");
+            String name = getShareUploadNameCopy();
+            if (name.length() == 0) name = "upload";
             sharePrintClipped(padX + tft.textWidth(upLab), y, name, maxTextPx - tft.textWidth(upLab));
         }
 
@@ -1074,6 +1369,7 @@ static void runShareLoop() {
     uint8_t lastClients = 255;
     bool needDraw = true;
     bool wasUploading = false;
+    refreshFsSizeCache(true);
 
     EscPress = false;
     NextPress = false;
@@ -1082,6 +1378,14 @@ static void runShareLoop() {
 
     while (!returnToMenu && !forceHome) {
         if (shareDnsRunning) shareDns.processNextRequest();
+        refreshFsSizeCache(false);
+
+        // Stale upload fallback when the client vanishes without a clean disconnect.
+        if (shareUploadActive && shareUploadLastProgressMs != 0 &&
+            (millis() - shareUploadLastProgressMs) > kUploadStaleMs) {
+            abortShareUpload("stale", true);
+            needDraw = true;
+        }
 
         if (check(EscPress)) {
             if (shareUploadBusy) {
@@ -1116,6 +1420,7 @@ static void runShareLoop() {
                     needDraw = true;
                     continue;
                 }
+                abortShareUpload("user-stop", true);
             }
             break;
         }
@@ -1238,6 +1543,9 @@ static void toggleReadOnly() {
 }
 
 static bool beginShareServer() {
+    ensureShareSdHandles();
+    refreshFsSizeCache(true);
+
     // Prefer internal RAM — AsyncTCP is unreliable when the server object lives in PSRAM.
     shareServer = (AsyncWebServer *)heap_caps_malloc(
         sizeof(AsyncWebServer), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT

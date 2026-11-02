@@ -34,7 +34,7 @@ Source domains: `src/menu/<id>/` — see [ARCHITECTURE.md](ARCHITECTURE.md).
 | `menu/wifi` → CSI Radar | RSSI hop / STA CSI / ESP-NOW |
 | `menu/netops` → SkyJack / LDAP / Autodiscover / CIW / Hijack | Addon logic runs (`EVIL_EXTENSIONS`) |
 | `menu/others` → LLM Chat | HTTP stream; UART if `HAS_LLM_MODULE` |
-| Modules → Companion bins | Lists `/support_files/companions/*.bin` or explains SD pack |
+| Modules → Companions | Lists `/support_files/companions/*.bin` or explains SD pack |
 | SD missing | Optional assets error; firmware still runs |
 | SD present with `tools/sd_pack` | Wordlists, CIW JSON, companion bins resolve |
 | `menu/gps` → Wardriving → Wardriving Master | Addon under existing Wardriving submenu |

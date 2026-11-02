@@ -145,7 +145,7 @@ static void tileXY(const GridGeom &g, int itemIdx, int &x, int &y) {
 static void drawFooter(int globalIndex, std::vector<MenuItemInterface *> &items) {
     String label = items[globalIndex]->getName();
     tft.fillRect(0, tftHeight - KVX_FOOTER_H, tftWidth, KVX_FOOTER_H, kvxConfig.secColor);
-    tft.setTextSize(FM);
+    tft.setTextSize(uiMenuFont());
     tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
     tft.drawCentreString(label, tftWidth / 2, tftHeight - KVX_FOOTER_H + 6, 1);
 }

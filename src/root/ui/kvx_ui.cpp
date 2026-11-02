@@ -155,47 +155,49 @@ static void drawKvxSubmenuRow(
     int marqueeOffset = 0
 ) {
     const uint16_t bg = kvxConfig.bgColor;
-    const uint16_t purple = kvxConfig.priColor;
-    const uint16_t green = kvxConfig.secColor;
+    const uint16_t pri = kvxConfig.priColor;
+    const uint16_t accent = kvxConfig.secColor;
+    const int menuFont = uiMenuFont();
 
     int y = startY + (i - scroll) * lineH;
-    tft.fillRect(0, y, tftWidth, lineH, bg);
-
     bool sel = (i == index);
-    String prefix = sel ? String("> ") : String("  ");
+    const uint16_t rowBg = sel ? accent : bg;
+    tft.fillRect(0, y, tftWidth, lineH, rowBg);
+
     String label = options[i].label;
-    String line = prefix + label;
+    String line = label;
     if ((int)line.length() > nchars) {
         if (sel && marqueeOffset > 0) {
             // Slow horizontal scroll of the selected label.
-            int avail = nchars - (int)prefix.length();
+            int avail = nchars;
             if (avail < 1) avail = 1;
             int maxOff = max(0, (int)label.length() - avail);
             int off = marqueeOffset % (maxOff + 8); // pause at ends via extra slack
             if (off > maxOff) off = maxOff;
-            line = prefix + label.substring(off, off + avail);
+            line = label.substring(off, off + avail);
         } else {
             line = line.substring(0, nchars);
         }
     }
 
-    tft.setTextSize(FM);
-    if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, bg);
-    else if (sel) tft.setTextColor(purple, bg);
-    else tft.setTextColor(green, bg);
+    tft.setTextSize(menuFont);
+    if (!options[i].enabled) tft.setTextColor(TFT_DARKGREY, rowBg);
+    else if (sel) tft.setTextColor(bg, accent);
+    else tft.setTextColor(pri, bg);
     tft.drawString(line, 6, y, 1);
 }
 
 void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title) {
     if (chargeModeActive) return;
     const uint16_t bg = kvxConfig.bgColor;
+    const int menuFont = uiMenuFont();
 
-    const int lineH = FM * LH + 4;
+    const int lineH = uiRowH(menuFont);
     const int startY = KVX_TOPBAR_H + 4;
     const int visible = max(1, (tftHeight - startY - 6) / lineH);
     int scroll = 0;
     if (index >= visible) scroll = index - visible + 1;
-    int nchars = max(1, (tftWidth - 12) / (FM * LW));
+    int nchars = max(1, (tftWidth - 12) / uiCharW(menuFont));
 
     String titleStr = (title && title[0] != '\0') ? String(title) : String("Menu");
     String first = options.empty() ? String() : options.front().label;
@@ -212,7 +214,7 @@ void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title) 
     bool needsMarquee = false;
     bool marqueeAdvance = false;
     if (index >= 0 && index < (int)options.size()) {
-        needsMarquee = ((int)options[index].label.length() + 2) > nchars;
+        needsMarquee = (int)options[index].label.length() > nchars;
     }
     if (marqueeIndex != index || fullRedraw) {
         marqueeIndex = index;

@@ -33,8 +33,8 @@ static constexpr unsigned long kBackspaceClearMs = 400;
 static constexpr unsigned long kFileScanBudgetMs = 24;
 static constexpr unsigned long kNavRepeatMs = 140;
 
-static int footerH() { return uiLineH(FP) + 4; }
-static int inputH() { return uiLineH(FP) + 8; }
+static int footerH() { return uiLineH(uiDenseFont()) + 4; }
+static int inputH() { return uiLineH(uiDenseFont()) + 8; }
 
 static void pushRecentApp(const String &id) {
     if (id.length() == 0) return;
@@ -143,49 +143,57 @@ static void buildFileScanResults(const FileSearchScanner &scan, std::vector<Sear
 
 static int bodyTop() { return inputH() + 2; }
 static int bodyH() { return tftHeight - bodyTop() - footerH(); }
-static int visibleRows() { return max(1, bodyH() / uiRowH(FP)); }
+static int searchRowFont() { return uiMenuFont(); }
+static int visibleRows() { return max(1, bodyH() / uiRowH(searchRowFont())); }
 
 static void drawHitRow(const SearchHit &hit, int y, bool selected) {
-    const int rowH = uiRowH(FP);
-    const uint16_t bg = selected ? kvxConfig.secColor : kvxConfig.bgColor;
-    tft.fillRect(0, y, tftWidth, rowH, bg);
-    tft.setTextSize(FP);
-    tft.setTextColor(kvxConfig.priColor, bg);
-    String mark = selected ? "> " : "  ";
-    String label = mark + hit.label;
-    int labelMax = max(6, (tftWidth - 4) / max(1, uiCharW(FP)));
+    const int rowFont = searchRowFont();
+    const int rowH = uiRowH(rowFont);
+    const uint16_t rowBg = selected ? kvxConfig.secColor : kvxConfig.bgColor;
+    const uint16_t rowFg = selected ? kvxConfig.bgColor : kvxConfig.priColor;
+    tft.fillRect(0, y, tftWidth, rowH, rowBg);
+    tft.setTextSize(rowFont);
+    tft.setTextColor(rowFg, rowBg);
+    String label = hit.label;
+    int labelMax = max(6, (tftWidth - 4) / max(1, uiCharW(rowFont)));
     if ((int)label.length() > labelMax) label = label.substring(0, labelMax - 1) + "…";
     tft.drawString(label, 2, y + 1);
     if (hit.subtitle.length()) {
         String sub = hit.subtitle;
-        int subW = sub.length() * uiCharW(FP);
-        int labelW = label.length() * uiCharW(FP);
-        if (labelW + subW + 10 < tftWidth) { tft.drawRightString(sub, tftWidth - 2, y + 1, 1); }
+        int subW = sub.length() * uiCharW(rowFont);
+        int labelW = label.length() * uiCharW(rowFont);
+        if (labelW + subW + 10 < tftWidth) {
+            // Unselected: subtitle in accent; selected: same inverted text as label.
+            tft.setTextColor(selected ? kvxConfig.bgColor : kvxConfig.secColor, rowBg);
+            tft.drawRightString(sub, tftWidth - 2, y + 1, 1);
+        }
     }
 }
 
 static void drawInputBar(SearchMode mode, const String &query) {
     const int ih = inputH();
+    const int dense = uiDenseFont();
     tft.fillRect(0, 0, tftWidth, ih, kvxConfig.secColor);
-    tft.setTextSize(FP);
+    tft.setTextSize(dense);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
     String modeTag = (mode == SearchMode::Apps) ? "App" : "File";
     String line = modeTag + ": " + query + "_";
-    int maxChars = max(8, (tftWidth - 8) / max(1, uiCharW(FP)));
+    int maxChars = max(8, (tftWidth - 8) / max(1, uiCharW(dense)));
     if ((int)line.length() > maxChars) line = String("…") + line.substring(line.length() - (maxChars - 1));
-    tft.drawString(line, 4, (ih - uiLineH(FP)) / 2);
+    tft.drawString(line, 4, (ih - uiLineH(dense)) / 2);
 }
 
 static void drawFooterBar(const String &query, size_t hitCount, bool scanning) {
     const int fh = footerH();
+    const int dense = uiDenseFont();
     tft.fillRect(0, tftHeight - fh, tftWidth, fh, kvxConfig.secColor);
-    tft.setTextSize(FP);
+    tft.setTextSize(dense);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.secColor);
     // ; , . / navigate; FN+those insert the symbols; FN+1-4 launch.
     String foot = "↑↓ FN+1-4 Ent Esc Tab";
     if (query.length() && !scanning) foot = String(hitCount) + "  " + foot;
     else if (scanning) foot = String("… ") + foot;
-    if ((int)foot.length() * uiCharW(FP) > tftWidth - 4) foot = "↑↓ FN+1-4 Esc";
+    if ((int)foot.length() * uiCharW(dense) > tftWidth - 4) foot = "↑↓ FN+1-4 Esc";
     tft.drawCentreString(foot, tftWidth / 2, tftHeight - fh + 2, 1);
 }
 
@@ -195,19 +203,20 @@ static void drawBody(
 ) {
     const int top = bodyTop();
     const int h = bodyH();
-    const int rowH = uiRowH(FP);
+    const int rowFont = searchRowFont();
+    const int rowH = uiRowH(rowFont);
     const int visible = visibleRows();
 
     tft.fillRect(0, top, tftWidth, h, kvxConfig.bgColor);
 
     if (hits.empty()) {
-        tft.setTextSize(FP);
+        tft.setTextSize(rowFont);
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         const char *msg = scanning                ? "Searching…"
                           : (query.length() == 0) ? (mode == SearchMode::Apps ? "Type to search apps"
                                                                               : "Type to search files")
                                                   : "No matches";
-        tft.drawCentreString(msg, tftWidth / 2, top + h / 2 - uiLineH(FP) / 2, 1);
+        tft.drawCentreString(msg, tftWidth / 2, top + h / 2 - uiLineH(rowFont) / 2, 1);
         return;
     }
 
@@ -234,7 +243,7 @@ static void drawSelectionChange(
 ) {
     if (hits.empty()) return;
     const int top = bodyTop();
-    const int rowH = uiRowH(FP);
+    const int rowH = uiRowH(searchRowFont());
     const int visible = visibleRows();
 
     auto paintIfVisible = [&](int idx, bool sel) {

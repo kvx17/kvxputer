@@ -26,7 +26,7 @@ void spiPinMap() {
     area.addLine("Grove SCL G" + String(GROVE_SCL));
 #endif
     area.addLine("");
-    area.addLine("RF module cfg: " + String((int)kvxConfigPins.rfModule));
+    area.addField("RF module cfg:", String((int)kvxConfigPins.rfModule));
     area.addLine("No active SPI probe.");
     area.show(true);
 }

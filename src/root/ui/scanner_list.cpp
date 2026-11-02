@@ -10,12 +10,13 @@
 #include <cstring>
 #include <globals.h>
 
-static constexpr int SCANNER_FOOTER_H = 14;
 static constexpr unsigned long SCANNER_BAR_MS = 30000;
+
+static int scannerFooterH() { return uiLineH(uiDenseFont()) + 4; }
 
 static int scannerBodyTop() { return KVX_TOPBAR_H + 2; }
 
-static int scannerBodyBottom() { return tftHeight - SCANNER_FOOTER_H; }
+static int scannerBodyBottom() { return tftHeight - scannerFooterH(); }
 
 static int scannerLineH() { return uiRowH(uiMenuFont()); }
 
@@ -26,9 +27,10 @@ static int scannerVisibleRows() {
 
 static void scannerDrawFooter() {
     const int dense = uiDenseFont();
+    const int footH = scannerFooterH();
     const uint16_t bg = kvxConfig.bgColor;
     const uint16_t fg = kvxConfig.priColor;
-    tft.fillRect(0, scannerBodyBottom(), tftWidth, SCANNER_FOOTER_H, bg);
+    tft.fillRect(0, scannerBodyBottom(), tftWidth, footH, bg);
     tft.drawFastHLine(0, scannerBodyBottom(), tftWidth, kvxConfig.priColor);
     tft.setTextSize(dense);
     tft.setTextColor(fg, bg);
@@ -37,9 +39,10 @@ static void scannerDrawFooter() {
 
 static void scannerDrawDetailFooter() {
     const int dense = uiDenseFont();
+    const int footH = scannerFooterH();
     const uint16_t bg = kvxConfig.bgColor;
     const uint16_t fg = kvxConfig.priColor;
-    tft.fillRect(0, scannerBodyBottom(), tftWidth, SCANNER_FOOTER_H, bg);
+    tft.fillRect(0, scannerBodyBottom(), tftWidth, footH, bg);
     tft.drawFastHLine(0, scannerBodyBottom(), tftWidth, kvxConfig.priColor);
     tft.setTextSize(dense);
     tft.setTextColor(fg, bg);
@@ -302,16 +305,17 @@ void scannerListShowDetail(
             if (sep >= 0) {
                 String lab = pr.text.substring(0, sep);
                 String val = pr.text.substring(sep + 1);
-                tft.setTextColor(accent, bg);
+                // Label priColor, value secColor — matches ScrollableTextArea::addField.
+                tft.setTextColor(fg, bg);
                 tft.drawString(lab + ":", 4, y + 1, 1);
                 int lx = 4 + (int)(lab.length() + 1) * uiCharW(bodyFont);
-                tft.setTextColor(fg, bg);
+                tft.setTextColor(accent, bg);
                 tft.drawString(val, lx + uiCharW(bodyFont), y + 1, 1);
             } else if (pr.isLabel) {
-                tft.setTextColor(accent, bg);
+                tft.setTextColor(fg, bg);
                 tft.drawString(pr.text, 4, y + 1, 1);
             } else {
-                tft.setTextColor(fg, bg);
+                tft.setTextColor(accent, bg);
                 tft.drawString(pr.text, 4, y + 1, 1);
             }
         }

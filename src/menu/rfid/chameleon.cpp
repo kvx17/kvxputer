@@ -160,21 +160,21 @@ void Chameleon::setMode(AppMode mode) {
             _hf_read_uid = false;
             break;
         case LF_CLONE_MODE:
-            padprintln("New UID: " + printableLFUID);
+            padField("New UID:", printableLFUID);
             padprintln("");
             break;
         case HF_CLONE_MODE:
-            padprintln("Device type: " + printableHFUID.piccType);
-            padprintln("New UID: " + printableHFUID.uid);
+            padField("Device type:", printableHFUID.piccType);
+            padField("New UID:", printableHFUID.uid);
             padprintln("");
             break;
         case LF_EMULATION_MODE:
-            padprintln("UID: " + printableLFUID);
+            padField("UID:", printableLFUID);
             padprintln("");
             break;
         case HF_EMULATION_MODE:
-            padprintln("Device type: " + printableHFUID.piccType);
-            padprintln("UID: " + printableHFUID.uid);
+            padField("Device type:", printableHFUID.piccType);
+            padField("UID:", printableHFUID.uid);
             padprintln("");
             break;
 
@@ -220,10 +220,10 @@ void Chameleon::displayBanner() {
 }
 
 void Chameleon::dumpHFCardDetails() {
-    padprintln("Device type: " + printableHFUID.piccType);
-    padprintln("UID: " + printableHFUID.uid);
-    padprintln("ATQA: " + printableHFUID.atqa);
-    padprintln("SAK: " + printableHFUID.sak);
+    padField("Device type:", printableHFUID.piccType);
+    padField("UID:", printableHFUID.uid);
+    padField("ATQA:", printableHFUID.atqa);
+    padField("SAK:", printableHFUID.sak);
     if (!pageReadSuccess) padprintln("[!] Failed to read data blocks");
 }
 
@@ -308,7 +308,7 @@ void Chameleon::readLFTag() {
     lfTagData = chmUltra.lfTagData;
 
     displayBanner();
-    padprintln("UID: " + printableLFUID);
+    padField("UID:", printableLFUID);
 
     _lf_read_uid = true;
     _lastReadTime = millis();

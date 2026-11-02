@@ -19,13 +19,13 @@ static void pdaMemoView(const String &text) {
         drawKvxTopBar("Memo");
     }
     const int bodyY = KVX_TOPBAR_H + 4;
-    const int bodyH = tftHeight - bodyY - FP * LH - 6;
+    const int footH = uiLineH(uiBodyFont()) + 4;
+    const int bodyH = tftHeight - bodyY - footH;
     ScrollableTextArea area(uiBodyFont(), BORDER_PAD_X, bodyY, tftWidth - 2 * BORDER_PAD_X, bodyH, false, false);
     area.fromString(text.length() ? text : String("(empty)"));
     area.draw(true);
-    tft.setTextSize(FP);
     tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawCentreString("Arrows scroll  OK/ESC back", tftWidth / 2, tftHeight - FP * LH - 2, 1);
+    printCenterFootnote("Arrows scroll  OK/ESC back");
     area.show(false);
 }
 

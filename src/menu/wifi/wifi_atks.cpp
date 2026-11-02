@@ -7,6 +7,7 @@
 #include "wifi_atks.h"
 #include "root/ui/display.h"
 #include "root/ui/main_menu.h"
+#include "root/ui/scrollableTextArea.h"
 #include "root/input/mykeyboard.h"
 #include "root/storage/sd_functions.h"
 #include "root/app/utils.h"
@@ -167,18 +168,18 @@ void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan
 }
 
 void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel) {
-    drawMainBorder();
-    tft.setTextColor(kvxConfig.priColor);
-    tft.setTextSize(FP);
-    tft.drawCentreString("-=Information=-", tft.width() / 2, uiStatusY(0) - uiRowH(FP), SMOOTH_FONT);
-    tft.drawString("AP: " + tssid, 10, uiStatusY(0));
-    tft.drawString("Channel: " + String(channel), 10, uiStatusY(1));
-    tft.drawString(mac, 10, uiStatusY(2));
-    tft.drawString("Press " + String(BTN_ALIAS) + " to act", 10, uiFooterY(FP));
+    ScrollableTextArea area("Information");
+    area.addField("AP:", tssid);
+    area.addField("Channel:", String(channel));
+    area.addField("MAC:", mac);
+    area.addLine("");
+    area.addLine("OK to act  Esc back");
+    area.draw(true);
     vTaskDelay(200 / portTICK_PERIOD_MS);
     SelPress = false;
 
     while (1) {
+        area.update();
         if (check(SelPress)) {
             returnToMenu = false;
             return;
@@ -376,12 +377,8 @@ ScanNets:
         }
         if (millis() - lastTime > 2000) {
             drawMainBorderWithTitle("Deauth Flood");
-            tft.setCursor(10, tftHeight - 25);
-            tft.print("Frames:               ");
-            tft.setCursor(10, tftHeight - 25);
-            tft.println("Frames: " + String(count / 2) + "/s   ");
-            tft.setCursor(10, tftHeight - 45);
-            tft.println("Channel " + String(channel) + "    ");
+            drawKvRow(10, tftHeight - 45, "Channel:", String(channel));
+            drawKvRow(10, tftHeight - 25, "Frames:", String(count / 2) + "/s");
             count = 0;
             lastTime = millis();
         }
@@ -562,16 +559,16 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
             drawMainBorderWithTitle("Handshake Capture");
             tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
             padprintln("");
-            padprintln("SSID: " + tssid);
-            padprintln("BSSID: " + mac);
-            padprintln("Security: " + encryptionTypeStr);
+            padField("SSID:", tssid);
+            padField("BSSID:", mac);
+            padField("Security:", encryptionTypeStr);
 
             if (phase == CAPTURED) {
                 tft.setTextColor(TFT_GREEN, kvxConfig.bgColor);
                 padprintln("Status: CAPTURED!");
             } else if (hasBeacons) {
                 tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
-                padprintln("Status: " + String(phase == MONITORING ? "Monitoring..." : "Scanning..."));
+                padField("Status:", String(phase == MONITORING ? "Monitoring..." : "Scanning..."));
             } else {
                 tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
                 padprintln("Status: Waiting...");

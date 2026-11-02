@@ -58,7 +58,7 @@ void deadDropMenu() {
             c.print(body);
             c.stop();
             tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Hits: " + String(hits), 10, uiStatusY(1));
+            drawKvRow(10, uiStatusY(1), "Hits:", String(hits));
             (void)req;
         }
         delay(10);

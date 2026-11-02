@@ -832,7 +832,7 @@ static void drawFnOverlay() {
         const int y = top + row * (rowH + vgap);
         tft.fillRoundRect(x, y, colW, rowH, 2, pri);
         tft.drawRoundRect(x, y, colW, rowH, 2, sec);
-        tft.setTextSize(1);
+        tft.setTextSize(uiDenseFont());
         char keyBuf[2] = {kShortcuts[i].key, 0};
         tft.setTextColor(sec, pri);
         tft.drawCentreString(keyBuf, x + colW / 2, y + 1, 1);

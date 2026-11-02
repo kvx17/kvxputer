@@ -89,7 +89,7 @@ void ReverseShell() {
     }
 
     tft.println("Wi-Fi AP Started: BruceShell (pass: bruce)");
-    tft.println("IP: " + apGateway.toString());
+    padField("IP:", apGateway.toString());
 
     tcpServer.begin();
     tft.println("TCP server started on port 23.");

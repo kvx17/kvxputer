@@ -88,16 +88,13 @@ void socks4Proxy(uint16_t port) {
     server.begin();
 
     drawMainBorderWithTitle("SOCKS4 PROXY");
-    tft.setTextSize(FP);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.setCursor(10, BORDER_PAD_Y + FM * LH);
-    tft.println("Port: " + String(port));
-    tft.setCursor(10, tft.getCursorY());
-    tft.println("IP: " + WiFi.localIP().toString());
-    tft.println();
-    tft.setCursor(10, tft.getCursorY());
-    tft.println("Waiting for clients...");
-    tft.println("");
+    setPadCursor(1, 0);
+    padField("Port:", String(port));
+    padField("IP:", WiFi.localIP().toString());
+    padprintln("");
+    padprintln("Waiting for clients...");
+    padprintln("");
     Serial.println("[SOCKS4] Listening on " + WiFi.localIP().toString() + ":" + String(port));
 
     char hostname[256];

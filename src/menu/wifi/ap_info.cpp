@@ -97,25 +97,26 @@ void fillInfo(ScrollableTextArea &area) {
 
     // in promiscius mode also Rx/Tx can be gathered
     // organized in the most to least usable
-    area.addLine("SSID: " + String((char *)ap_info.ssid));
-    area.addLine("PSK: " + kvxConfig.getWifiPassword((char *)ap_info.ssid));
-    area.addLine("Internet: " + String(internetConnection() ? "avail" : "unavail"));
-    area.addLine("Modes: " + phyModes2String(ap_info));
-    area.addLine("Signal strength: " + String(ap_info.rssi) + "db");
+    area.addField("SSID:", String((char *)ap_info.ssid));
+    area.addField("PSK:", kvxConfig.getWifiPassword((char *)ap_info.ssid));
+    area.addField("Internet:", String(internetConnection() ? "avail" : "unavail"));
+    area.addField("Modes:", phyModes2String(ap_info));
+    area.addField("Signal strength:", String(ap_info.rssi) + "db");
     // AP might not have assigned IP and gateway ip might differ from an ap ip
-    area.addLine("Gateway: " + WiFi.gatewayIP().toString());
-    area.addLine("My IP:" + WiFi.localIP().toString());
-    area.addLine("Channel: " + String(ap_info.primary) + " " + getChannelWidth(ap_info.second));
-    area.addLine("BSSID: " + mac); // sometimes MAC != BSSID (but we ignore that case)
-    area.addLine("Manufacturer: " + getManufacturer(mac));
-    area.addLine(
-        "Auth mode: " + autoMode2String(ap_info.authmode) + " WPA: " + String(ap_info.wps ? "enbld" : "dsbld")
+    area.addField("Gateway:", WiFi.gatewayIP().toString());
+    area.addField("My IP:", WiFi.localIP().toString());
+    area.addField("Channel:", String(ap_info.primary) + " " + getChannelWidth(ap_info.second));
+    area.addField("BSSID:", mac); // sometimes MAC != BSSID (but we ignore that case)
+    area.addField("Manufacturer:", getManufacturer(mac));
+    area.addField(
+        "Auth mode:",
+        autoMode2String(ap_info.authmode) + " WPA: " + String(ap_info.wps ? "enbld" : "dsbld")
     );
-    area.addLine(
-        "Cypher uni: " + cypherType2String(ap_info.pairwise_cipher) +
-        " mulit: " + cypherType2String(ap_info.group_cipher)
+    area.addField(
+        "Cypher uni:",
+        cypherType2String(ap_info.pairwise_cipher) + " mulit: " + cypherType2String(ap_info.group_cipher)
     );
-    area.addLine("Antenna: " + String(ap_info.ant));
+    area.addField("Antenna:", String(ap_info.ant));
 }
 
 void displayAPInfo() {

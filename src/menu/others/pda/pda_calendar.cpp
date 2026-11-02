@@ -105,10 +105,8 @@ static void pdaDrawCalendar(FS *fs, int year, int month, int curDay, const struc
 
     tft.fillScreen(bg);
 
-    tft.setTextColor(pri, bg);
-    tft.setTextSize(FM);
     String header = String(kMonthNames[month - 1]) + " " + String(year);
-    tft.drawCentreString(header, tftWidth / 2, 2, 1);
+    drawKvxTopBar(header.c_str());
 
     const int margin = 4;
     const int gridX = margin;
@@ -119,7 +117,7 @@ static void pdaDrawCalendar(FS *fs, int year, int month, int curDay, const struc
     const int dayLH = uiLineH(dayFont);
 
     const char *wd[] = {"S", "M", "T", "W", "T", "F", "S"};
-    int wdY = uiLineH(FM) + 4;
+    int wdY = KVX_TOPBAR_H + 4;
     tft.setTextSize(dayFont);
     tft.setTextColor(sec, bg);
     for (int i = 0; i < 7; i++) tft.drawCentreString(wd[i], gridX + cw * i + cw / 2, wdY, 1);
@@ -153,9 +151,8 @@ static void pdaDrawCalendar(FS *fs, int year, int month, int curDay, const struc
         if (eventCount[day] > 0) tft.fillCircle(x + cw / 2, y + ch - 3, 1, isCursor ? bg : sec);
     }
 
-    tft.setTextSize(dayFont);
     tft.setTextColor(sec, bg);
-    tft.drawCentreString("Fn+;/. year  [] month  arrows day", tftWidth / 2, footerY, 1);
+    printCenterFootnote("Fn+;/. year  [] month  arrows day");
 }
 
 void pdaCalendar() {

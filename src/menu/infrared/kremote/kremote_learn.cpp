@@ -177,12 +177,12 @@ static KrCaptureAction krCaptureSlot(IRrecv &irrecv, const char *slotName, int i
         area.clear();
         area.addLine(String("Got: ") + slotName);
         if (pending->type == "raw") {
-            area.addLine("Type: raw");
+            area.addField("Type:", "raw");
             area.addLine(pending->data.substring(0, 40) + "...");
         } else {
-            area.addLine("Proto: " + pending->protocol);
-            area.addLine("Addr: " + pending->address);
-            area.addLine("Cmd: " + pending->command);
+            area.addField("Proto:", pending->protocol);
+            area.addField("Addr:", pending->address);
+            area.addField("Cmd:", pending->command);
         }
         area.addLine("");
         area.addLine("OK=accept  Rt=skip");

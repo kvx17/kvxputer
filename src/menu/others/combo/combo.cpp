@@ -195,7 +195,7 @@ void showResults(const ComboLockCombination &sol) {
         tft.setTextSize(FP);
         tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
         int y = KVX_TOPBAR_H + 4;
-        tft.drawString("First: " + String(sol.first_pin_index), 8, y);
+        drawKvRow(8, y, "First:", String(sol.first_pin_index));
         y += uiLineH(FP) + 2;
         String seconds = "Second:";
         for (uint8_t i = 0; i < sol.second_pin_count; i++) {

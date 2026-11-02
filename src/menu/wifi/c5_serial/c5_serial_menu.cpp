@@ -281,7 +281,7 @@ bool runListCommand(const char *cmdLine) {
         if (check(EscPress) || returnToMenu) break;
         if (gApCount != paintedAp || gSeenHeader != paintedHeader) {
             tft.fillRect(10, 40, tftWidth - 20, 24, kvxConfig.bgColor);
-            tft.drawString("AP:" + String(gApCount), 10, uiStatusY(0));
+            drawKvRow(10, uiStatusY(0), "AP:", String(gApCount));
             tft.drawString(gSeenHeader ? "Parsing OK" : "Parsing...", 10, 52);
             paintedAp = gApCount;
             paintedHeader = gSeenHeader;

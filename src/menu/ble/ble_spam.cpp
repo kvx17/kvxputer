@@ -537,7 +537,7 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
 
     drawMainBorderWithTitle("iBeacon");
     padprintln("");
-    padprintln("UUID:" + String(BEACON_UUID));
+    padField("UUID:", String(BEACON_UUID));
     padprintln("");
     padprintln("Press Any key to STOP.");
 

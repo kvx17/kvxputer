@@ -33,8 +33,8 @@ void nfcAmiiboToolkit() {
     }
     if (act == 0) {
         ScrollableTextArea area("Amiibo dump");
-        area.addLine("UID: " + s.rfid->printableUID.uid);
-        area.addLine("Pages: " + String(s.rfid->dataPages) + "/" + String(s.rfid->totalPages));
+        area.addField("UID:", s.rfid->printableUID.uid);
+        area.addField("Pages:", String(s.rfid->dataPages) + "/" + String(s.rfid->totalPages));
         if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
         area.addLine("");
         area.addLine("Keygen: supply keys on SD");
@@ -70,8 +70,8 @@ void nfcTransitParsers() {
 
     String type = s.rfid->printableUID.picc_type;
     String uid = s.rfid->printableUID.uid;
-    area.addLine("UID: " + uid);
-    area.addLine("Type: " + type);
+    area.addField("UID:", uid);
+    area.addField("Type:", type);
 
     // Minimal heuristic parsers — unknown → raw dump.
     bool parsed = false;
@@ -132,7 +132,7 @@ void nfcEpassport() {
     uint16_t rxLen = 0;
     int rc = s.rfid->transceive_apdu(selEfCom, sizeof(selEfCom), rx, sizeof(rx), &rxLen);
     ScrollableTextArea area("ePassport");
-    area.addLine("MRZ len: " + String(mrz.length()));
+    area.addField("MRZ len:", String(mrz.length()));
     area.addLine("BAC: not fully implemented");
     area.addLine("(needs SM session).");
     if (rc == RFIDInterface::SUCCESS && rxLen >= 2) {

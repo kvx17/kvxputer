@@ -171,7 +171,7 @@ void probeAttack() {
         probeCount++;
         if (probeCount % 10 == 0) {
             tft.fillRect(10, uiStatusY(0), tftWidth - 20, 2 * uiRowH(FP), kvxConfig.bgColor);
-            tft.drawString("Sent: " + String(probeCount), 10, uiStatusY(0));
+            drawKvRow(10, uiStatusY(0), "Sent:", String(probeCount));
             tft.drawString(ssid, 10, uiStatusY(1));
         }
         delay(20);
@@ -220,7 +220,7 @@ void probeSniff() {
             lastHop = millis();
         }
         tft.fillRect(10, uiStatusY(0), tftWidth - 20, uiRowH(FP), kvxConfig.bgColor);
-        tft.drawString("Unique SSIDs: " + String((int)gSniffCount), 10, uiStatusY(0));
+        drawKvRow(10, uiStatusY(0), "Unique SSIDs:", String((int)gSniffCount));
         delay(80);
     }
 

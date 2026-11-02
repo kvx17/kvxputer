@@ -30,7 +30,7 @@ void nfcIso15693Tool() {
         int rc = s.rfid->iso15693_inventory(uid);
         if (rc == RFIDInterface::SUCCESS) {
             ScrollableTextArea area("ISO15693");
-            area.addLine("UID: " + uid);
+            area.addField("UID:", uid);
             if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
             area.addLine("");
             area.addLine("Esc = back");
@@ -40,8 +40,8 @@ void nfcIso15693Tool() {
             nfcInfo("Hold ISO15693 tag, then press a key.");
             if (s.rfid->read() == RFIDInterface::SUCCESS) {
                 ScrollableTextArea area("ISO15693");
-                area.addLine("Type: " + s.rfid->printableUID.picc_type);
-                area.addLine("UID: " + s.rfid->printableUID.uid);
+                area.addField("Type:", s.rfid->printableUID.picc_type);
+                area.addField("UID:", s.rfid->printableUID.uid);
                 if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
                 area.show();
             } else {
@@ -102,8 +102,8 @@ void nfcDesfireBrowser() {
         tft.fillScreen(kvxConfig.bgColor);
         drawKvxTopBar("NFC", "DESFire");
     }
-    area.addLine("UID: " + s.rfid->printableUID.uid);
-    area.addLine("Type: " + s.rfid->printableUID.picc_type);
+    area.addField("UID:", s.rfid->printableUID.uid);
+    area.addField("Type:", s.rfid->printableUID.picc_type);
     if (rc == RFIDInterface::SUCCESS || s.rfid->strAllPages.length()) {
         if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
         else area.addLine("No plain apps/files.");
@@ -181,7 +181,7 @@ void nfcUlcAuth() {
     s.rfid->read();
     ScrollableTextArea area("UL-C dump");
     area.addLine("Auth OK");
-    area.addLine("UID: " + s.rfid->printableUID.uid);
+    area.addField("UID:", s.rfid->printableUID.uid);
     if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
     area.show();
 }
@@ -202,9 +202,9 @@ void nfcFelicaServices() {
         return;
     }
     ScrollableTextArea area("FeliCa");
-    area.addLine("IDm: " + s.rfid->printableUID.uid);
-    area.addLine("PMm: " + s.rfid->printableUID.sak);
-    area.addLine("Sys: " + s.rfid->printableUID.atqa);
+    area.addField("IDm:", s.rfid->printableUID.uid);
+    area.addField("PMm:", s.rfid->printableUID.sak);
+    area.addField("Sys:", s.rfid->printableUID.atqa);
     if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
     else area.addLine("(service blocks: best-effort)");
     area.show();
@@ -232,10 +232,10 @@ void nfcForcedTypeRead() {
     }
     if (rc == RFIDInterface::NOT_IMPLEMENTED) rc = s.rfid->read(t == RFIDInterface::READ_AS_FELICA ? 1 : 0);
     ScrollableTextArea area("Forced read");
-    area.addLine("Type: " + s.rfid->printableUID.picc_type);
-    area.addLine("UID: " + s.rfid->printableUID.uid);
-    area.addLine("ATQA: " + s.rfid->printableUID.atqa);
-    area.addLine("SAK: " + s.rfid->printableUID.sak);
+    area.addField("Type:", s.rfid->printableUID.picc_type);
+    area.addField("UID:", s.rfid->printableUID.uid);
+    area.addField("ATQA:", s.rfid->printableUID.atqa);
+    area.addField("SAK:", s.rfid->printableUID.sak);
     if (s.rfid->strAllPages.length()) area.fromString(s.rfid->strAllPages);
     area.show();
 }

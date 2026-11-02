@@ -58,7 +58,7 @@ void dhcpStarvationMenu() {
         sent++;
         if (sent % 5 == 0) {
             tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
-            tft.drawString("Discovers: " + String(sent), 10, uiStatusY(0));
+            drawKvRow(10, uiStatusY(0), "Discovers:", String(sent));
         }
         delay(40);
     }

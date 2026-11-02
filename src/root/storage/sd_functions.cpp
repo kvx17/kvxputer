@@ -1129,11 +1129,11 @@ void fileInfo(FS &fs, const String &filepath) {
     file.close();
 
     ScrollableTextArea area = ScrollableTextArea("File Info");
-    area.addLine("Path: " + filepath);
+    area.addField("Path:", filepath);
     area.addLine("");
-    area.addLine("Bytes: " + String(bytesize));
-    area.addLine("Size: " + String(sizeBuf));
-    area.addLine("Modified: " + modified);
+    area.addField("Bytes:", String(bytesize));
+    area.addField("Size:", String(sizeBuf));
+    area.addField("Modified:", modified);
     area.show();
 }
 
