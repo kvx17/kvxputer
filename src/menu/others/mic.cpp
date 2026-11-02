@@ -222,16 +222,17 @@ void mic_test_one_task() {
     const int displayX = MARGIN_X;
     const int displayY = MARGIN_Y;
 
-    // Alloc framebuffer
-    uint16_t *frameBuffer;
-    if (psramFound()) frameBuffer = (uint16_t *)ps_malloc(displayWidth * displayHeight * sizeof(uint16_t));
-    else {
-        closeSdCard();
-        frameBuffer = (uint16_t *)malloc(displayWidth * displayHeight * sizeof(uint16_t));
+    // One column strip (~displayHeight * 2 bytes) instead of a full-frame buffer.
+    const size_t colBytes = (size_t)displayHeight * sizeof(uint16_t);
+#if defined(ESP32)
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA) < colBytes + 4096) {
+        displayError("Not Enough RAM", true);
+        return;
     }
-
-    if (!frameBuffer) {
-        Serial.println("Error alloc drawing frameBuffer, exiting");
+#endif
+    uint16_t *colBuffer = (uint16_t *)malloc(colBytes);
+    if (!colBuffer) {
+        Serial.println("Error alloc column buffer, exiting");
         displayError("Not Enough RAM", true);
         return;
     }
@@ -239,6 +240,8 @@ void mic_test_one_task() {
     // Border around the spectrogram
     tft.drawRect(displayX - 2, displayY - 2, displayWidth + 4, displayHeight + 4, kvxConfig.priColor);
 
+    int writeX = 0;
+    unsigned long lastPaintMs = 0;
     while (1) {
         fft_config_t *plan = fft_init(FFT_SIZE, FFT_REAL, FFT_FORWARD, NULL, NULL);
         size_t bytesread;
@@ -263,34 +266,31 @@ void mic_test_one_task() {
 
         fft_destroy(plan);
 
-        // ===== RENDER WITH SCALING =====
-        for (int y = 0; y < displayHeight; y++) {
-            // Original spectrum y-display y-map
-            int srcY = (y * SPECTRUM_HEIGHT) / displayHeight;
-
-            for (int x = 0; x < displayWidth; x++) {
-                // Original spectrum display x-map
-                int srcX = (x * SPECTRUM_WIDTH) / displayWidth;
-                int index = (srcX + posData) % HISTORY_LEN;
-
+        // Cap paints at ~20 fps; I2S + FFT stay in the loop at full rate.
+        const unsigned long now = millis();
+        if (!lastPaintMs || now - lastPaintMs >= 50) {
+            const int srcX = (SPECTRUM_WIDTH - 1);
+            const int index = (srcX + posData) % HISTORY_LEN;
+            for (int y = 0; y < displayHeight; y++) {
+                int srcY = (y * SPECTRUM_HEIGHT) / displayHeight;
                 uint8_t val = fftHistory[index * SPECTRUM_HEIGHT + srcY];
-                uint16_t color = rgb565(
+                colBuffer[y] = rgb565(
                     pgm_read_byte(&ImageData[val * 3 + 0]),
                     pgm_read_byte(&ImageData[val * 3 + 1]),
                     pgm_read_byte(&ImageData[val * 3 + 2])
                 );
-                frameBuffer[y * displayWidth + x] = color;
             }
+            tft.pushImage(displayX + writeX, displayY, 1, displayHeight, colBuffer);
+            writeX = (writeX + 1) % displayWidth;
+            lastPaintMs = now;
         }
-
-        tft.pushImage(displayX, displayY, displayWidth, displayHeight, frameBuffer);
         resetPowerSaveTimer();
         if (check(SelPress) || check(EscPress) || forceHome) break;
         vTaskDelay(pdMS_TO_TICKS(1));
     }
     i2s_channel_disable(i2s_chan);
 
-    free(frameBuffer);
+    free(colBuffer);
 }
 
 bool isGPIOOutput(gpio_num_t gpio) {
@@ -862,16 +862,21 @@ void mic_record_app() {
                     if (String(timerStr) != lastTimerStr) {
                         lastTimerStr = String(timerStr);
 
-                        tft.fillRect(0, TIMER_Y - 5, tftWidth, TIMER_SIZE * 8 + 10, kvxConfig.bgColor);
-
                         tft.setTextSize(TIMER_SIZE);
-                        tft.setTextColor(TFT_RED, kvxConfig.bgColor);
+                        tft.setTextColor(TFT_RED, kvxConfig.bgColor, true);
                         int timerWidth = strlen(timerStr) * 6 * TIMER_SIZE;
                         tft.setCursor((tftWidth - timerWidth) / 2, TIMER_Y);
                         tft.print(timerStr);
+                        // Clear any leftover digits to the right of a shorter string.
+                        const int tEnd = (tftWidth + timerWidth) / 2;
+                        if (tEnd < tftWidth) {
+                            tft.fillRect(
+                                tEnd, TIMER_Y, tftWidth - tEnd, TIMER_SIZE * 8, kvxConfig.bgColor
+                            );
+                        }
 
                         tft.setTextSize(TEXT_SIZE_SMALL);
-                        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+                        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor, true);
                         const char *label = (time_seconds == 0) ? "Elapsed" : "Elapsed / Total";
                         int labelWidth = strlen(label) * 6;
                         tft.setCursor((tftWidth - labelWidth) / 2, TIMER_Y + TIMER_SIZE * 8 + 5);

@@ -76,7 +76,7 @@ static String scannerRowText(const ScannerListState &st, int idx, int nchars) {
     return line;
 }
 
-static void scannerDrawRow(ScannerListState &st, int idx, int scroll, int nchars) {
+static void scannerDrawRow(ScannerListState &st, int idx, int scroll, int nchars, bool bgChanged) {
     const int lineH = scannerLineH();
     const int startY = scannerBodyTop();
     const int y = startY + (idx - scroll) * lineH;
@@ -85,11 +85,17 @@ static void scannerDrawRow(ScannerListState &st, int idx, int scroll, int nchars
     const bool sel = (idx == st.cursor);
     const uint16_t bg = sel ? kvxConfig.secColor : kvxConfig.bgColor;
     const uint16_t fg = sel ? kvxConfig.bgColor : kvxConfig.priColor;
+    const int menuFont = uiMenuFont();
 
-    tft.fillRect(0, y, tftWidth, lineH, bg);
-    tft.setTextSize(uiMenuFont());
-    tft.setTextColor(fg, bg);
-    tft.drawString(scannerRowText(st, idx, nchars), 4, y + 1, 1);
+    // Fill the row only when selection (background) changes. Label updates use
+    // opaque text so the panel never blanks the row first.
+    if (bgChanged) tft.fillRect(0, y, tftWidth, lineH, bg);
+    tft.setTextSize(menuFont);
+    tft.setTextColor(fg, bg, true);
+    String line = scannerRowText(st, idx, nchars);
+    tft.drawString(line, 4, y + 1, 1);
+    const int used = 4 + tft.textWidth(line);
+    if (used < tftWidth) tft.fillRect(used, y, tftWidth - used, lineH, bg);
 }
 
 static void scannerRedrawBody(ScannerListState &st, bool forceAll) {
@@ -119,12 +125,12 @@ static void scannerRedrawBody(ScannerListState &st, bool forceAll) {
         for (int i = 0; i < visible; i++) {
             int idx = st.scroll + i;
             if (idx >= count) break;
-            scannerDrawRow(st, idx, st.scroll, nchars);
+            scannerDrawRow(st, idx, st.scroll, nchars, true);
             st.lastVisible.push_back(st.rows[idx]);
         }
         if (count == 0) {
             tft.setTextSize(uiDenseFont());
-            tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
+            tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor, true);
             const char *placeholder = st.status.length() ? st.status.c_str() : "Scanning...";
             tft.drawString(placeholder, 8, startY + 4, 1);
         }
@@ -136,7 +142,7 @@ static void scannerRedrawBody(ScannerListState &st, bool forceAll) {
             bool labelChanged = (i >= (int)st.lastVisible.size()) || st.lastVisible[i] != st.rows[idx];
             bool selChanged = (idx == st.cursor || idx == st.lastCursor) && st.cursor != st.lastCursor;
             if (labelChanged || selChanged || forceAll) {
-                scannerDrawRow(st, idx, st.scroll, nchars);
+                scannerDrawRow(st, idx, st.scroll, nchars, selChanged || forceAll);
                 if (i < (int)st.lastVisible.size()) st.lastVisible[i] = st.rows[idx];
                 else st.lastVisible.push_back(st.rows[idx]);
             }

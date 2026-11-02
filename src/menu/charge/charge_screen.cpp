@@ -139,14 +139,18 @@ static void drawField(
     if (!text || !last) return;
     if (w < 1 || h < 1) return;
     if (strcmp(text, last) == 0) return;
-    tft.fillRect(x, y, w, h, bg);
     tft.setTextSize(size);
-    tft.setTextColor(color, bg);
+    tft.setTextColor(color, bg, true);
     if (centre) tft.drawCentreString(text, x + w / 2, y, 1);
     else {
         tft.setCursor(x, y);
         tft.print(text);
     }
+    // Clear only the trailing strip past the new glyphs.
+    const int used = centre ? (w + tft.textWidth(text)) / 2 : x + tft.textWidth(text);
+    const int clearX = centre ? used : used;
+    const int clearW = centre ? (x + w - clearX) : (x + w - clearX);
+    if (clearW > 0) tft.fillRect(clearX, y, clearW, h, bg);
     strncpy(last, text, lastLen - 1);
     last[lastLen - 1] = '\0';
 }

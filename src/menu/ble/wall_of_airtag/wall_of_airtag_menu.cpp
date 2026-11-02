@@ -189,6 +189,7 @@ void wallOfAirtagMenu() {
     };
 
     unsigned long lastPaint = 0;
+    unsigned long lastSortMs = 0;
     while (true) {
         ScannerListResult r = scannerListPoll(ui);
         if (r == SCANNER_LIST_EXIT) break;
@@ -203,9 +204,13 @@ void wallOfAirtagMenu() {
         if (millis() - lastPaint > 220) {
             lastPaint = millis();
             String keep = (ui.cursor >= 0 && ui.cursor < (int)hits.size()) ? hits[ui.cursor].mac : "";
-            std::sort(hits.begin(), hits.end(), [](const AirTagHit &a, const AirTagHit &b) {
-                return a.rssi > b.rssi;
-            });
+            // Hold sort order for 2 s so RSSI jitter does not reshuffle every paint.
+            if (!lastSortMs || millis() - lastSortMs >= 2000) {
+                std::sort(hits.begin(), hits.end(), [](const AirTagHit &a, const AirTagHit &b) {
+                    return a.rssi > b.rssi;
+                });
+                lastSortMs = millis();
+            }
             if (keep.length()) {
                 for (int i = 0; i < (int)hits.size(); i++) {
                     if (hits[i].mac == keep) {

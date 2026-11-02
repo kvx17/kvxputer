@@ -585,29 +585,39 @@ static void _activeLoop() {
                 }
             }
             const int _lh = (LH * FP + 2);
-            tft.fillRect(6, tftHeight - 6 * _lh, tftWidth - 12, 6 * _lh - 6, kvxConfig.bgColor);
-            tft.setTextSize(FP);
-
-            // Troll timing info
-            if (trollN > 0) {
-                tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor);
-                tft.drawString(
-                    "Troll: " + String(s_trollOfflineMs / 1000) + "s OFF / " +
-                        String(s_trollOnlineMs / 1000) + "s ON",
-                    10,
-                    tftHeight - 6 * _lh,
-                    1
+            static int lastCut = -1, lastTrollOff = -1, lastTrollOn = -1, lastDev = -1;
+            static uint32_t lastPkts = (uint32_t)-1;
+            static bool escDrawn = false;
+            const bool dirty = cutN != lastCut || trollOff != lastTrollOff || trollOn != lastTrollOn ||
+                               s_deviceCount != lastDev || packetCount != lastPkts;
+            if (dirty) {
+                if (trollN > 0) {
+                    tft.setTextColor(TFT_YELLOW, kvxConfig.bgColor, true);
+                    tft.drawString(
+                        ("Troll: " + String(s_trollOfflineMs / 1000) + "s OFF / " +
+                         String(s_trollOnlineMs / 1000) + "s ON")
+                            .c_str(),
+                        10,
+                        tftHeight - 6 * _lh,
+                        1
+                    );
+                }
+                drawKvRow(10, tftHeight - 5 * _lh, "CUT:", String(cutN) + " Dev:" + String(s_deviceCount));
+                drawKvRow(
+                    10, tftHeight - 4 * _lh, "TRL:", String(trollOff) + "off/" + String(trollOn) + "on"
                 );
+                drawKvRow(10, tftHeight - 3 * _lh, "Pkts:", String(packetCount));
+                lastCut = cutN;
+                lastTrollOff = trollOff;
+                lastTrollOn = trollOn;
+                lastDev = s_deviceCount;
+                lastPkts = packetCount;
             }
-
-            drawKvRow(10, tftHeight - 5 * _lh, "CUT:", String(cutN) + " Dev:" + String(s_deviceCount));
-            drawKvRow(
-                10, tftHeight - 4 * _lh, "TRL:", String(trollOff) + "off/" + String(trollOn) + "on"
-            );
-            drawKvRow(10, tftHeight - 3 * _lh, "Pkts:", String(packetCount));
-
-            tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor);
-            tft.drawString("Esc=Stop", 10, tftHeight - 2 * _lh, 1);
+            if (!escDrawn) {
+                tft.setTextColor(TFT_DARKGREY, kvxConfig.bgColor, true);
+                tft.drawString("Esc=Stop", 10, tftHeight - 2 * _lh, 1);
+                escDrawn = true;
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(10));

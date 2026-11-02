@@ -1148,34 +1148,53 @@ static bool antScanChoice(const float *means, int best, bool activity, float &mh
     return antTune(mhz);
 }
 
+static LiveField s_antLines[8];
+static bool s_antReady = false;
+
 static void drawAntHud(
     const char *cap, const char *radio, const char *freq, const char *rssi, const char *delta,
     const char *verdict, uint16_t verdictColor, const char *hint
 ) {
     const int sz = uiDenseFont();
     const int lh = uiLineH(sz);
-    tft.fillScreen(kvxConfig.bgColor);
+    const uint16_t bg = kvxConfig.bgColor;
+    if (!s_antReady) {
+        tft.fillScreen(bg);
+        for (int i = 0; i < 8; i++) {
+            s_antLines[i].configure(4, 2 + i * lh, tftWidth - 8, kvxConfig.priColor, bg, sz, 0);
+        }
+        s_antReady = true;
+    }
     tft.setTextSize(sz);
     tft.setTextDatum(TL_DATUM);
-    int y = 2;
-    auto line = [&](const char *text, uint16_t color) {
-        if (y > tftHeight - lh) return;
-        tft.setTextColor(color, kvxConfig.bgColor);
-        tft.drawString(text, 4, y);
-        y += lh;
-    };
-    line("Antenna Check", kvxConfig.priColor);
-    line(cap, kvxConfig.priColor);
-    line(radio, kvxConfig.priColor);
-    line(freq, kvxConfig.priColor);
-    line(rssi, kvxConfig.priColor);
-    line(delta, kvxConfig.priColor);
-    line(verdict, verdictColor);
-    line(hint, kvxConfig.secColor);
-    line("<> freq   Sel test   s save", kvxConfig.secColor);
+    s_antLines[0].fg = kvxConfig.priColor;
+    s_antLines[0].paint("Antenna Check");
+    s_antLines[1].fg = kvxConfig.priColor;
+    s_antLines[1].paint(cap ? cap : "");
+    s_antLines[2].fg = kvxConfig.priColor;
+    s_antLines[2].paint(radio ? radio : "");
+    s_antLines[3].fg = kvxConfig.priColor;
+    s_antLines[3].paint(freq ? freq : "");
+    s_antLines[4].fg = kvxConfig.priColor;
+    s_antLines[4].paint(rssi ? rssi : "");
+    s_antLines[5].fg = kvxConfig.priColor;
+    s_antLines[5].paint(delta ? delta : "");
+    s_antLines[6].fg = verdictColor;
+    s_antLines[6].paint(verdict ? verdict : "");
+    s_antLines[7].fg = kvxConfig.secColor;
+    s_antLines[7].paint(hint ? hint : "");
+    // Footer is static after first paint.
+    static bool footDone = false;
+    if (!footDone) {
+        tft.setTextColor(kvxConfig.secColor, bg, true);
+        tft.drawString("<> freq   Sel test   s save", 4, 2 + 8 * lh);
+        footDone = true;
+    }
 }
 
 static void antLive(float mhz, const char *label) {
+    s_antReady = false;
+    for (int i = 0; i < 8; i++) s_antLines[i].invalidate();
     int n = 0;
     const LoraBandPreset *bands = antBands(n);
     int idx = -1;

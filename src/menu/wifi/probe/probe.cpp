@@ -170,8 +170,8 @@ void probeAttack() {
         sendProbeRequest(ssid.c_str());
         probeCount++;
         if (probeCount % 10 == 0) {
-            tft.fillRect(10, uiStatusY(0), tftWidth - 20, 2 * uiRowH(FP), kvxConfig.bgColor);
             drawKvRow(10, uiStatusY(0), "Sent:", String(probeCount));
+            tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor, true);
             tft.drawString(ssid, 10, uiStatusY(1));
         }
         delay(20);
@@ -203,6 +203,11 @@ void probeSniff() {
     drawMainBorderWithTitle("Probe Sniff");
     tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
+    LiveField sniffField;
+    sniffField.configure(
+        10, uiStatusY(0), tftWidth - 20, kvxConfig.secColor, kvxConfig.bgColor, uiBodyFont(), 100
+    );
+    int paintedSniff = -1;
 
     while (!check(EscPress) && !returnToMenu) {
         while (gProbeTail != gProbeHead) {
@@ -219,8 +224,12 @@ void probeSniff() {
             chIdx = (chIdx + 1) % 3;
             lastHop = millis();
         }
-        tft.fillRect(10, uiStatusY(0), tftWidth - 20, uiRowH(FP), kvxConfig.bgColor);
-        drawKvRow(10, uiStatusY(0), "Unique SSIDs:", String((int)gSniffCount));
+        if (gSniffCount != paintedSniff) {
+            char buf[28];
+            snprintf(buf, sizeof(buf), "Unique SSIDs: %d", gSniffCount);
+            sniffField.paint(buf);
+            paintedSniff = gSniffCount;
+        }
         delay(80);
     }
 

@@ -266,7 +266,8 @@ void GPSTracker::loop() {
 
         if (keepScroll < area.getMaxLines()) area.firstVisibleLine = keepScroll;
         else area.firstVisibleLine = area.getMaxLines() ? area.getMaxLines() - 1 : 0;
-        area.draw(true);
+        // Soft draw: ScrollableTextArea patches only changed lines when scroll is stable.
+        area.draw(false);
     };
 
     rebuildHud(false, false, 0);

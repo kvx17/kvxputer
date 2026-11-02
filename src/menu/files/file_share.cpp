@@ -18,7 +18,6 @@
 #include <SD.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
-#include <esp_netif.h>
 #include <esp_wifi.h>
 #include <esp32-hal-psram.h>
 #include <freertos/FreeRTOS.h>
@@ -484,20 +483,6 @@ static void stopShareServer() {
     shareSessions.clear();
 }
 
-static bool ensureApDhcpRunning() {
-    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
-    if (!ap_netif) {
-        Serial.println("[FileShare] WIFI_AP_DEF missing");
-        return false;
-    }
-    // Stop+start so a half-failed softAPConfig cannot leave DHCPS dead
-    // (clients then fall back to 169.254.link-local).
-    esp_netif_dhcps_stop(ap_netif);
-    esp_err_t e = esp_netif_dhcps_start(ap_netif);
-    Serial.printf("[FileShare] dhcps_start: %s\n", esp_err_to_name(e));
-    return e == ESP_OK || e == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED;
-}
-
 static bool startShareAp() {
     shareModeAp = true;
     shareOwnedWifi = true;
@@ -515,18 +500,6 @@ static bool startShareAp() {
 
     wifiDisconnect();
     vTaskDelay(pdMS_TO_TICKS(400));
-    WiFi.persistent(false);
-
-#if defined(ARDUINO_M5STACK_TAB5)
-    wifiPrepareTab5Hosted();
-    if (!WiFi.mode(WIFI_AP)) {
-        displayError("WiFi radio failed\n(C6 hosted)", true);
-        return false;
-    }
-#else
-    WiFi.mode(WIFI_AP);
-#endif
-    vTaskDelay(pdMS_TO_TICKS(100));
 
     String ssid = kvxConfig.fileShare.ssid;
     String pwd = kvxConfig.fileShare.pwd;
@@ -534,65 +507,31 @@ static bool startShareAp() {
     if (ssid.length() == 0) ssid = "kvxputer";
     if (pwd.length() < 8) pwd = "kvxputer";
 
-    // softAP FIRST so WIFI_EVENT_AP_START fires and DHCPS binds, then softAPConfig
-    // moves the AP onto 192.168.1.0/24. Config-before-softAP leaves clients on
-    // 169.254.link-local (no lease) on this Arduino-ESP32 stack.
-    if (!WiFi.softAP(ssid.c_str(), pwd.c_str(), 6, 0, 4, false)) {
-        displayError("softAP failed", true);
+    // 172.0.0.1 avoids colliding with home routers at 192.168.1.1. Shared helper
+    // puts the AP IP in the DHCP DNS field and recovers DHCPS if captive-portal
+    // option setup fails (that failure mode left phones on 169.254.*).
+    IPAddress apGw(172, 0, 0, 1);
+    uint8_t ch = kvxConfig.fileShare.channel;
+    if (ch < 1 || ch > 13) ch = 6;
+    if (!wifiStartPortalAp(ssid, pwd, ch, apGw, WIFI_AP)) {
+        displayError("AP start failed", true);
         wifiDisconnect();
         return false;
     }
-    esp_wifi_set_ps(WIFI_PS_NONE);
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    IPAddress apIP(192, 168, 1, 1);
-    IPAddress netMsk(255, 255, 255, 0);
-    // dhcp_lease_start=0 → AP+1 (.2); dns=AP so phones get a resolver in-lease
-    // (same 5-arg pattern as Evil Portal).
-    if (!WiFi.softAPConfig(apIP, apIP, netMsk, IPAddress((uint32_t)0), apIP)) {
-        Serial.println("[FileShare] softAPConfig failed — retry 3-arg");
-        if (!WiFi.softAPConfig(apIP, apIP, netMsk)) {
-            displayError("AP config failed", true);
-            wifiDisconnect();
-            return false;
-        }
-    }
-
-    if (!ensureApDhcpRunning()) {
-        displayError("DHCP server failed", true);
-        wifiDisconnect();
-        return false;
-    }
-
-    IPAddress got = WiFi.softAPIP();
-    if (got != apIP) {
-        Serial.printf("[FileShare] softAPIP %s != %s — reconfig\n", got.toString().c_str(), apIP.toString().c_str());
-        WiFi.softAPConfig(apIP, apIP, netMsk, IPAddress((uint32_t)0), apIP);
-        ensureApDhcpRunning();
-        got = WiFi.softAPIP();
-    }
-
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
-    // DHCP option 114 — phones open the share page; restart DHCPS after.
-    if (!WiFi.AP.enableDhcpCaptivePortal()) {
-        Serial.println("[FileShare] DHCP captive portal URI failed");
-    }
-    ensureApDhcpRunning();
-#endif
-
-    wifiConnected = true;
-    wifiIP = WiFi.softAPIP().toString();
-    Serial.printf("[FileShare] AP '%s' IP %s (clients 192.168.1.2+)\n", ssid.c_str(), wifiIP.c_str());
 
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    // DNS after AP is up (captive probes). Failure must not tear down the AP.
     IPAddress dnsIp = WiFi.softAPIP();
-    if (dnsIp != IPAddress((uint32_t)0)) {
-        shareDns.setErrorReplyCode(DNSReplyCode::NoError);
+    if (dnsIp == IPAddress((uint32_t)0)) dnsIp = apGw;
+    shareDns.setErrorReplyCode(DNSReplyCode::NoError);
+    shareDnsRunning = shareDns.start(53, "*", dnsIp);
+    if (!shareDnsRunning) {
+        Serial.println("[FileShare] DNS start failed — retry");
+        vTaskDelay(pdMS_TO_TICKS(100));
         shareDnsRunning = shareDns.start(53, "*", dnsIp);
-        if (!shareDnsRunning) Serial.println("[FileShare] DNS optional start failed");
     }
+    if (!shareDnsRunning) Serial.println("[FileShare] DNS optional start failed");
+    Serial.printf("[FileShare] AP '%s' URL http://%s/\n", ssid.c_str(), dnsIp.toString().c_str());
     return true;
 }
 
@@ -1292,7 +1231,7 @@ static void drawInfoScreen() {
             if (net.length() == 0) net = "(wifi)";
             labelVal("Net: ", net, true);
         }
-        labelVal("IP: ", shareDisplayIp(), true);
+        labelVal("URL: ", shareHttpUrl(), true);
 
         size_t got = shareUploadReceived;
         size_t total = shareUploadTotal;
@@ -1340,7 +1279,7 @@ static void drawInfoScreen() {
         }
         labelVal("User: ", kvxConfig.fileShare.user, true);
         labelVal("Pwd: ", maskPwd(kvxConfig.fileShare.portalPwd, sharePwdVisible), sharePwdVisible);
-        labelVal("IP: ", shareDisplayIp(), true);
+        labelVal("URL: ", shareHttpUrl(), true);
         labelVal("", lastTransferLine(), false);
     }
 

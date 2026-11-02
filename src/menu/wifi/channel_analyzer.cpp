@@ -10,6 +10,7 @@
 #include "root/app/utils.h"
 #include "root/ui/display.h"
 #include "root/ui/scanner_list.h"
+#include "root/ui/ui_metrics.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include <Arduino.h>
@@ -420,10 +421,45 @@ static bool ca_scan_tick(
 #endif
 
 // Green border follows navCh (user selection). Sweep continues independently.
+// Chrome is drawn once at entry; only dirty columns and the footer update.
+static uint8_t ca_paintedLoad[12];
+static uint8_t ca_paintedPeak[12];
+static uint8_t ca_paintedNav = 255;
+static bool ca_plotReady = false;
+static LiveField ca_footerField;
+
+static void ca_draw_column(
+    int i, const uint8_t *load, const uint8_t *peak, uint8_t navCh, int x0, int top, int baseline, int plotH,
+    int slot, int barW, int barOff, int labelFont
+) {
+    uint8_t ch = CA_CHANNELS[i];
+    int cellX = x0 + i * slot;
+    int bx = cellX + barOff;
+    bool isNav = (ch == navCh);
+    uint16_t col = CA_PALETTE[i % CA_NPAL];
+    const uint16_t bg = kvxConfig.bgColor;
+
+    // Clear only this column's bar band (not the whole plot).
+    tft.fillRect(bx - 1, top, barW + 2, plotH, bg);
+
+    int bh = plotH * load[ch] / 100;
+    if (bh > 0) tft.fillRect(bx, baseline - bh, barW, bh, col);
+    if (isNav) tft.drawRect(bx - 1, top, barW + 2, plotH, kvxConfig.secColor);
+
+    int ph = plotH * peak[ch] / 100;
+    if (ph > 0) tft.drawFastHLine(bx, baseline - ph, barW, TFT_WHITE);
+
+    tft.setTextSize(labelFont);
+    tft.setTextColor(isNav ? kvxConfig.secColor : kvxConfig.priColor, bg, true);
+    tft.drawString(String(ch), bx, baseline + 2, 1);
+
+    ca_paintedLoad[ch] = load[ch];
+    ca_paintedPeak[ch] = peak[ch];
+}
+
 static void
 ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t navCh, uint16_t dwell) {
-    drawMainBorder(false);
-
+    (void)dwell;
     const int x0 = 8;
     const int top = 26;
     const int labelFont = uiDenseFont();
@@ -436,34 +472,38 @@ ca_draw(const uint8_t *load, const uint8_t *peak, const int8_t *rssi, uint8_t na
     const int barW = (slot * 2) / 3;
     const int barOff = (slot - barW) / 2;
 
-    tft.setTextSize(labelFont);
-    tft.drawFastHLine(x0, baseline, plotW, kvxConfig.priColor);
+    if (!ca_plotReady) {
+        memset(ca_paintedLoad, 0, sizeof(ca_paintedLoad));
+        memset(ca_paintedPeak, 0, sizeof(ca_paintedPeak));
+        ca_paintedNav = 255;
+        tft.setTextSize(labelFont);
+        tft.drawFastHLine(x0, baseline, plotW, kvxConfig.priColor);
+        ca_footerField.configure(
+            x0, bottom, plotW, kvxConfig.priColor, kvxConfig.bgColor, labelFont, 0
+        );
+    }
 
     for (int i = 0; i < CA_NCH; i++) {
         uint8_t ch = CA_CHANNELS[i];
-        int cellX = x0 + i * slot;
-        int bx = cellX + barOff;
-        bool isNav = (ch == navCh);
-        uint16_t col = CA_PALETTE[i % CA_NPAL];
-
-        tft.fillRect(cellX, top, slot, plotH, kvxConfig.bgColor);
-
-        int bh = plotH * load[ch] / 100;
-        if (bh > 0) tft.fillRect(bx, baseline - bh, barW, bh, col);
-
-        if (isNav) tft.drawRect(bx - 1, top, barW + 2, plotH, kvxConfig.secColor);
-
-        int ph = plotH * peak[ch] / 100;
-        if (ph > 0) tft.drawFastHLine(bx, baseline - ph, barW, TFT_WHITE);
-
-        tft.setTextColor(isNav ? kvxConfig.secColor : kvxConfig.priColor, kvxConfig.bgColor);
-        tft.drawString(String(ch), bx, baseline + 2, 1);
+        const bool dirty = !ca_plotReady || load[ch] != ca_paintedLoad[ch] ||
+                           peak[ch] != ca_paintedPeak[ch] ||
+                           ((ch == navCh) != (ch == ca_paintedNav)) ||
+                           ((ch == ca_paintedNav) && ca_paintedNav != navCh);
+        if (dirty) {
+            ca_draw_column(
+                i, load, peak, navCh, x0, top, baseline, plotH, slot, barW, barOff, labelFont
+            );
+        }
     }
+    ca_paintedNav = navCh;
+    ca_plotReady = true;
 
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    String foot = "Ch" + String(navCh) + " " + String(load[navCh]) + "% pk" + String(peak[navCh]) +
-                  "% " + String(rssi[navCh]) + "dBm OK=ch L=all";
-    tft.drawString(foot, x0, bottom, 1);
+    char foot[56];
+    snprintf(
+        foot, sizeof(foot), "Ch%u %u%% pk%u%% %ddBm OK=ch L=all", (unsigned)navCh, (unsigned)load[navCh],
+        (unsigned)peak[navCh], (int)rssi[navCh]
+    );
+    ca_footerField.paint(foot);
 }
 
 // Background sweep one channel; does not move the green nav border.
@@ -667,6 +707,9 @@ void channel_analyzer_setup() {
         intro.push_back("L=all list  Esc=exit");
         showScrollableBody("WiFi Analyz", intro);
     }
+    ca_plotReady = false;
+    drawMainBorder(false);
+    uiMetricsMark("wifi_analyzer", UI_METRICS_ENTRY);
     ca_draw(load, peak, rssi, CA_CHANNELS[navIdx], dwell);
 
     for (;;) {
@@ -694,13 +737,19 @@ void channel_analyzer_setup() {
             ca_draw(load, peak, rssi, CA_CHANNELS[navIdx], dwell);
         } else if (action == 1) { // OK → SSIDs for selected channel
             ca_ssid_list_view(load, peak, rssi, dwell, sweepIdx, CA_CHANNELS[navIdx]);
+            ca_plotReady = false;
+            drawMainBorder(false);
             ca_draw(load, peak, rssi, CA_CHANNELS[navIdx], dwell);
         } else if (action == 2) { // L → all SSIDs
             ca_ssid_list_view(load, peak, rssi, dwell, sweepIdx, 0);
+            ca_plotReady = false;
+            drawMainBorder(false);
             ca_draw(load, peak, rssi, CA_CHANNELS[navIdx], dwell);
         }
+        uiMetricsTick();
     }
 
+    uiMetricsMark("wifi_analyzer", UI_METRICS_EXIT);
     ca_stop_wifi();
 }
 

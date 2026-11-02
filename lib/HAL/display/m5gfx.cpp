@@ -7,6 +7,24 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <esp_heap_caps.h>
+#include "../../../src/root/ui/ui_metrics.h"
+
+static inline void tftNoteDirectPixels(bool buffering, int32_t w, int32_t h) {
+    if (buffering || w <= 0 || h <= 0) return;
+    uiMetricsNoteDirectPixels((uint32_t)w * (uint32_t)h);
+}
+
+extern "C" void kvxInvalidateTopBarCache_C(void) __attribute__((weak));
+static inline void tftMaybeInvalidateTopBar(int32_t y, int32_t h) {
+    if (!kvxInvalidateTopBarCache_C) return;
+    if (h <= 0) return;
+#if defined(ARDUINO_M5STACK_TAB5)
+    const int barH = 48;
+#else
+    const int barH = 24;
+#endif
+    if (y < barH && (y + h) > 0) kvxInvalidateTopBarCache_C();
+}
 /*
 static SemaphoreHandle_t tftMutex;
 #define RUN_ON_MUTEX(fn)                                                                                     \
@@ -88,9 +106,11 @@ void tft_display::presentDirty() {
     // One sprite blit. Per-row pushImage of the raw buffer swaps colors and
     // leaves a gap between scanlines, which reads as jitter. Clip keeps the
     // transfer to the dirty area without a second pixel buffer.
+    const uint32_t t0 = micros();
     M5.Display.setClipRect(sx, sy, sw, sh);
     _fb->pushSprite(0, 0);
     M5.Display.clearClipRect();
+    uiMetricsNotePresent((uint32_t)sw * (uint32_t)sh, micros() - t0);
 }
 
 void tft_display::releaseCanvas() {
@@ -143,10 +163,16 @@ bool tft_display::beginFrame() {
         const int16_t h = M5.Display.height();
         if (w > 0 && h > 0) {
             const size_t need = (size_t)w * (size_t)h * 2 + 16 * 1024;
-            if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA) < need) return false;
+            if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA) < need) {
+                uiMetricsNoteFrameFallback();
+                return false;
+            }
         }
     }
-    if (!ensureCanvas()) return false;
+    if (!ensureCanvas()) {
+        uiMetricsNoteFrameFallback();
+        return false;
+    }
     syncCanvasState();
     _buffering = true;
     _frameDepth = 1;
@@ -208,6 +234,7 @@ void tft_display::drawFastHLine(int32_t x, int32_t y, int32_t w, uint32_t color)
 
 void tft_display::drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color) {
     markDirty(x, y, 1, h);
+    if (!_buffering && h >= (int32_t)M5.Display.height() - 2) tftNoteDirectPixels(false, 1, h);
     RUN_ON_MUTEX(drawDst().drawFastVLine(x, y, h, (uint16_t)color));
 }
 
@@ -218,6 +245,8 @@ void tft_display::drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t 
 
 void tft_display::fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
     markDirty(x, y, w, h);
+    tftNoteDirectPixels(_buffering, w, h);
+    tftMaybeInvalidateTopBar(y, h);
     RUN_ON_MUTEX(drawDst().fillRect(x, y, w, h, (uint16_t)color));
 }
 
@@ -237,6 +266,8 @@ void tft_display::fillRectVGradient(
 
 void tft_display::fillScreen(uint32_t color) {
     markDirty(0, 0, M5.Display.width(), M5.Display.height());
+    tftNoteDirectPixels(_buffering, M5.Display.width(), M5.Display.height());
+    tftMaybeInvalidateTopBar(0, M5.Display.height());
     RUN_ON_MUTEX(drawDst().fillScreen((uint16_t)color));
 }
 
@@ -341,11 +372,13 @@ void tft_display::drawXBitmap(
 
 void tft_display::pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint16_t *data) {
     markDirty(x, y, w, h);
+    tftNoteDirectPixels(_buffering, w, h);
     RUN_ON_MUTEX(drawDst().pushImage(x, y, w, h, data));
 }
 
 void tft_display::pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data) {
     markDirty(x, y, w, h);
+    tftNoteDirectPixels(_buffering, w, h);
     RUN_ON_MUTEX(drawDst().pushImage(x, y, w, h, data));
 }
 

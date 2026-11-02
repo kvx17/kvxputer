@@ -255,9 +255,8 @@ void clockFaceDrawDigital(int topY, const char *timeStr, uint16_t color) {
             }
         }
         int midY = topY + (tftHeight - topY) / 2 - f_size * LH / 2;
-        tft.fillRect(BORDER_PAD_X + 2, midY - 2, tftWidth - 2 * BORDER_PAD_X - 4, f_size * LH + 4, bg);
         tft.setTextSize(f_size);
-        tft.setTextColor(color, bg);
+        tft.setTextColor(color, bg, true);
         tft.drawCentreString(s, tftWidth / 2, midY, 1);
         strncpy(s_digitalLastTime, s, sizeof(s_digitalLastTime) - 1);
         s_digitalLastTime[sizeof(s_digitalLastTime) - 1] = '\0';

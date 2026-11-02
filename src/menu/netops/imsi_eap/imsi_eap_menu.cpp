@@ -90,8 +90,13 @@ void imsiEapMenu() {
                 }
             }
         }
-        tft.fillRect(10, 56, tftWidth - 20, 16, kvxConfig.bgColor);
-        drawKvRow(10, uiStatusY(1), "IDs:", String((int)seen.size()) + " ch " + String(ch));
+        static size_t paintedIds = (size_t)-1;
+        static uint8_t paintedCh = 255;
+        if (seen.size() != paintedIds || ch != paintedCh) {
+            drawKvRow(10, uiStatusY(1), "IDs:", String((int)seen.size()) + " ch " + String(ch));
+            paintedIds = seen.size();
+            paintedCh = ch;
+        }
         delay(40);
     }
     esp_wifi_set_promiscuous_rx_cb(nullptr);

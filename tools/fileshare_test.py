@@ -8,8 +8,8 @@ Manual checklist (device UI / phone):
   - ESC during upload prompts Sel=stop / ESC=cancel; Sel aborts cleanly
 
 Usage:
-  python3 tools/fileshare_test.py --host 192.168.1.1 --user kvx --pwd SECRET
-  python3 tools/fileshare_test.py --host 192.168.1.1 --soak 5
+  python3 tools/fileshare_test.py --host 172.0.0.1 --user kvx --pwd SECRET
+  python3 tools/fileshare_test.py --host 172.0.0.1 --soak 5
 """
 
 from __future__ import annotations

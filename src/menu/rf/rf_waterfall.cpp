@@ -1,4 +1,5 @@
 #include "rf_waterfall.h"
+#include <cstring>
 #ifndef TFT_MOSI
 #define TFT_MOSI -1
 #endif
@@ -81,25 +82,33 @@ void rf_waterfall_run() {
     int selected_item = 0;
     bool exitting = false;
     unsigned long exit_time = 0;
+    int lastSelected = -1;
+    float lastStart = -1, lastEnd = -1;
+    char lastFooter[48] = "";
 
-    while (1) {
+    auto drawChrome = [&](bool force) {
+        if (!force && selected_item == lastSelected && f_start == lastStart && f_end == lastEnd) return;
+        tft.fillRect(0, 0, screen_width, display_top, TFT_BLACK);
         for (int i = 0; i < 4; i++) {
             int x = i * (screen_width / 4);
             float f_freq = f_start + (f_end - f_start) * i / 4.0;
             tft.setCursor(x, 0);
             tft.setTextSize(uiDenseFont()) /* Waterfall overlay chrome stays dense */;
-
-            if (i == 0 && selected_item == 0) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else if (i == 3 && selected_item == 1) {
-                tft.setTextColor(TFT_PINK, TFT_BLACK);
-            } else {
-                tft.setTextColor(TFT_WHITE, TFT_BLACK);
-            }
-
-            tft.drawFastVLine(x, 0, tft.height(), TFT_DARKGREY);
+            if (i == 0 && selected_item == 0) tft.setTextColor(TFT_PINK, TFT_BLACK, true);
+            else if (i == 3 && selected_item == 1) tft.setTextColor(TFT_PINK, TFT_BLACK, true);
+            else tft.setTextColor(TFT_WHITE, TFT_BLACK, true);
+            // Grid lines once through the header only — never restamp the history.
+            tft.drawFastVLine(x, 0, display_top, TFT_DARKGREY);
             tft.print(String(f_freq, 1));
         }
+        lastSelected = selected_item;
+        lastStart = f_start;
+        lastEnd = f_end;
+    };
+    drawChrome(true);
+
+    while (1) {
+        drawChrome(false);
 
         f_freq_step = (f_end - f_start) / screen_width;
 
@@ -191,16 +200,18 @@ void rf_waterfall_run() {
             lastMaxUpdate = millis();
         }
 
-        tft.setCursor(3, 20);
-        tft.setTextColor(TFT_DARKCYAN);
-        tft.print("[OK] Item [PREV/NEXT] Value ");
-
-        if (selected_item == 2) {
-            tft.setTextColor(TFT_RED);
+        char foot[48];
+        snprintf(
+            foot, sizeof(foot), "[OK] Item [PREV/NEXT] Value %s", selected_item == 2 ? "EXIT" : "EXIT"
+        );
+        if (strcmp(lastFooter, foot) != 0 || selected_item != lastSelected) {
+            tft.setCursor(3, 20);
+            tft.setTextColor(TFT_DARKCYAN, TFT_BLACK, true);
+            tft.print("[OK] Item [PREV/NEXT] Value ");
+            tft.setTextColor(selected_item == 2 ? TFT_RED : TFT_WHITE, TFT_BLACK, true);
             tft.print("EXIT");
-        } else {
-            tft.setTextColor(TFT_WHITE);
-            tft.print("EXIT");
+            strncpy(lastFooter, foot, sizeof(lastFooter) - 1);
+            lastFooter[sizeof(lastFooter) - 1] = '\0';
         }
 
         if (check(EscPress) || forceHome) break;

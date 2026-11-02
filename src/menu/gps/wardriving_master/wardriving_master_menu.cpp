@@ -80,9 +80,13 @@ void wardrivingMasterMenu() {
             lines++;
             last = String((char *)item.data).substring(0, item.len);
         }
-        tft.fillRect(10, 56, tftWidth - 20, 32, kvxConfig.bgColor);
-        drawKvRow(10, uiStatusY(1), "Rows:", String(lines));
-        tft.drawString(last.substring(0, 28), 10, 72);
+        static int paintedLines = -1;
+        if (lines != paintedLines) {
+            drawKvRow(10, uiStatusY(1), "Rows:", String(lines));
+            tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor, true);
+            tft.drawString(last.substring(0, 28), 10, 72);
+            paintedLines = lines;
+        }
         delay(40);
     }
     esp_now_unregister_recv_cb();

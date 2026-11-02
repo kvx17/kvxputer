@@ -358,40 +358,89 @@ void ScrollableTextArea::addField(const String &label, const String &value) {
 void ScrollableTextArea::draw(bool force) {
     if (!_redraw && !force) return;
 
-    _scrollBuffer.fillRect(_startX, _startY, _width, _height, kvxConfig.bgColor);
-    const uint8_t prevSize = tft.getTextSize();
-
-    int32_t yOffset = 0;
+    // Build the visible set first so an unchanged scroll can patch lines only.
+    struct VisLine {
+        size_t idx;
+        int y;
+        int rowH;
+        uint8_t sz;
+        uint16_t color;
+        uint16_t rc;
+        const char *left;
+        const char *right;
+    };
+    VisLine vis[32];
     size_t lines = 0;
-    size_t idx{firstVisibleLine};
-    while (idx < linesBuffer.size()) {
+    int32_t yOffset = 0;
+    size_t idx = firstVisibleLine;
+    while (idx < linesBuffer.size() && lines < 32) {
         const int32_t rowH = linePixels(idx);
         if (yOffset + rowH > _height) break;
-
-        const uint16_t color =
-            (idx < lineColors.size()) ? lineColors[idx] : kvxConfig.priColor;
-        const uint8_t sz =
-            (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
-        tft.setTextSize(sz);
-        const int y = _startY + yOffset;
-        _scrollBuffer.setTextColor(color);
-        _scrollBuffer.drawString(linesBuffer[idx], _startX, y);
-
-        if (idx < lineRightText.size() && lineRightText[idx].length()) {
-            const uint16_t rc =
-                (idx < lineRightColors.size()) ? lineRightColors[idx] : kvxConfig.secColor;
-            const int lx = _startX + _scrollBuffer.textWidth(linesBuffer[idx]) + uiCharW(sz);
-            _scrollBuffer.setTextColor(rc);
-            _scrollBuffer.drawString(lineRightText[idx], lx, y);
-        }
-
+        VisLine &v = vis[lines];
+        v.idx = idx;
+        v.y = _startY + yOffset;
+        v.rowH = rowH;
+        v.sz = (idx < lineFontSizes.size()) ? lineFontSizes[idx] : _fontSize;
+        v.color = (idx < lineColors.size()) ? lineColors[idx] : kvxConfig.priColor;
+        v.rc = (idx < lineRightColors.size()) ? lineRightColors[idx] : kvxConfig.secColor;
+        v.left = linesBuffer[idx].c_str();
+        v.right = (idx < lineRightText.size()) ? lineRightText[idx].c_str() : "";
         yOffset += rowH;
         lines++;
         idx++;
     }
 
+    const bool scrollChanged =
+        force || firstVisibleLine != _lastFirstVisible || lines != _lastLineCount ||
+        _lastLeft.size() != lines;
+    const uint8_t prevSize = tft.getTextSize();
+    const uint16_t bg = kvxConfig.bgColor;
+
+    if (scrollChanged) {
+        _scrollBuffer.fillRect(_startX, _startY, _width, _height, bg);
+        _lastLeft.clear();
+        _lastRight.clear();
+        _lastLeft.reserve(lines);
+        _lastRight.reserve(lines);
+    }
+
+    for (size_t i = 0; i < lines; i++) {
+        const VisLine &v = vis[i];
+        const bool leftChanged =
+            scrollChanged || i >= _lastLeft.size() || _lastLeft[i] != v.left;
+        const bool rightChanged =
+            scrollChanged || i >= _lastRight.size() || _lastRight[i] != v.right;
+        if (!leftChanged && !rightChanged) continue;
+
+        tft.setTextSize(v.sz);
+        // Opaque overwrite of the line strip — no full viewport clear on a text change.
+        if (!scrollChanged) _scrollBuffer.fillRect(_startX, v.y, _width, v.rowH, bg);
+        _scrollBuffer.setTextColor(v.color, bg, true);
+        _scrollBuffer.drawString(v.left, _startX, v.y);
+        if (v.right && v.right[0]) {
+            const int lx = _startX + _scrollBuffer.textWidth(v.left) + uiCharW(v.sz);
+            _scrollBuffer.setTextColor(v.rc, bg, true);
+            _scrollBuffer.drawString(v.right, lx, v.y);
+        }
+
+        if (i < _lastLeft.size()) {
+            _lastLeft[i] = v.left;
+            _lastRight[i] = v.right ? v.right : "";
+        } else {
+            _lastLeft.push_back(v.left);
+            _lastRight.push_back(v.right ? v.right : "");
+        }
+    }
+
+    // Drop stale cache entries when the visible count shrank.
+    if (_lastLeft.size() > lines) {
+        _lastLeft.resize(lines);
+        _lastRight.resize(lines);
+    }
+
+    _lastFirstVisible = firstVisibleLine;
+    _lastLineCount = lines;
     lastVisibleLine = firstVisibleLine + lines;
     tft.setTextSize(prevSize);
-
     _redraw = false;
 }

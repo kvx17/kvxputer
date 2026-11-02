@@ -27,7 +27,6 @@ void ssdpMenu() {
         udp.write((const uint8_t *)notify, strlen(notify));
         udp.endPacket();
         sent++;
-        tft.fillRect(10, 40, tftWidth - 20, 16, kvxConfig.bgColor);
         drawKvRow(10, uiStatusY(0), "NOTIFYs:", String(sent));
         delay(400);
     }

@@ -299,48 +299,68 @@ static void chatLoop() {
     }
 }
 
-static void drawNodesScreen() {
-    drawMainBorderWithTitle("Mesh Nodes");
-    tft.setTextDatum(TL_DATUM);
-    tft.setTextSize(1);
-    int y = 40;
+static LiveField s_meshLines[12];
+static bool s_meshReady = false;
+static size_t s_meshPaintedCount = (size_t)-1;
+
+static void drawNodesScreen(bool forceChrome) {
+    if (forceChrome || !s_meshReady) {
+        drawMainBorderWithTitle("Mesh Nodes");
+        tft.setTextDatum(TL_DATUM);
+        tft.setTextSize(1);
+        for (int i = 0; i < 12; i++) {
+            s_meshLines[i].configure(
+                6, 40 + i * 12, tftWidth - 12, kvxConfig.priColor, kvxConfig.bgColor, 1, 0
+            );
+        }
+        s_meshReady = true;
+        s_meshPaintedCount = (size_t)-1;
+    }
     char line[48];
+    int row = 0;
     snprintf(line, sizeof(line), "Me %s (!%08x)", gCfg.shortName, (unsigned)gCfg.nodeNum);
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.drawString(line, 6, y);
-    y += 14;
+    s_meshLines[row++].paint(line);
     snprintf(
         line, sizeof(line), "%.3f MHz  %s  P%d", mesh::meshFrequencyMHz(),
         mesh::presetParams(gCfg.preset).name, mesh::meshTxPowerDbm()
     );
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawString(line, 6, y);
-    y += 14;
+    s_meshLines[row].fg = kvxConfig.secColor;
+    s_meshLines[row++].paint(line);
     if (gNodeCount == 0) {
-        tft.drawString("No nodes heard yet", 6, y);
+        s_meshLines[row].fg = kvxConfig.priColor;
+        s_meshLines[row++].paint("No nodes heard yet");
     } else {
-        for (size_t i = 0; i < gNodeCount && y < tftHeight - 20; i++) {
+        for (size_t i = 0; i < gNodeCount && row < 10; i++) {
             const HeardNode &n = gNodes[i];
             char who[16];
             if (n.shortName[0]) strlcpy(who, n.shortName, sizeof(who));
             else snprintf(who, sizeof(who), "%04x", (unsigned)(n.num & 0xffff));
             uint32_t ago = (millis() - n.lastHeardMs) / 1000UL;
             snprintf(line, sizeof(line), "%s  SNR%.1f  %lus", who, n.snr, (unsigned long)ago);
-            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-            tft.drawString(line, 6, y);
-            y += 12;
+            s_meshLines[row].fg = kvxConfig.priColor;
+            s_meshLines[row++].paint(line);
         }
     }
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawString("Esc=back", 6, tftHeight - 14);
+    // Clear stale rows if the node list shrank.
+    if (s_meshPaintedCount != (size_t)-1 && row < (int)s_meshPaintedCount) {
+        for (int i = row; i < (int)s_meshPaintedCount && i < 12; i++) s_meshLines[i].paint(" ");
+    }
+    s_meshPaintedCount = row;
+    static bool footDone = false;
+    if (!footDone) {
+        tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor, true);
+        tft.drawString("Esc=back", 6, tftHeight - 14);
+        footDone = true;
+    }
 }
 
 static void nodesLoop() {
     uint32_t lastDraw = 0;
+    s_meshReady = false;
     while (true) {
         pumpRadio();
         if (millis() - lastDraw > 500) {
-            drawNodesScreen();
+            drawNodesScreen(false);
             lastDraw = millis();
         }
         if (check(EscPress)) break;

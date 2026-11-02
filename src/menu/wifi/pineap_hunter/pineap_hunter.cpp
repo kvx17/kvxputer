@@ -514,12 +514,12 @@ static void pineapHunterRun() {
                 }
                 lastAlertCount = alertCount;
                 if (viewMode == 0) {
-                    if (pinesVisuallyChanged(pines, next) || totalScans != paintedScans ||
-                        alertSsids != paintedAlert) {
+                    // totalScans alone must not force a body clear.
+                    if (pinesVisuallyChanged(pines, next) || alertSsids != paintedAlert) {
                         needsRedraw = true;
                     }
                 } else if (viewMode == 1) {
-                    if (twinsVisuallyChanged(twins, nextTwins) || totalScans != paintedScans) {
+                    if (twinsVisuallyChanged(twins, nextTwins)) {
                         needsRedraw = true;
                     }
                 } else if (viewMode == 2 && selectedPine < (int)next.size()) {
@@ -530,8 +530,6 @@ static void pineapHunterRun() {
                 }
                 pines = std::move(next);
                 twins = std::move(nextTwins);
-            } else if (totalScans != paintedScans) {
-                needsRedraw = true;
             }
             WiFi.scanDelete();
         }

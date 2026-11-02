@@ -11,6 +11,7 @@
 #include "menu/others/pda/pda_alarms.h"
 #endif
 #include <JPEGDecoder.h>
+#include <cstring>
 #include <interface.h> //for charging ischarging to print charging indicator
 #include <memory>
 
@@ -614,42 +615,105 @@ void padField(const String &label, const String &value, int16_t padx) {
     tft.setTextColor(labelColor, bg);
 }
 
-void drawKvRow(int16_t x, int16_t y, const String &label, const String &value) {
+void LiveField::configure(
+    int16_t x_, int16_t y_, int16_t w_, uint16_t fg_, uint16_t bg_, int sz, unsigned intervalMs
+) {
+    x = x_;
+    y = y_;
+    width = w_;
+    fg = fg_;
+    bg = bg_;
+    fontSize = sz;
+    minIntervalMs = intervalMs;
+    invalidate();
+}
+
+void LiveField::invalidate() {
+    last[0] = '\0';
+    lastMs = 0;
+    primed = false;
+}
+
+bool LiveField::paint(const char *text) {
+    if (!text) text = "";
+    const unsigned long now = millis();
+    if (primed && strcmp(last, text) == 0) return false;
+    if (primed && (now - lastMs) < minIntervalMs) return false;
+
+    const int sz = fontSize ? fontSize : uiBodyFont();
+    const int rowH = uiLineH(sz);
+    const int maxW = width > 0 ? width : max(0, tftWidth - x - BORDER_PAD_X);
+
+    tft.setTextSize(sz);
+    tft.setTextColor(fg, bg, true);
+
+    char fit[sizeof(last)];
+    size_t n = 0;
+    fit[0] = '\0';
+    for (const char *p = text; *p && n + 1 < sizeof(fit); ++p) {
+        fit[n] = *p;
+        fit[n + 1] = '\0';
+        if (tft.textWidth(fit) > maxW) {
+            fit[n] = '\0';
+            break;
+        }
+        n++;
+    }
+
+    if (n) tft.drawString(fit, x, y, 1);
+    const int used = n ? tft.textWidth(fit) : 0;
+    if (used < maxW) tft.fillRect(x + used, y, maxW - used, rowH, bg);
+
+    strncpy(last, text, sizeof(last) - 1);
+    last[sizeof(last) - 1] = '\0';
+    lastMs = now;
+    primed = true;
+    return true;
+}
+
+void drawKvRow(int16_t x, int16_t y, const char *label, const char *value) {
+    if (!label) label = "";
+    if (!value) value = "";
     const int sz = uiBodyFont();
     const uint16_t labelColor = kvxConfig.priColor;
     const uint16_t valueColor = kvxConfig.secColor;
     const uint16_t bg = kvxConfig.bgColor;
     const int charW = uiCharW(sz);
-    const int maxW = tftWidth - x - BORDER_PAD_X;
+    const int rowH = uiLineH(sz);
+    const int maxW = max(0, tftWidth - x - BORDER_PAD_X);
 
     tft.setTextSize(sz);
     const int labelPx = tft.textWidth(label);
     int avail = maxW - labelPx - charW;
     if (avail < charW * 2) avail = charW * 2;
 
-    String remain = value;
-    String firstVal;
-    while (remain.length()) {
-        String trial = firstVal + remain.substring(0, 1);
-        if (tft.textWidth(trial) > avail && firstVal.length()) break;
-        if (tft.textWidth(trial) > avail && !firstVal.length()) {
-            firstVal = remain.substring(0, 1);
-            remain.remove(0, 1);
+    char valBuf[64];
+    size_t n = 0;
+    valBuf[0] = '\0';
+    for (const char *p = value; *p && n + 1 < sizeof(valBuf); ++p) {
+        valBuf[n] = *p;
+        valBuf[n + 1] = '\0';
+        if (tft.textWidth(valBuf) > avail) {
+            valBuf[n] = '\0';
             break;
         }
-        firstVal = trial;
-        remain.remove(0, 1);
-        if (tft.textWidth(firstVal) >= avail) break;
+        n++;
     }
 
-    // Clear the row strip so live HUDs can redraw without ghosting.
-    tft.fillRect(x, y, max(0, tftWidth - x), uiLineH(sz), bg);
-    tft.setTextColor(labelColor, bg);
+    // Opaque glyphs + trailing clear. No pre-clear of the whole row.
+    tft.setTextColor(labelColor, bg, true);
     tft.drawString(label, x, y, 1);
-    if (firstVal.length()) {
-        tft.setTextColor(valueColor, bg);
-        tft.drawString(firstVal, x + labelPx + charW, y, 1);
+    const int valX = x + labelPx + charW;
+    if (n) {
+        tft.setTextColor(valueColor, bg, true);
+        tft.drawString(valBuf, valX, y, 1);
     }
+    const int used = labelPx + charW + (n ? tft.textWidth(valBuf) : 0);
+    if (used < maxW) tft.fillRect(x + used, y, maxW - used, rowH, bg);
+}
+
+void drawKvRow(int16_t x, int16_t y, const String &label, const String &value) {
+    drawKvRow(x, y, label.c_str(), value.c_str());
 }
 
 void progressHandler(int progress, size_t total, const String &message) {

@@ -10,6 +10,7 @@
 #include "esp_wifi.h"
 #include "menu/ble/ble_common.h"
 #include <esp_event.h>
+#include <esp_idf_version.h>
 #include <esp_netif.h>
 #include <globals.h>
 
@@ -222,6 +223,106 @@ bool _setupAP() {
     wifiIP = WiFi.softAPIP().toString(); // update global var
     Serial.println("IP: " + wifiIP);
     wifiConnected = true;
+    return true;
+}
+
+bool wifiEnsureApDhcpRunning() {
+    esp_netif_t *ap_netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (!ap_netif) {
+        Serial.println("[WiFi] WIFI_AP_DEF missing");
+        return false;
+    }
+    esp_netif_dhcp_status_t st = ESP_NETIF_DHCP_INIT;
+    if (esp_netif_dhcps_get_status(ap_netif, &st) == ESP_OK && st == ESP_NETIF_DHCP_STARTED) {
+        return true;
+    }
+    // Do not stop a healthy server — only start when down (captive-portal
+    // option setup can leave DHCPS stopped after a failed esp_netif_dhcps_option).
+    esp_err_t e = esp_netif_dhcps_start(ap_netif);
+    if (e == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) return true;
+    if (e != ESP_OK) {
+        // Last resort: stop then start.
+        esp_netif_dhcps_stop(ap_netif);
+        e = esp_netif_dhcps_start(ap_netif);
+    }
+    Serial.printf("[WiFi] dhcps_start: %s\n", esp_err_to_name(e));
+    return e == ESP_OK || e == ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED;
+}
+
+bool wifiStartPortalAp(
+    const String &ssid, const String &passphrase, uint8_t channel, IPAddress apIp, wifi_mode_t mode
+) {
+    if (apIp == IPAddress((uint32_t)0)) apIp = IPAddress(172, 0, 0, 1);
+    if (channel < 1 || channel > 13) channel = 6;
+
+    String apSsid = ssid;
+    apSsid.trim();
+    if (apSsid.length() == 0) apSsid = "kvxputer";
+
+    WiFi.persistent(false);
+
+#if defined(ARDUINO_M5STACK_TAB5)
+    wifiPrepareTab5Hosted();
+#endif
+
+    if (!WiFi.mode(mode)) {
+        Serial.println("[WiFi] portal AP mode failed");
+        return false;
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // dns1 (4th) = DHCP pool start (0 → AP+1). dns2 (5th) = DNS handed to clients.
+    // Without dns2, phones keep 8.8.8.8 and never hit our captive DNS/HTTP.
+    if (!WiFi.softAPConfig(apIp, apIp, IPAddress(255, 255, 255, 0), IPAddress((uint32_t)0), apIp)) {
+        Serial.println("[WiFi] softAPConfig failed");
+        return false;
+    }
+
+    const char *pass = passphrase.length() > 0 ? passphrase.c_str() : nullptr;
+    if (!WiFi.softAP(apSsid.c_str(), pass, channel, 0, 4, false)) {
+        Serial.printf("[WiFi] softAP failed ssid='%s' ch=%u\n", apSsid.c_str(), (unsigned)channel);
+        return false;
+    }
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 2)
+    // Option 114 helps modern phones open the portal URL. On failure the
+    // Arduino helper can leave DHCPS stopped — always recover.
+    if (!WiFi.AP.enableDhcpCaptivePortal()) {
+        Serial.println("[WiFi] DHCP captive URI unavailable; recovering DHCPS");
+        if (!wifiEnsureApDhcpRunning()) {
+            Serial.println("[WiFi] DHCPS recover failed");
+            return false;
+        }
+    }
+#else
+    if (!wifiEnsureApDhcpRunning()) {
+        Serial.println("[WiFi] DHCPS start failed");
+        return false;
+    }
+#endif
+
+    if (!wifiEnsureApDhcpRunning()) {
+        Serial.println("[WiFi] DHCPS not running after AP start");
+        return false;
+    }
+
+    IPAddress got = WiFi.softAPIP();
+    if (got != apIp) {
+        Serial.printf(
+            "[WiFi] softAPIP %s != %s — reconfig\n", got.toString().c_str(), apIp.toString().c_str()
+        );
+        WiFi.softAPConfig(apIp, apIp, IPAddress(255, 255, 255, 0), IPAddress((uint32_t)0), apIp);
+        wifiEnsureApDhcpRunning();
+        got = WiFi.softAPIP();
+    }
+
+    wifiConnected = true;
+    wifiIP = got.toString();
+    Serial.printf(
+        "[WiFi] portal AP '%s' IP %s mode=%d dns-in-lease=1\n", apSsid.c_str(), wifiIP.c_str(), (int)mode
+    );
     return true;
 }
 

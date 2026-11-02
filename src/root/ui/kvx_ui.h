@@ -16,6 +16,8 @@ void drawKvxTopBar(const char *leftLabel);
 void drawKvxTopBar(const char *leftLabel, const char *statusLabel);
 /** Last app name drawn in the top bar (for status refreshes). */
 const char *kvxTopBarAppName();
+/** Force the next drawKvxTopBar to paint (e.g. after fillScreen wiped the strip). */
+void kvxInvalidateTopBarCache();
 void drawKvxSubmenu(int index, std::vector<Option> &options, const char *title);
 void kvxInvalidateSubmenuCache();
 

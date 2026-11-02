@@ -91,6 +91,24 @@ bool _connectToWifiNetwork(const String &ssid, const String &pwd);
  */
 bool _setupAP();
 
+/**
+ * Ensure the SoftAP DHCP server is running. Safe after a failed
+ * enableDhcpCaptivePortal() which can leave DHCPS stopped.
+ */
+bool wifiEnsureApDhcpRunning();
+
+/**
+ * Start a captive-portal SoftAP with DNS in the DHCP lease (phones send
+ * captive probes to us) and power-save off. Does not start DNSServer/HTTP —
+ * callers own those. passphrase empty = open AP.
+ *
+ * @param mode WIFI_AP or WIFI_AP_STA (e.g. Evil Portal password verify)
+ */
+bool wifiStartPortalAp(
+    const String &ssid, const String &passphrase, uint8_t channel, IPAddress apIp,
+    wifi_mode_t mode = WIFI_AP
+);
+
 void updateTimezoneTask(void *pvParameters);
 
 #endif

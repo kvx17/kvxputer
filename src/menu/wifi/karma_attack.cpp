@@ -2429,6 +2429,42 @@ void updateKarmaDisplay() {
     if (currentTime - last_time > 1000) {
         last_time = currentTime;
 
+        static uint32_t lastTotal = (uint32_t)-1;
+        static size_t lastUniq = (size_t)-1;
+        static size_t lastAct = (size_t)-1;
+        static size_t lastPend = (size_t)-1;
+        static size_t lastQueue = (size_t)-1;
+        static uint32_t lastBeac = (uint32_t)-1;
+        static uint32_t lastKarma = (uint32_t)-1;
+        static uint32_t lastClone = (uint32_t)-1;
+        static uint32_t lastPort = (uint32_t)-1;
+        static size_t lastHs = (size_t)-1;
+        static uint32_t lastPmkid = (uint32_t)-1;
+        static bool lastPaused = false;
+        static int lastMode = -1;
+        const bool dirty = totalProbes != lastTotal || uniqueClients != lastUniq ||
+                           activeNetworks.size() != lastAct || pendingPortals.size() != lastPend ||
+                           responseQueue.size() != lastQueue || beaconsSent != lastBeac ||
+                           karmaResponsesSent != lastKarma || cloneAttacksLaunched != lastClone ||
+                           autoPortalsLaunched != lastPort || handshakeBuffer.size() != lastHs ||
+                           pmkidCaptured != lastPmkid || karmaPaused != lastPaused ||
+                           (int)karmaMode != lastMode || screenNeedsRedraw;
+        if (!dirty) return;
+        lastTotal = totalProbes;
+        lastUniq = uniqueClients;
+        lastAct = activeNetworks.size();
+        lastPend = pendingPortals.size();
+        lastQueue = responseQueue.size();
+        lastBeac = beaconsSent;
+        lastKarma = karmaResponsesSent;
+        lastClone = cloneAttacksLaunched;
+        lastPort = autoPortalsLaunched;
+        lastHs = handshakeBuffer.size();
+        lastPmkid = pmkidCaptured;
+        lastPaused = karmaPaused;
+        lastMode = (int)karmaMode;
+        screenNeedsRedraw = false;
+
         tft.fillRect(10, 45, tftWidth - 20, tftHeight - 70, kvxConfig.bgColor);
         // Multi-column live stats need dense HUD chrome — FP body won't fit.
         tft.setTextSize(uiDenseFont());

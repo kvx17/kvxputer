@@ -7,6 +7,7 @@
 #include "root/ui/display.h"
 #include "root/ui/scanner_list.h"
 #include <Arduino.h>
+#include <cstring>
 #include <globals.h>
 #include <set>
 #include <vector>
@@ -35,11 +36,14 @@ static void drawRssiBar(int x, int y, int w, int h, int rssi, int floorDbm) {
     if (fill > 0) tft.fillRect(x + 1, y + 1, fill, h - 2, kvxConfig.priColor);
 }
 
+static char s_hunterBanner[36] = "";
+static LiveField s_hunterAdv, s_hunterUniq, s_hunterWin, s_hunterRssi;
+static bool s_hunterReady = false;
+
 static void drawHud(
     uint32_t advCount, size_t uniqueCount, int alertPkts, int lastRssi, int rssiFloor, bool alertsPaused,
     uint32_t windowLeftSec
 ) {
-    clearBody();
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
     const int x0 = 8;
@@ -49,34 +53,47 @@ static void drawHud(
     bool over = alertPkts > 0 && (int)advCount >= alertPkts;
     uint16_t sc = over ? TFT_RED : (alertsPaused ? TFT_YELLOW : TFT_GREEN);
     const int bannerH = uiLineH(dense) + 10;
-    tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
-    tft.setTextColor(TFT_BLACK, sc);
-    String banner = alertsPaused ? "alerts paused (Sel)" : (over ? "! BLE spam threshold" : "monitoring");
-    tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
+    const char *banner =
+        alertsPaused ? "alerts paused (Sel)" : (over ? "! BLE spam threshold" : "monitoring");
+    if (!s_hunterReady || strcmp(s_hunterBanner, banner) != 0) {
+        if (!s_hunterReady) clearBody();
+        tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
+        tft.setTextColor(TFT_BLACK, sc, true);
+        tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
+        strncpy(s_hunterBanner, banner, sizeof(s_hunterBanner) - 1);
+        s_hunterBanner[sizeof(s_hunterBanner) - 1] = '\0';
+    }
     y += bannerH + 6;
 
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    if (!s_hunterReady) {
+        s_hunterAdv.configure(x0, y, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0);
+        s_hunterUniq.configure(
+            x0, y + lh, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0
+        );
+        s_hunterWin.configure(
+            x0, y + 2 * lh, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0
+        );
+        s_hunterRssi.configure(
+            x0, y + 3 * lh + 4, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0
+        );
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor, true);
+        tft.drawString("UP/DN thr  Prev/Nxt floor", x0, y + 4 * lh + 8, 1);
+        tft.drawString("Sel pause  ESC exit", x0, y + 5 * lh + 8, 1);
+        s_hunterReady = true;
+    }
+
     char line[40];
     snprintf(line, sizeof(line), "Adverts: %5lu / %3d", (unsigned long)advCount, alertPkts);
-    tft.drawString(line, x0, y, 1);
-    y += lh;
+    s_hunterAdv.paint(line);
     snprintf(line, sizeof(line), "Unique:  %5d / %3d", (int)uniqueCount, (int)kMaxUnique);
-    tft.drawString(line, x0, y, 1);
-    y += lh;
+    s_hunterUniq.paint(line);
     snprintf(line, sizeof(line), "Window:  %2lus left", (unsigned long)windowLeftSec);
-    tft.drawString(line, x0, y, 1);
-    y += lh + 4;
-
+    s_hunterWin.paint(line);
     snprintf(line, sizeof(line), "RSSI %4ddBm", lastRssi);
-    tft.drawString(line, x0, y, 1);
+    s_hunterRssi.paint(line);
     int barX = x0 + tft.textWidth("RSSI -000dBm") + 6;
     int barW = tftWidth - barX - x0;
-    if (barW > 20) drawRssiBar(barX, y, barW, uiLineH(dense), lastRssi, rssiFloor);
-    y += lh + 4;
-
-    tft.drawString("UP/DN thr  Prev/Nxt floor", x0, y, 1);
-    y += lh;
-    tft.drawString("Sel pause  ESC exit", x0, y, 1);
+    if (barW > 20) drawRssiBar(barX, y + 3 * lh + 4, barW, uiLineH(dense), lastRssi, rssiFloor);
 }
 
 } // namespace
@@ -115,6 +132,12 @@ void bleHunterMenu() {
     uint32_t paintedLeftSec = UINT32_MAX;
 
     drawMainBorderWithTitle("BLE Hunter", true);
+    s_hunterReady = false;
+    s_hunterBanner[0] = '\0';
+    s_hunterAdv.invalidate();
+    s_hunterUniq.invalidate();
+    s_hunterWin.invalidate();
+    s_hunterRssi.invalidate();
 
     while (!returnToMenu && !forceHome) {
         if (check(EscPress)) break;

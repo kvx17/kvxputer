@@ -10,6 +10,11 @@ void WdUi::reset() {
     scroll = 0;
     liveFeed.clear();
     newFeed.clear();
+    chromeReady = false;
+    lastTitle = "";
+    lastFooter = "";
+    lastLines.clear();
+    lastScroll = -1;
 }
 
 void WdUi::nextView() {
@@ -17,6 +22,9 @@ void WdUi::nextView() {
     if (v >= (uint8_t)WdDashView::Count) v = 0;
     current = (WdDashView)v;
     scroll = 0;
+    chromeReady = false;
+    lastLines.clear();
+    lastFooter = "";
 }
 
 void WdUi::nextChannelMode() {
@@ -84,27 +92,58 @@ void WdUi::drawLines(const char *title, const std::vector<String> &lines, const 
     if (scroll > maxScroll) scroll = maxScroll;
     if (scroll < 0) scroll = 0;
 
-    tft.fillScreen(kvxConfig.bgColor);
-    drawKvxTopBar(title);
-
-    tft.setTextSize(dense);
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    const int maxChars = max(1, (tftWidth - 12) / uiCharW(dense));
-    for (int i = 0; i < maxRows && (scroll + i) < (int)lines.size(); i++) {
-        String line = lines[scroll + i];
-        if ((int)line.length() > maxChars) line = line.substring(0, maxChars);
-        tft.setCursor(6, listY + i * rowH);
-        tft.print(line);
+    const uint16_t bg = kvxConfig.bgColor;
+    const bool scrollChanged = scroll != lastScroll || !chromeReady;
+    if (!chromeReady) {
+        tft.fillScreen(bg);
+        drawKvxTopBar(title);
+        chromeReady = true;
+        lastTitle = title ? title : "";
+        lastLines.clear();
+        lastScroll = -1;
+    } else if (title && lastTitle != title) {
+        drawKvxTopBar(title);
+        lastTitle = title;
     }
 
-    String foot = footer;
+    tft.setTextSize(dense);
+    const int maxChars = max(1, (tftWidth - 12) / uiCharW(dense));
+    if (scrollChanged) {
+        tft.fillRect(0, listY, tftWidth, tftHeight - listY - footerH, bg);
+        lastLines.clear();
+    }
+    for (int i = 0; i < maxRows; i++) {
+        String line;
+        if ((scroll + i) < (int)lines.size()) {
+            line = lines[scroll + i];
+            if ((int)line.length() > maxChars) line = line.substring(0, maxChars);
+        }
+        const bool dirty =
+            scrollChanged || i >= (int)lastLines.size() || lastLines[i] != line;
+        if (!dirty) continue;
+        const int y = listY + i * rowH;
+        tft.setTextColor(kvxConfig.priColor, bg, true);
+        tft.drawString(line.length() ? line : " ", 6, y, 1);
+        const int used = 6 + tft.textWidth(line.length() ? line : " ");
+        if (used < tftWidth) tft.fillRect(used, y, tftWidth - used, rowH, bg);
+        if (i < (int)lastLines.size()) lastLines[i] = line;
+        else lastLines.push_back(line);
+    }
+    if ((int)lastLines.size() > maxRows) lastLines.resize(maxRows);
+    lastScroll = scroll;
+
+    String foot = footer ? footer : "";
     if (maxScroll > 0) {
         char hint[24];
         snprintf(hint, sizeof(hint), "  %d/%d", scroll + 1, (int)lines.size());
         foot += hint;
     }
-    tft.setTextColor(kvxConfig.secColor, kvxConfig.bgColor);
-    tft.drawCentreString(foot.c_str(), tftWidth / 2, tftHeight - footerH, 1);
+    if (foot != lastFooter) {
+        tft.fillRect(0, tftHeight - footerH, tftWidth, footerH, bg);
+        tft.setTextColor(kvxConfig.secColor, bg, true);
+        tft.drawCentreString(foot.c_str(), tftWidth / 2, tftHeight - footerH, 1);
+        lastFooter = foot;
+    }
 }
 
 void WdUi::draw(

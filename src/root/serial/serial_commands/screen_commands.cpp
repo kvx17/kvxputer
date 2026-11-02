@@ -1,5 +1,6 @@
 #include "screen_commands.h"
 #include "root/ui/settings.h"
+#include "root/ui/ui_metrics.h"
 #include "root/app/utils.h" // time
 #include <globals.h>
 
@@ -93,8 +94,31 @@ uint32_t clockCallback(cmd *c) {
     return true;
 }
 
+uint32_t uiMetricsCallback(cmd *c) {
+    Command cmd(c);
+    Argument arg = cmd.getArgument("mode");
+    String mode = arg.getValue();
+    mode.trim();
+    mode.toLowerCase();
+    if (mode.length() == 0 || mode == "on" || mode == "1" || mode == "true") {
+        uiMetricsSetEnabled(true);
+    } else if (mode == "off" || mode == "0" || mode == "false") {
+        uiMetricsSetEnabled(false);
+    } else if (mode == "toggle") {
+        uiMetricsSetEnabled(!uiMetricsIsEnabled());
+    } else {
+        serialDevice->println("uimetrics [on|off|toggle]");
+        return false;
+    }
+    serialDevice->println(uiMetricsIsEnabled() ? "uimetrics on" : "uimetrics off");
+    return true;
+}
+
 void createScreenCommands(SimpleCLI *cli) {
     Command clockCmd = cli->addCommand("clock", clockCallback);
+
+    Command metricsCmd = cli->addCommand("uimetrics", uiMetricsCallback);
+    metricsCmd.addPosArg("mode", "");
 
     Command screenCmd = cli->addCompositeCmd("screen");
 

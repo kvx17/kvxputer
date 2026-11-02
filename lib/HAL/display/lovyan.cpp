@@ -166,7 +166,14 @@ void tft_display::drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t 
     RUN_ON_MUTEX(lgfx::LGFX_Device::drawRect(x, y, w, h, (uint16_t)color));
 }
 
+extern "C" void kvxInvalidateTopBarCache_C(void) __attribute__((weak));
+static inline void tftMaybeInvalidateTopBar(int32_t y, int32_t h) {
+    if (!kvxInvalidateTopBarCache_C || h <= 0) return;
+    if (y < 24 && (y + h) > 0) kvxInvalidateTopBarCache_C();
+}
+
 void tft_display::fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
+    tftMaybeInvalidateTopBar(y, h);
     RUN_ON_MUTEX(lgfx::LGFX_Device::fillRect(x, y, w, h, (uint16_t)color));
 }
 
@@ -184,7 +191,10 @@ void tft_display::fillRectVGradient(
     RUN_ON_MUTEX(fillRect(x, y, w, h, (uint16_t)color1));
 }
 
-void tft_display::fillScreen(uint32_t color) { RUN_ON_MUTEX(lgfx::LGFX_Device::fillScreen((uint16_t)color)); }
+void tft_display::fillScreen(uint32_t color) {
+    tftMaybeInvalidateTopBar(0, height());
+    RUN_ON_MUTEX(lgfx::LGFX_Device::fillScreen((uint16_t)color));
+}
 
 void tft_display::drawRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint32_t color) {
     RUN_ON_MUTEX(lgfx::LGFX_Device::drawRoundRect(x, y, w, h, r, (uint16_t)color));

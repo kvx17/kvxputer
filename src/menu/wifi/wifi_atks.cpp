@@ -362,12 +362,13 @@ ScanNets:
     uint16_t count = 0;
     uint8_t channel = 0;
     drawMainBorderWithTitle("Deauth Flood");
+    LiveField chField, frField;
+    chField.configure(10, tftHeight - 45, tftWidth - 20, kvxConfig.secColor, kvxConfig.bgColor, uiBodyFont(), 0);
+    frField.configure(10, tftHeight - 25, tftWidth - 20, kvxConfig.secColor, kvxConfig.bgColor, uiBodyFont(), 0);
     while (true) {
         for (const auto &record : ap_records) {
             channel = record.primary;
             wsl_bypasser_send_raw_frame(&record, record.primary, _default_target);
-            tft.setCursor(10, tftHeight - 45);
-            tft.println("Channel " + String(record.primary) + "    ");
             for (int i = 0; i < 100; i++) {
                 send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
                 count += 3;
@@ -376,9 +377,11 @@ ScanNets:
             if (EscPress) break;
         }
         if (millis() - lastTime > 2000) {
-            drawMainBorderWithTitle("Deauth Flood");
-            drawKvRow(10, tftHeight - 45, "Channel:", String(channel));
-            drawKvRow(10, tftHeight - 25, "Frames:", String(count / 2) + "/s");
+            char chBuf[24], frBuf[28];
+            snprintf(chBuf, sizeof(chBuf), "Channel: %u", (unsigned)channel);
+            snprintf(frBuf, sizeof(frBuf), "Frames: %u/s", (unsigned)(count / 2));
+            chField.paint(chBuf);
+            frField.paint(frBuf);
             count = 0;
             lastTime = millis();
         }

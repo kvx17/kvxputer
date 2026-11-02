@@ -2,10 +2,25 @@
 
 #if defined(USE_TFT_ESPI)
 #include <esp_heap_caps.h>
+#include "../../../src/root/ui/ui_metrics.h"
 #if defined(LOAD_GFXFF)
 #include "../../../src/root/ui/fonts/kvx_body_12.h"
 #endif
 // This library uses Mutex locally! don't need to rewrite the whole thing!!
+
+static inline void tftNoteDirectPixels(bool buffering, int32_t w, int32_t h) {
+    if (buffering || w <= 0 || h <= 0) return;
+    uiMetricsNoteDirectPixels((uint32_t)w * (uint32_t)h);
+}
+
+// Weak: when linked with the UI, a fill that covers the system top bar clears its paint cache.
+extern "C" void kvxInvalidateTopBarCache_C(void) __attribute__((weak));
+static inline void tftMaybeInvalidateTopBar(int32_t y, int32_t h) {
+    if (!kvxInvalidateTopBarCache_C) return;
+    if (h <= 0) return;
+    // Any wipe that touches y=0..top-bar height means the bar pixels are gone.
+    if (y < 24 && (y + h) > 0) kvxInvalidateTopBarCache_C();
+}
 
 tft_display::tft_display(int16_t _W, int16_t _H) : TFT_eSPI(_W, _H) {}
 
@@ -83,16 +98,18 @@ void tft_display::presentDirty() {
     const int32_t sw = ex - sx;
     const int32_t sh = ey - sy;
     if (sw <= 0 || sh <= 0) return;
+    const uint32_t t0 = micros();
     if (sx == 0 && sy == 0 && sw == bw && sh == bh) {
         _fb->pushSprite(0, 0);
-        return;
+    } else {
+        // Cropped pushSprite writes one row per SPI transaction. The gaps between
+        // those transactions are the menu shimmer. Hold the bus for the whole rect.
+        startWrite();
+        _fb->pushSprite(sx, sy, sx, sy, sw, sh);
+        endWrite();
+        _fb->setWindow(0, 0, bw - 1, bh - 1);
     }
-    // Cropped pushSprite writes one row per SPI transaction. The gaps between
-    // those transactions are the menu shimmer. Hold the bus for the whole rect.
-    startWrite();
-    _fb->pushSprite(sx, sy, sx, sy, sw, sh);
-    endWrite();
-    _fb->setWindow(0, 0, bw - 1, bh - 1);
+    uiMetricsNotePresent((uint32_t)sw * (uint32_t)sh, micros() - t0);
 }
 
 void tft_display::releaseCanvas() {
@@ -144,10 +161,16 @@ bool tft_display::beginFrame() {
         const int16_t h = TFT_eSPI::height();
         if (w > 0 && h > 0) {
             const size_t need = (size_t)w * (size_t)h * 2 + 16 * 1024;
-            if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA) < need) return false;
+            if (heap_caps_get_largest_free_block(MALLOC_CAP_DMA) < need) {
+                uiMetricsNoteFrameFallback();
+                return false;
+            }
         }
     }
-    if (!ensureCanvas()) return false;
+    if (!ensureCanvas()) {
+        uiMetricsNoteFrameFallback();
+        return false;
+    }
     syncCanvasState();
     _buffering = true;
     _frameDepth = 1;
@@ -203,7 +226,11 @@ void tft_display::drawFastVLine(int32_t x, int32_t y, int32_t h, uint32_t color)
     if (_buffering && _fb) {
         markDirty(x, y, 1, h);
         _fb->drawFastVLine(x, y, h, color);
-    } else TFT_eSPI::drawFastVLine(x, y, h, color);
+    } else {
+        // Full-height clears (NRF spectrum) are the expensive direct paints.
+        if (h >= TFT_eSPI::height() - 2) tftNoteDirectPixels(false, 1, h);
+        TFT_eSPI::drawFastVLine(x, y, h, color);
+    }
 }
 
 void tft_display::drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
@@ -214,10 +241,15 @@ void tft_display::drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t 
 }
 
 void tft_display::fillRect(int32_t x, int32_t y, int32_t w, int32_t h, uint32_t color) {
+    // Any wipe of the top strip (sprite or panel) must force the next top-bar paint.
+    tftMaybeInvalidateTopBar(y, h);
     if (_buffering && _fb) {
         markDirty(x, y, w, h);
         _fb->fillRect(x, y, w, h, color);
-    } else TFT_eSPI::fillRect(x, y, w, h, color);
+    } else {
+        tftNoteDirectPixels(false, w, h);
+        TFT_eSPI::fillRect(x, y, w, h, color);
+    }
 }
 
 void tft_display::fillRectHGradient(
@@ -241,8 +273,14 @@ void tft_display::fillRectVGradient(
 void tft_display::fillScreen(uint32_t color) {
     if (_buffering && _fb) {
         markDirty(0, 0, TFT_eSPI::width(), TFT_eSPI::height());
+        // Sprite wipe also erases the bar content that will be presented.
+        tftMaybeInvalidateTopBar(0, TFT_eSPI::height());
         _fb->fillSprite(color);
-    } else TFT_eSPI::fillScreen(color);
+    } else {
+        tftNoteDirectPixels(false, TFT_eSPI::width(), TFT_eSPI::height());
+        tftMaybeInvalidateTopBar(0, TFT_eSPI::height());
+        TFT_eSPI::fillScreen(color);
+    }
 }
 
 void tft_display::drawRoundRect(int32_t x, int32_t y, int32_t w, int32_t h, int32_t r, uint32_t color) {
@@ -367,14 +405,20 @@ void tft_display::pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t
     if (_buffering && _fb) {
         markDirty(x, y, w, h);
         _fb->pushImage(x, y, w, h, data);
-    } else TFT_eSPI::pushImage(x, y, w, h, data);
+    } else {
+        tftNoteDirectPixels(false, w, h);
+        TFT_eSPI::pushImage(x, y, w, h, data);
+    }
 }
 
 void tft_display::pushImage(int32_t x, int32_t y, int32_t w, int32_t h, const uint16_t *data) {
     if (_buffering && _fb) {
         markDirty(x, y, w, h);
         _fb->pushImage(x, y, w, h, data);
-    } else TFT_eSPI::pushImage(x, y, w, h, data);
+    } else {
+        tftNoteDirectPixels(false, w, h);
+        TFT_eSPI::pushImage(x, y, w, h, data);
+    }
 }
 
 void tft_display::pushImage(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t *data, uint16_t transparent) {

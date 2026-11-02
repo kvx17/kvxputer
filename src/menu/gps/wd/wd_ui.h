@@ -90,4 +90,10 @@ private:
     static constexpr size_t FEED_MAX = 10;
 
     void drawLines(const char *title, const std::vector<String> &lines, const char *footer);
+
+    bool chromeReady = false;
+    String lastTitle;
+    String lastFooter;
+    std::vector<String> lastLines;
+    int lastScroll = -1;
 };

@@ -170,6 +170,9 @@ void handshakeMasterRun() {
     tft.drawString("Waiting ESP-NOW slaves", 10, uiStatusY(0));
     tft.drawString("ESC to stop", 10, uiFooterY(FP));
     EscPress = false;
+    LiveField framesField;
+    framesField.configure(10, 58, tftWidth - 20, kvxConfig.secColor, kvxConfig.bgColor, uiBodyFont(), 100);
+    uint32_t paintedRx = (uint32_t)-1;
 
     while (!check(EscPress) && !returnToMenu) {
         while (gQTail != gQHead) {
@@ -202,8 +205,12 @@ void handshakeMasterRun() {
                 expectFrag = 0;
             }
         }
-        tft.fillRect(10, 58, tftWidth - 20, 16, kvxConfig.bgColor);
-        drawKvRow(10, 58, "Frames:", String((unsigned)gRxCount));
+        if (gRxCount != paintedRx) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "Frames: %u", (unsigned)gRxCount);
+            framesField.paint(buf);
+            paintedRx = gRxCount;
+        }
         delay(40);
     }
 

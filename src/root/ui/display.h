@@ -222,8 +222,36 @@ void padprintln(double n, int digits, int16_t padx = 1);
 
 /** Key/value row via pad cursor: label priColor, value secColor, body font. */
 void padField(const String &label, const String &value, int16_t padx = 1);
-/** Key/value row at a fixed pixel position (live HUDs). */
+/**
+ * Key/value row at a fixed pixel position (live HUDs).
+ * Opaque text + a trailing bg fill — no full-row fillRect first.
+ */
+void drawKvRow(int16_t x, int16_t y, const char *label, const char *value);
 void drawKvRow(int16_t x, int16_t y, const String &label, const String &value);
+
+/**
+ * Rate-limited opaque field for live HUDs. Paint only when text changes and
+ * minIntervalMs has elapsed. Callers must not fillRect the same strip first.
+ */
+struct LiveField {
+    int16_t x = 0;
+    int16_t y = 0;
+    int16_t width = 0;
+    uint16_t fg = 0;
+    uint16_t bg = 0;
+    int fontSize = 0;
+    unsigned minIntervalMs = 100;
+    char last[48] = "";
+    unsigned long lastMs = 0;
+    bool primed = false;
+
+    void configure(
+        int16_t x_, int16_t y_, int16_t w_, uint16_t fg_, uint16_t bg_, int sz, unsigned intervalMs = 100
+    );
+    void invalidate();
+    /** Returns true if the panel was updated. */
+    bool paint(const char *text);
+};
 
 // loopOptions will now return the last index used in the function
 int loopOptions(

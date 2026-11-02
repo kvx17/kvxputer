@@ -787,15 +787,15 @@ void TagOMatic::read_card() {
 void TagOMatic::scan_cards() {
     if (_rfid->read() != RFIDInterface::SUCCESS) return;
 
-    if (_scanned_set.find(_rfid->printableUID.uid) == _scanned_set.end()) {
+    const bool isNew = _scanned_set.find(_rfid->printableUID.uid) == _scanned_set.end();
+    if (isNew) {
         _scanned_set.insert(_rfid->printableUID.uid);
         _scanned_tags.push_back(_rfid->printableUID.uid);
+        display_banner();
+        padprintln(String(_scanned_tags.size()) + " unique — OK to scroll");
+        padprintln("");
+        dump_scan_results();
     }
-
-    display_banner();
-    padprintln(String(_scanned_tags.size()) + " unique — OK to scroll");
-    padprintln("");
-    dump_scan_results();
     delayWithReturn(200);
 }
 

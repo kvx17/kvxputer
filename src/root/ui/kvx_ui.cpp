@@ -5,20 +5,36 @@
 #include "root/net/wg.h"
 #include <WiFi.h>
 #include <interface.h>
+#include <cstring>
 
 static String kvxTopBarTitle = "Menu";
 static String kvxTopBarStatus;
 
+static char s_barTitle[16] = "";
+static char s_barStatus[24] = "";
+static char s_barHhmm[6] = "";
+static uint8_t s_barBat = 255;
+static uint8_t s_barIcons = 0;
+static unsigned long s_barSlowMs = 0;
+
 const char *kvxTopBarAppName() { return kvxTopBarTitle.c_str(); }
+
+void kvxInvalidateTopBarCache() {
+    s_barTitle[0] = '\0';
+    s_barStatus[0] = '\0';
+    s_barHhmm[0] = '\0';
+    s_barBat = 255;
+    s_barIcons = 0;
+    s_barSlowMs = 0;
+}
+
+// C linkage so the display HAL can invalidate after fillScreen without including kvx_ui.h.
+extern "C" void kvxInvalidateTopBarCache_C(void) { kvxInvalidateTopBarCache(); }
 
 void drawKvxTopBar(const char *leftLabel) { drawKvxTopBar(leftLabel, nullptr); }
 
 void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     if (chargeModeActive) return;
-    // Only open a present-frame when the caller is not already buffering.
-    // Nested top-bar frames used to blit the strip alone mid-redraw and flash.
-    const bool ownFrame = !tft.isFraming();
-    if (ownFrame) tft.beginFrame();
 
     const uint16_t bg = kvxConfig.bgColor;
     const uint16_t purple = kvxConfig.priColor;
@@ -27,9 +43,6 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     if (leftLabel && leftLabel[0] != '\0') kvxTopBarTitle = leftLabel;
     kvxTopBarStatus = (statusLabel && statusLabel[0]) ? String(statusLabel) : String();
 
-    tft.fillRect(0, 0, tftWidth, KVX_TOPBAR_H, bg);
-    tft.drawLine(0, KVX_TOPBAR_H, tftWidth, KVX_TOPBAR_H, purple);
-
     uint8_t bat = getBattery();
     const bool showWifi = (WiFi.getMode() != WIFI_MODE_NULL);
     const bool showGPS = gpsConnected;
@@ -37,6 +50,48 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     const bool showWeb = isWebUIActive;
     const bool showWG = isConnectedWireguard;
     const bool showSD = sdcardMounted;
+
+    uint8_t iconMask = 0;
+    if (showWifi) iconMask |= 1;
+    if (showGPS) iconMask |= 2;
+    if (showBLE) iconMask |= 4;
+    if (showWeb) iconMask |= 8;
+    if (showWG) iconMask |= 16;
+    if (showSD) iconMask |= 32;
+
+    char hhmm[6] = "";
+    if (clock_set) {
+#if defined(HAS_RTC)
+        updateTimeStr(_rtc.getTimeStruct());
+#else
+        updateTimeStr(rtc.getTimeStruct());
+#endif
+        snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
+    }
+
+    const char *titleC = kvxTopBarTitle.c_str();
+    const char *statusC = kvxTopBarStatus.c_str();
+    const bool titleChanged = strcmp(s_barTitle, titleC) != 0;
+    const bool statusChanged = strcmp(s_barStatus, statusC) != 0;
+    const bool iconsChanged = iconMask != s_barIcons;
+    const bool clockChanged = strcmp(s_barHhmm, hhmm) != 0;
+    const bool batChanged = bat != s_barBat;
+    const unsigned long now = millis();
+    const bool slowOk = !s_barSlowMs || (now - s_barSlowMs) >= 1000;
+
+    // Status text updates immediately. Battery/clock alone wait 1 s.
+    if (!titleChanged && !statusChanged && !iconsChanged && !(clockChanged && slowOk) &&
+        !(batChanged && slowOk) && s_barTitle[0] != '\0') {
+        return;
+    }
+
+    // Only open a present-frame when the caller is not already buffering.
+    // Nested top-bar frames used to blit the strip alone mid-redraw and flash.
+    const bool ownFrame = !tft.isFraming();
+    if (ownFrame) tft.beginFrame();
+
+    tft.fillRect(0, 0, tftWidth, KVX_TOPBAR_H, bg);
+    tft.drawLine(0, KVX_TOPBAR_H, tftWidth, KVX_TOPBAR_H, purple);
 
     // Top-bar labels stay compact (GLCD dense).
     const int barSize = uiDenseFont();
@@ -62,14 +117,7 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
 
     // Compact HH:MM immediately left of the icon pack / battery (right cluster).
     int statusRight = iconsLeft - 4;
-    if (clock_set) {
-#if defined(HAS_RTC)
-        updateTimeStr(_rtc.getTimeStruct());
-#else
-        updateTimeStr(rtc.getTimeStruct());
-#endif
-        char hhmm[6];
-        snprintf(hhmm, sizeof(hhmm), "%.5s", timeStr);
+    if (hhmm[0]) {
         tft.setTextSize(barSize);
         tft.setTextColor(purple, bg);
         tft.drawRightString(hhmm, statusRight, barTextY, 1);
@@ -131,6 +179,16 @@ void drawKvxTopBar(const char *leftLabel, const char *statusLabel) {
     }
 
     drawBatteryStatus(bat);
+
+    strncpy(s_barTitle, titleC, sizeof(s_barTitle) - 1);
+    s_barTitle[sizeof(s_barTitle) - 1] = '\0';
+    strncpy(s_barStatus, statusC, sizeof(s_barStatus) - 1);
+    s_barStatus[sizeof(s_barStatus) - 1] = '\0';
+    strncpy(s_barHhmm, hhmm, sizeof(s_barHhmm) - 1);
+    s_barHhmm[sizeof(s_barHhmm) - 1] = '\0';
+    s_barBat = bat;
+    s_barIcons = iconMask;
+    if (clockChanged || batChanged) s_barSlowMs = now;
 
     if (ownFrame) tft.endFrame();
 }

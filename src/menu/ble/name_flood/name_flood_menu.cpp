@@ -50,7 +50,7 @@ void nameFloodMenu() {
             idx = (idx + 1) % names.size();
             bleBackend().advertiseName(names[idx].c_str());
             count++;
-            tft.fillRect(10, 40, tftWidth - 20, 40, kvxConfig.bgColor);
+            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor, true);
             tft.drawString(names[idx], 10, uiStatusY(1));
             drawKvRow(10, uiStatusY(2), "Ads:", String((unsigned)count));
         }
@@ -80,7 +80,7 @@ void nameFloodMenu() {
             adv->setName(names[idx].c_str());
             adv->start();
             count++;
-            tft.fillRect(10, 40, tftWidth - 20, 32, kvxConfig.bgColor);
+            tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor, true);
             tft.drawString(names[idx], 10, uiStatusY(0));
             drawKvRow(10, uiStatusY(1), "Ads:", String((unsigned)count));
         }

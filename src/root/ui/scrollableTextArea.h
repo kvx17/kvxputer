@@ -74,6 +74,12 @@ private:
     uint16_t _maxCharactersPerLine;
     bool _indentWrappedLines;
 
+    /// Last painted visible lines (left + optional right). Used for dirty line patch.
+    size_t _lastFirstVisible = (size_t)-1;
+    size_t _lastLineCount = (size_t)-1;
+    std::vector<String> _lastLeft;
+    std::vector<String> _lastRight;
+
     void setup();
     int32_t linePixels(size_t idx) const;
     uint16_t maxCharsForFont(uint8_t fontSize) const;

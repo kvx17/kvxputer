@@ -13,6 +13,7 @@
 #include "esp_idf_version.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <cstring>
 #include <globals.h>
 #include <math.h>
 
@@ -62,16 +63,36 @@ void onEspNow(
     for (int i = 0; i < n; i++) gAmp[i] = (float)data[i];
 }
 
+static int8_t s_scopeH[32];
+static int8_t s_hopH[13];
+static bool s_scopeReady = false;
+static LiveField s_scopeLabel;
+
 void drawScope(const char *label) {
-    tft.fillRect(8, 36, tftWidth - 16, 70, kvxConfig.bgColor);
     int w = (tftWidth - 20) / 32;
+    if (w < 1) w = 1;
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t fg = kvxConfig.priColor;
+    if (!s_scopeReady) {
+        memset(s_scopeH, 0, sizeof(s_scopeH));
+        tft.fillRect(8, 36, tftWidth - 16, 70, bg);
+        s_scopeLabel.configure(8, 108, tftWidth - 16, fg, bg, uiBodyFont(), 100);
+        s_scopeReady = true;
+    }
     for (int i = 0; i < 32; i++) {
         int h = (int)gAmp[i] / 4;
         if (h < 1) h = 1;
         if (h > 50) h = 50;
-        tft.fillRect(8 + i * w, 90 - h, w - 1, h, kvxConfig.priColor);
+        const int x = 8 + i * w;
+        const int prev = s_scopeH[i];
+        if (h == prev) continue;
+        if (h < prev) tft.fillRect(x, 90 - prev, w - 1, prev - h, bg);
+        else tft.fillRect(x, 90 - h, w - 1, h - prev, fg);
+        s_scopeH[i] = (int8_t)h;
     }
-    tft.drawString(String(label) + " n=" + String((unsigned)gCsiFrames), 8, 108);
+    char buf[28];
+    snprintf(buf, sizeof(buf), "%s n=%u", label ? label : "", (unsigned)gCsiFrames);
+    s_scopeLabel.paint(buf);
 }
 
 void runHopRssi() {
@@ -87,6 +108,8 @@ void runHopRssi() {
     drawMainBorderWithTitle("CSI Radar RSSI");
     tft.drawString("ESC stop  hop 1-13", 10, uiFooterY(FP));
     EscPress = false;
+    memset(s_hopH, 0, sizeof(s_hopH));
+    tft.fillRect(8, 36, tftWidth - 16, 70, kvxConfig.bgColor);
     unsigned long hop = millis();
     while (!check(EscPress) && !returnToMenu) {
         if (millis() - hop > 180) {
@@ -94,13 +117,20 @@ void runHopRssi() {
             curCh = curCh >= 13 ? 1 : curCh + 1;
             esp_wifi_set_channel(curCh, WIFI_SECOND_CHAN_NONE);
         }
-        tft.fillRect(8, 36, tftWidth - 16, 70, kvxConfig.bgColor);
         int barW = (tftWidth - 20) / 13;
+        if (barW < 1) barW = 1;
+        const uint16_t bg = kvxConfig.bgColor;
+        const uint16_t fg = kvxConfig.priColor;
         for (int ch = 1; ch <= 13; ch++) {
             int h = peak[ch] + 90;
             if (h < 2) h = 2;
             if (h > 50) h = 50;
-            tft.fillRect(8 + (ch - 1) * barW, 90 - h, barW - 1, h, kvxConfig.priColor);
+            const int x = 8 + (ch - 1) * barW;
+            const int prev = s_hopH[ch - 1];
+            if (h == prev) continue;
+            if (h < prev) tft.fillRect(x, 90 - prev, barW - 1, prev - h, bg);
+            else tft.fillRect(x, 90 - h, barW - 1, h - prev, fg);
+            s_hopH[ch - 1] = (int8_t)h;
         }
         delay(80);
     }
@@ -131,6 +161,7 @@ void runCsiSta() {
     drawMainBorderWithTitle("CSI STA");
     tft.drawString("Need CSI-enabled build", 8, uiFooterY(FP));
     EscPress = false;
+    s_scopeReady = false;
     WiFiUDP udp;
     unsigned long ping = 0;
     while (!check(EscPress) && !returnToMenu) {
@@ -168,6 +199,7 @@ void runEspNow() {
     drawMainBorderWithTitle("CSI ESP-NOW");
     tft.drawString("Need CSI-Beacon slave", 8, uiFooterY(FP));
     EscPress = false;
+    s_scopeReady = false;
     while (!check(EscPress) && !returnToMenu) {
         drawScope("NOW");
         delay(50);

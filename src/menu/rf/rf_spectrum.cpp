@@ -3,6 +3,7 @@
 #include "protocols/rf_decoder.h"
 #include "rf_utils.h"
 #include "structs.h"
+#include <cstring>
 
 static bool spectrum_rmt_rx_done_callback(
     rmt_channel_t *channel, const rmt_rx_done_event_data_t *edata, void *user_data
@@ -14,21 +15,64 @@ static bool spectrum_rmt_rx_done_callback(
     return high_task_wakeup == pdTRUE;
 }
 
-void draw_tf_spectrum_grid() {
+static int16_t s_rfColH[320];
+static bool s_rfGridReady = false;
+static unsigned long s_rfLastPaintMs = 0;
+
+void draw_tf_spectrum_grid(bool clearPlot = true) {
     tft.setTextSize(uiDenseFont()) /* Spectrum axis/HUD overlays stay dense */;
-    tft.setCursor(3, 2);
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    tft.printf(" RF - Spectrum (%.2f Mhz)", kvxConfigPins.rfFreq);
-    tft.fillRect(0, 20, tftWidth, tftHeight - 20, kvxConfig.bgColor);
+    if (!s_rfGridReady) {
+        tft.setCursor(3, 2);
+        tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor, true);
+        tft.printf(" RF - Spectrum (%.2f Mhz)", kvxConfigPins.rfFreq);
+        s_rfGridReady = true;
+    }
+    if (clearPlot) {
+        tft.fillRect(0, 20, tftWidth, tftHeight - 20, kvxConfig.bgColor);
+        memset(s_rfColH, 0, sizeof(s_rfColH));
+    }
     tft.drawFastHLine(0, 20 + tftHeight / 2, tftWidth, TFT_DARKGREY);
     tft.drawFastVLine((1 * tftWidth) / 4, 20, tftHeight - 20, TFT_DARKGREY);
     tft.drawFastVLine((2 * tftWidth) / 4, 20, tftHeight - 20, TFT_DARKGREY);
     tft.drawFastVLine((3 * tftWidth) / 4, 20, tftHeight - 20, TFT_DARKGREY);
 }
 
+static void rf_paint_waveform_durations(const std::vector<int> &durations) {
+    const uint16_t bg = kvxConfig.bgColor;
+    const uint16_t fg = kvxConfig.priColor;
+    const int mid = 20 + tftHeight / 2;
+    const int maxH = tftHeight / 2;
+    const int n = (int)durations.size();
+    if (n <= 0) return;
+
+    // Erase previous columns without blanking the whole plot.
+    for (int x = 0; x < tftWidth && x < (int)(sizeof(s_rfColH) / sizeof(s_rfColH[0])); x++) {
+        int h = s_rfColH[x];
+        if (h <= 0) continue;
+        tft.drawFastVLine(x, mid - h / 2, h, bg);
+        s_rfColH[x] = 0;
+    }
+    tft.drawFastHLine(0, mid, tftWidth, TFT_DARKGREY);
+
+    for (int i = 0; i < n; i++) {
+        int pulse = abs(durations[i]);
+        int lineHeight = map(pulse, 0, SIGNAL_STRENGTH_THRESHOLD, 0, maxH);
+        int lineX = map(i, 0, n > 1 ? n - 1 : 1, 0, tftWidth - 1);
+        if (lineX < 0) lineX = 0;
+        if (lineX >= tftWidth) lineX = tftWidth - 1;
+        if (lineX >= (int)(sizeof(s_rfColH) / sizeof(s_rfColH[0]))) continue;
+        int startY = constrain(mid - lineHeight / 2, 20, 20 + tftHeight);
+        int endY = constrain(mid + lineHeight / 2, 20, 20 + tftHeight);
+        tft.drawLine(lineX, startY, lineX, endY, fg);
+        s_rfColH[lineX] = (int16_t)(endY - startY);
+    }
+}
+
 void rf_spectrum() {
     tft.fillScreen(kvxConfig.bgColor);
-    draw_tf_spectrum_grid();
+    s_rfGridReady = false;
+    s_rfLastPaintMs = 0;
+    draw_tf_spectrum_grid(true);
     if (kvxConfigPins.rfModule == M5_RF_MODULE) {
         RfRxSession rx;
         if (!rx.begin()) {
@@ -37,26 +81,27 @@ void rf_spectrum() {
         }
 
         std::vector<int> durations;
+        std::vector<int> pending;
+        bool havePending = false;
         while (1) {
             if (rx.poll(durations)) {
-                draw_tf_spectrum_grid();
-                for (size_t i = 0; i < durations.size(); i++) {
-                    int pulse = abs(durations[i]);
-                    int lineHeight = map(pulse, 0, SIGNAL_STRENGTH_THRESHOLD, 0, tftHeight / 2);
-                    int lineX =
-                        map(i, 0, durations.size() > 1 ? durations.size() - 1 : 1, 0, tftWidth - 1);
-                    int startY = constrain(20 + tftHeight / 2 - lineHeight / 2, 20, 20 + tftHeight);
-                    int endY = constrain(20 + tftHeight / 2 + lineHeight / 2, 20, 20 + tftHeight);
-                    tft.drawLine(lineX, startY, lineX, endY, kvxConfig.priColor);
-                }
+                pending = durations;
+                havePending = true;
                 RF_DBG("m5 spectrum: durations=%u", (unsigned)durations.size());
+            }
+            // Keep draining the radio every 10 ms; paint the latest burst at ~15 fps.
+            if (havePending && (!s_rfLastPaintMs || millis() - s_rfLastPaintMs >= 66)) {
+                rf_paint_waveform_durations(pending);
+                s_rfLastPaintMs = millis();
+                havePending = false;
             }
 
             if (check(EscPress)) { break; }
             if (setMHZMenu()) {
                 rx.end();
                 rx.begin();
-                draw_tf_spectrum_grid();
+                s_rfGridReady = false;
+                draw_tf_spectrum_grid(true);
             }
             vTaskDelay(pdMS_TO_TICKS(10));
         }
@@ -87,35 +132,36 @@ void rf_spectrum() {
     ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
 
     size_t rx_size = 0;
+    std::vector<int> pendingRmt;
+    bool havePendingRmt = false;
     while (1) {
         rmt_symbol_word_t *rx_items = NULL;
         if (xQueueReceive(receive_queue, &rx_data, 0) == pdPASS) {
             rx_size = rx_data.num_symbols;
             rx_items = rx_data.received_symbols;
         }
-        if (rx_size != 0) {
-            // Draw grid and info
-            draw_tf_spectrum_grid();
-            // Draw waveform based on signal strength
+        if (rx_size != 0 && rx_items) {
+            pendingRmt.clear();
+            pendingRmt.reserve(rx_size);
             for (size_t i = 0; i < rx_size; i++) {
-                int lineHeight =
-                    map(rx_items[i].duration0 + rx_items[i].duration1,
-                        0,
-                        SIGNAL_STRENGTH_THRESHOLD,
-                        0,
-                        tftHeight / 2);
-                int lineX = map(i, 0, rx_size - 1, 0, tftWidth - 1); // Map i to within the display width
-                int startY = constrain(20 + tftHeight / 2 - lineHeight / 2, 20, 20 + tftHeight);
-                int endY = constrain(20 + tftHeight / 2 + lineHeight / 2, 20, 20 + tftHeight);
-                tft.drawLine(lineX, startY, lineX, endY, kvxConfig.priColor);
+                pendingRmt.push_back((int)(rx_items[i].duration0 + rx_items[i].duration1));
             }
-
+            havePendingRmt = true;
             ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
             rx_size = 0;
         }
+        if (havePendingRmt && (!s_rfLastPaintMs || millis() - s_rfLastPaintMs >= 66)) {
+            rf_paint_waveform_durations(pendingRmt);
+            s_rfLastPaintMs = millis();
+            havePendingRmt = false;
+        }
         // Checks to leave while
         if (check(EscPress)) { break; }
-        if (setMHZMenu()) yield();
+        if (setMHZMenu()) {
+            s_rfGridReady = false;
+            draw_tf_spectrum_grid(true);
+            yield();
+        }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     returnToMenu = true;
@@ -263,7 +309,8 @@ void rf_CC1101_rssi() {
                 tft.drawLine(x0, base_y - curr, x1, base_y - next_val, kvxConfig.priColor);
                 prev = curr;
             }
-            tft.drawFastVLine(20, 20, tftHeight, kvxConfig.priColor);
+            // Axis stays inside the plot band (not the full panel height).
+            tft.drawFastVLine(20, 20, max(0, tftHeight - 40), kvxConfig.priColor);
             vTaskDelay(pdMS_TO_TICKS(75));
         }
         // draw a bargraph similar to nrf24 across the range
@@ -282,10 +329,26 @@ void rf_CC1101_rssi() {
                 int size = map(rssi, -95, -20, 0, max_bar_size);
                 if (size > bar_size[i]) bar_size[i] = size;
                 else bar_size[i] = bar_size[i] - (bar_size[i] - size) / 2; // slow down decrease
-                tft.fillRect(
-                    i * space, tftHeight - 20 - bar_size[i], space - 2, bar_size[i], kvxConfig.priColor
-                );
-                tft.fillRect(i * space, 20, space, max_bar_size - bar_size[i], kvxConfig.bgColor);
+                // Delta fill: shrink clears the top of the bar, grow fills the new segment.
+                static int lastBar[64] = {0};
+                if (i < 64) {
+                    int prev = lastBar[i];
+                    int cur = bar_size[i];
+                    if (cur < prev) {
+                        tft.fillRect(
+                            i * space, tftHeight - 20 - prev, space - 2, prev - cur, kvxConfig.bgColor
+                        );
+                    } else if (cur > prev) {
+                        tft.fillRect(
+                            i * space, tftHeight - 20 - cur, space - 2, cur - prev, kvxConfig.priColor
+                        );
+                    } else if (cur > 0 && prev == 0) {
+                        tft.fillRect(
+                            i * space, tftHeight - 20 - cur, space - 2, cur, kvxConfig.priColor
+                        );
+                    }
+                    lastBar[i] = cur;
+                }
                 if (bar_size[i] > bar_size[max_idx] && bar_size[i] > min_value) max_idx = i;
             }
             if (bar_size[max_idx] > min_value) {

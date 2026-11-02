@@ -12,9 +12,11 @@
 #include "root/storage/paths.h"
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
+#include "root/ui/ui_metrics.h"
 #include "root/input/mykeyboard.h"
 #include "root/net/wifi_common.h"
 #include <Arduino.h>
+#include <cstring>
 #include <globals.h>
 #include <map>
 #include <vector>
@@ -111,12 +113,54 @@ static void jd_draw_rssi_bar(int x, int y, int w, int h, int8_t rssi, int floorD
     if (fill > 0) tft.fillRect(x + 1, y + 1, fill, h - 2, kvxConfig.priColor);
 }
 
+static int jd_rowsTop = 0;
+static int jd_rowH = 0;
+static int jd_chBarX = 0;
+static int jd_barWch = 0;
+static bool jd_layoutReady = false;
+static char jd_lastBanner[40] = "";
+static LiveField jd_rssiField;
+static LiveField jd_footField;
+
+static void jd_draw_ch_row(
+    int i, const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, uint32_t scale
+) {
+    const int dense = uiDenseFont();
+    const int x0 = 8;
+    uint8_t ch = JD_CHANNELS[i];
+    int ry = jd_rowsTop + i * jd_rowH;
+    bool isCur = (ch == curCh);
+    bool over = (dps[ch] >= thr);
+    const uint16_t bg = kvxConfig.bgColor;
+
+    tft.setTextSize(dense);
+    tft.setTextColor(isCur ? bg : kvxConfig.priColor, isCur ? kvxConfig.priColor : bg, true);
+    char lab[8];
+    snprintf(lab, sizeof(lab), "Ch%u", (unsigned)ch);
+    tft.drawString(lab, x0, ry, 1);
+
+    int bh = jd_rowH - 3;
+    if (bh < 4) bh = 4;
+    tft.drawRect(jd_chBarX, ry, jd_barWch, bh, kvxConfig.priColor);
+    tft.fillRect(jd_chBarX + 1, ry + 1, jd_barWch - 2, bh - 2, bg);
+    uint32_t fillW = (uint32_t)(jd_barWch - 2) * dps[ch] / scale;
+    if (fillW > (uint32_t)(jd_barWch - 2)) fillW = jd_barWch - 2;
+    if (fillW > 0)
+        tft.fillRect(jd_chBarX + 1, ry + 1, (int)fillW, bh - 2, over ? TFT_RED : kvxConfig.priColor);
+    uint32_t pkX = (uint32_t)(jd_chBarX + 1) + (uint32_t)(jd_barWch - 2) * peak[ch] / scale;
+    if (peak[ch] > 0 && pkX > (uint32_t)(jd_chBarX + 1))
+        tft.drawFastVLine((int)pkX, ry + 1, bh - 2, TFT_YELLOW);
+
+    tft.setTextColor(over ? TFT_RED : kvxConfig.priColor, bg, true);
+    char valBuf[8];
+    snprintf(valBuf, sizeof(valBuf), "%3u", (unsigned)dps[ch]);
+    tft.drawString(valBuf, jd_chBarX + jd_barWch + 4, ry, 1);
+}
+
 static void jd_draw(
     const uint16_t *dps, const uint16_t *peak, uint32_t thr, uint8_t curCh, int attackCh, bool hopPaused,
-    int8_t lastRssi, int rssiFloor
+    int8_t lastRssi, int rssiFloor, uint8_t prevCh, bool forceAll
 ) {
-    jd_clear_body();
-
     const int dense = uiDenseFont();
     tft.setTextSize(dense);
 
@@ -126,20 +170,36 @@ static void jd_draw(
     bool attack = (attackCh >= 0);
     uint16_t sc = attack ? TFT_RED : TFT_GREEN;
     const int bannerH = uiLineH(dense) + 10;
-    tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
-    tft.setTextColor(TFT_BLACK, sc);
-    String banner;
-    if (hopPaused) banner = "FROZEN ch" + String(curCh);
-    else if (attack) banner = "ATTACK ch" + String(attackCh) + "  " + String(dps[attackCh]) + "/s";
-    else banner = "scanning... no jamming";
-    tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
+
+    char banner[40];
+    if (hopPaused) snprintf(banner, sizeof(banner), "FROZEN ch%u", (unsigned)curCh);
+    else if (attack)
+        snprintf(banner, sizeof(banner), "ATTACK ch%d  %u/s", attackCh, (unsigned)dps[attackCh]);
+    else snprintf(banner, sizeof(banner), "scanning... no jamming");
+
+    if (forceAll || !jd_layoutReady) {
+        jd_clear_body();
+        jd_layoutReady = false;
+        jd_lastBanner[0] = '\0';
+    }
+
+    if (!jd_layoutReady || strcmp(jd_lastBanner, banner) != 0) {
+        tft.fillRect(x0, y, tftWidth - 2 * x0, bannerH, sc);
+        tft.setTextColor(TFT_BLACK, sc, true);
+        tft.drawCentreString(banner, tftWidth / 2, y + 3, 1);
+        strncpy(jd_lastBanner, banner, sizeof(jd_lastBanner) - 1);
+        jd_lastBanner[sizeof(jd_lastBanner) - 1] = '\0';
+    }
     y += bannerH + 4;
 
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-    // Fixed-width RSSI so shorter values do not leave ghosts.
+    if (!jd_layoutReady) {
+        jd_rssiField.configure(
+            x0, y, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0
+        );
+    }
     char rssiBuf[20];
     snprintf(rssiBuf, sizeof(rssiBuf), "RSSI %4ddBm", (int)lastRssi);
-    tft.drawString(rssiBuf, x0, y, 1);
+    jd_rssiField.paint(rssiBuf);
     int barX = x0 + tft.textWidth("RSSI -000dBm") + 6;
     int barW = tftWidth - barX - x0;
     if (barW > 20) jd_draw_rssi_bar(barX, y, barW, uiLineH(dense), lastRssi, rssiFloor);
@@ -147,44 +207,32 @@ static void jd_draw(
 
     const int labelW = 28;
     const int valW = 30;
-    const int chBarX = x0 + labelW;
+    jd_chBarX = x0 + labelW;
     const int bottom = uiFooterY(dense);
-    const int rowH = (bottom - y) / JD_NCH;
-    const int barWch = tftWidth - chBarX - valW - 6;
+    jd_rowH = (bottom - y) / JD_NCH;
+    jd_rowsTop = y;
+    jd_barWch = tftWidth - jd_chBarX - valW - 6;
     uint32_t scale = thr * 2;
     if (scale < 4) scale = 4;
 
-    for (int i = 0; i < JD_NCH; i++) {
-        uint8_t ch = JD_CHANNELS[i];
-        int ry = y + i * rowH;
-        bool isCur = (ch == curCh);
-        bool over = (dps[ch] >= thr);
-
-        tft.setTextColor(
-            isCur ? kvxConfig.bgColor : kvxConfig.priColor,
-            isCur ? kvxConfig.priColor : kvxConfig.bgColor
-        );
-        tft.drawString("Ch" + String(ch), x0, ry, 1);
-
-        int bh = rowH - 3;
-        if (bh < 4) bh = 4;
-        tft.drawRect(chBarX, ry, barWch, bh, kvxConfig.priColor);
-        tft.fillRect(chBarX + 1, ry + 1, barWch - 2, bh - 2, kvxConfig.bgColor);
-        uint32_t fillW = (uint32_t)(barWch - 2) * dps[ch] / scale;
-        if (fillW > (uint32_t)(barWch - 2)) fillW = barWch - 2;
-        if (fillW > 0)
-            tft.fillRect(chBarX + 1, ry + 1, (int)fillW, bh - 2, over ? TFT_RED : kvxConfig.priColor);
-        uint32_t pkX = (uint32_t)(chBarX + 1) + (uint32_t)(barWch - 2) * peak[ch] / scale;
-        if (peak[ch] > 0 && pkX > (uint32_t)(chBarX + 1))
-            tft.drawFastVLine((int)pkX, ry + 1, bh - 2, TFT_YELLOW);
-
-        tft.setTextColor(over ? TFT_RED : kvxConfig.priColor, kvxConfig.bgColor);
-        char valBuf[8];
-        snprintf(valBuf, sizeof(valBuf), "%3u", (unsigned)dps[ch]);
-        tft.drawString(valBuf, chBarX + barWch + 4, ry, 1);
+    if (!jd_layoutReady || forceAll) {
+        for (int i = 0; i < JD_NCH; i++) jd_draw_ch_row(i, dps, peak, thr, curCh, scale);
+        jd_layoutReady = true;
+    } else {
+        // Hop: only the previous and current channel rows change highlight.
+        for (int i = 0; i < JD_NCH; i++) {
+            uint8_t ch = JD_CHANNELS[i];
+            if (ch == curCh || ch == prevCh) jd_draw_ch_row(i, dps, peak, thr, curCh, scale);
+            else if (dps[ch] != peak[ch]) { /* peak is max; always allow dps-driven redraw via force */ }
+        }
+        // Always refresh rows whose rate changed — caller passes forceAll for that.
     }
 
-    tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
+    if (!jd_footField.primed) {
+        jd_footField.configure(
+            x0, bottom, tftWidth - 2 * x0, kvxConfig.priColor, kvxConfig.bgColor, dense, 0
+        );
+    }
     char foot[48];
     snprintf(
         foot,
@@ -194,7 +242,7 @@ static void jd_draw(
         (unsigned long)thr,
         rssiFloor
     );
-    tft.drawString(foot, x0, bottom, 1);
+    jd_footField.paint(foot);
 }
 
 void jam_detect_setup() {
@@ -225,6 +273,10 @@ void jam_detect_setup() {
 
     jd_start_wifi();
     drawMainBorderWithTitle("Jam Detect", true);
+    jd_layoutReady = false;
+    jd_rssiField.invalidate();
+    jd_footField.invalidate();
+    uiMetricsMark("jam_detect", UI_METRICS_ENTRY);
 
     for (;;) {
         if (returnToMenu) break;
@@ -324,7 +376,13 @@ void jam_detect_setup() {
         }
 
         if (needPaint) {
-            jd_draw(dps, peak, threshold, ch, attackCh, hopPaused, lastRssi, rssiFloor);
+            // Full clear only when rates/threshold change; hops patch two rows.
+            const bool forceAll = controlsChanged || dpsChanged || threshold != paintedThr ||
+                                  attackCh != paintedAttack || hopPaused != paintedPaused ||
+                                  !jd_layoutReady;
+            jd_draw(
+                dps, peak, threshold, ch, attackCh, hopPaused, lastRssi, rssiFloor, paintedCh, forceAll
+            );
             paintedCh = ch;
             paintedAttack = attackCh;
             paintedThr = threshold;
@@ -334,9 +392,11 @@ void jam_detect_setup() {
             for (int i = 0; i < JD_NCH; i++) paintedDps[JD_CHANNELS[i]] = dps[JD_CHANNELS[i]];
         }
 
+        uiMetricsTick();
         if (!hopPaused) idx = (idx + 1) % JD_NCH;
     }
 
+    uiMetricsMark("jam_detect", UI_METRICS_EXIT);
     jd_stop_wifi();
 }
 

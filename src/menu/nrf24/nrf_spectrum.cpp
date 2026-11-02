@@ -1,15 +1,20 @@
 #include "nrf_spectrum.h"
 #include "root/ui/display.h"
+#include "root/ui/ui_metrics.h"
 #include "root/input/mykeyboard.h"
+#include <cstring>
 
 #define CHANNELS 80
 #define RGB565(r, g, b) ((((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)))
 uint8_t channel[CHANNELS];
 
-// scanning channels
-#define _BW tftWidth / CHANNELS
+static uint8_t s_nrfPainted[CHANNELS];
+static unsigned long s_nrfLastPaintMs = 0;
+
+// Radio walk only. Drawing is rate-capped separately so SPI does not thrash.
 String scanChannels(bool web) {
-    String result = "{";
+    String result;
+    if (web) result = "{";
 
     uint8_t rpdValues[CHANNELS] = {0};
     digitalWrite(kvxConfigPins.NRF24_bus.io0, LOW);
@@ -27,35 +32,48 @@ String scanChannels(bool web) {
 
     digitalWrite(kvxConfigPins.NRF24_bus.io0, HIGH);
 
-    for (int i = 0; i < CHANNELS; i++) {
-        int level = rpdValues[i];
-        int x = i * _BW;
-        int c = i;
-
-        tft.drawFastVLine(
-            x, tftHeight - (10 + level), level, (i % 2 == 0) ? kvxConfig.priColor : TFT_DARKGREY
-        ); // for level display
-
-        tft.drawFastVLine(
-            x, 0, tftHeight - (9 + level), (i % 8) ? TFT_BLACK : RGB565(25, 25, 25)
-        );                                                    /// for clearing
-        tft.drawFastVLine(x, 0, level, kvxConfig.secColor); /// for top display
-        // show 5 channel gap only — dense so mid labels fit under the plot
-        if (c % 5 == 0 && c != 0) {
-            tft.setTextSize(uiDenseFont());
-            tft.drawCentreString(String(c).c_str(), x, tftHeight / 2, 1);
-            tft.setTextSize(FP);
-        }
-
-        if (web) {
+    if (web) {
+        for (int i = 0; i < CHANNELS; i++) {
             if (i > 0) result += ",";
-            result += String(level);
+            result += String(rpdValues[i]);
         }
+        result += "}";
     }
+    return result;
+}
 
-    if (web) result += "}";
-    return result; // return a string in this format "{1,32,45,32,84,32 .... 12,54,65}" with 80 values to be
-                   // used in the WebUI (Future)
+static void nrf_paint_plot(const uint8_t *levels) {
+    const int bw = max(1, (int)(tftWidth / CHANNELS));
+    const int plotTop = 12;
+    const int plotBottom = uiFooterY(FP) - 2;
+    const int plotH = max(8, plotBottom - plotTop);
+    const uint16_t bg = kvxConfig.bgColor;
+
+    for (int i = 0; i < CHANNELS; i++) {
+        int level = levels[i];
+        if (level > plotH - 2) level = plotH - 2;
+        if (level < 0) level = 0;
+        const int prev = s_nrfPainted[i];
+        if (level == prev) continue;
+
+        const int x = i * bw;
+        // Clear previous bar inside the plot band only (never y=0 through footer).
+        if (prev > 0) {
+            tft.drawFastVLine(x, plotBottom - prev, prev, bg);
+        }
+        if (level > 0) {
+            tft.drawFastVLine(
+                x, plotBottom - level, level, (i % 2 == 0) ? kvxConfig.priColor : TFT_DARKGREY
+            );
+            tft.drawFastVLine(x, plotTop, min(level, 4), kvxConfig.secColor);
+        }
+        if (i % 5 == 0 && i != 0) {
+            tft.setTextSize(uiDenseFont());
+            tft.setTextColor(kvxConfig.priColor, bg, true);
+            tft.drawCentreString(String(i).c_str(), x, plotTop + plotH / 2, 1);
+        }
+        s_nrfPainted[i] = (uint8_t)level;
+    }
 }
 
 void nrf_spectrum() {
@@ -87,19 +105,30 @@ void nrf_spectrum() {
         for (uint8_t i = 0; i < 6; ++i) { NRFradio.openReadingPipe(i, noiseAddress[i]); }
         NRFradio.setDataRate(RF24_1MBPS);
 
+        memset(s_nrfPainted, 0, sizeof(s_nrfPainted));
+        s_nrfLastPaintMs = 0;
+        uiMetricsMark("nrf_spectrum", UI_METRICS_ENTRY);
+
         while (!check(EscPress)) {
-            scanChannels();
+            scanChannels(false);
+            const unsigned long now = millis();
+            // Cap plot paints at ~30 fps; radio walk stays full rate.
+            if (!s_nrfLastPaintMs || now - s_nrfLastPaintMs >= 33) {
+                nrf_paint_plot(channel);
+                s_nrfLastPaintMs = now;
+            }
+            uiMetricsTick();
             vTaskDelay(pdMS_TO_TICKS(1));
         }
         NRFradio.stopListening();
         NRFradio.powerDown();
+        uiMetricsMark("nrf_spectrum", UI_METRICS_EXIT);
         delay(250);
         return;
 
     } else {
         Serial.println("Fail Starting radio");
-        displayError("NRF24 not found");
+        displayError("NRF24 start fail", true);
         delay(500);
-        return;
     }
 }
