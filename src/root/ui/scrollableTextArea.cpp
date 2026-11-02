@@ -34,14 +34,40 @@ ScrollableTextArea::~ScrollableTextArea() {
 }
 
 uint16_t ScrollableTextArea::maxCharsForFont(uint8_t fontSize) const {
-    int charW = uiCharW(fontSize);
-    // Measure with the active face. Do not pass UI_FONT_BODY as a TFT font index.
-    const uint8_t prev = tft.getTextSize();
-    _scrollBuffer.setTextSize(fontSize);
-    int measured = _scrollBuffer.textWidth("W");
-    _scrollBuffer.setTextSize(prev);
-    if (measured > 0 && measured <= charW * 2) charW = measured;
-    return max(8, (int)(_width / max(1, charW)));
+    // Average-ish advance for estimates only. Wrapping uses pixel width (see addLine).
+    return max(8, (int)(_width / max(1, uiCharW(fontSize))));
+}
+
+/** Largest end index in [start, text.length()] whose substring fits in maxPx. */
+static size_t fitEndByPixels(const String &text, size_t start, int32_t maxPx) {
+    if (start >= text.length() || maxPx <= 0) return start;
+    size_t lo = 1;
+    size_t hi = text.length() - start;
+    size_t best = 1;
+    while (lo <= hi) {
+        size_t mid = (lo + hi) / 2;
+        if (_scrollBuffer.textWidth(text.substring(start, start + mid)) <= maxPx) {
+            best = mid;
+            lo = mid + 1;
+        } else {
+            if (mid == 0) break;
+            hi = mid - 1;
+        }
+    }
+    size_t end = start + best;
+    // Prefer breaking at a space when the line is truncated mid-word.
+    if (end < text.length() && best > 1) {
+        int sp = -1;
+        for (size_t i = end; i > start; i--) {
+            if (text[i - 1] == ' ') {
+                sp = (int)i;
+                break;
+            }
+        }
+        // Only use the space if it still leaves a useful chunk.
+        if (sp > (int)start + 1) end = (size_t)sp;
+    }
+    return end;
 }
 
 int32_t ScrollableTextArea::linePixels(size_t idx) const {
@@ -244,7 +270,6 @@ void ScrollableTextArea::addLine(const String &text, uint16_t color) {
 
 void ScrollableTextArea::addLine(const String &text, uint16_t color, uint8_t fontSize) {
     const uint8_t sz = fontSize ? fontSize : _fontSize;
-    const uint16_t maxChars = maxCharsForFont(sz);
 
     auto pushLine = [&](const String &s) {
         linesBuffer.emplace_back(s);
@@ -260,27 +285,31 @@ void ScrollableTextArea::addLine(const String &text, uint16_t color, uint8_t fon
         return;
     }
 
-    String buff;
+    const uint8_t prev = tft.getTextSize();
+    _scrollBuffer.setTextSize(sz);
+
     size_t start = 0;
     bool firstLine = true;
-
-    // Automatically split into multiple lines
     while (start < text.length()) {
-        size_t len = maxChars;
-
+        int32_t avail = _width;
+        size_t contentStart = start;
+        String prefix;
         if (!firstLine && _indentWrappedLines) {
-            buff = " " + text.substring(start, start + len - 1); // Reduce length for space
-            start += len - 1;
-        } else {
-            buff = text.substring(start, start + len);
-            start += len;
+            prefix = " ";
+            avail -= _scrollBuffer.textWidth(prefix);
+            if (avail < uiCharW(sz)) avail = uiCharW(sz);
         }
-        if (buff.endsWith("\r")) buff.remove(buff.length() - 1);
 
+        size_t end = fitEndByPixels(text, contentStart, avail);
+        if (end <= contentStart) end = contentStart + 1; // always advance
+        String buff = prefix + text.substring(contentStart, end);
+        if (buff.endsWith("\r")) buff.remove(buff.length() - 1);
         pushLine(buff);
+        start = end;
         firstLine = false;
     }
 
+    _scrollBuffer.setTextSize(prev);
     _redraw = true;
 }
 
@@ -321,19 +350,9 @@ void ScrollableTextArea::addField(const String &label, const String &value) {
     lineRightText.emplace_back(firstVal);
     lineRightColors.emplace_back(valueColor);
 
-    // Overflow continuation lines in accent color.
-    const uint16_t maxChars = maxCharsForFont(sz);
-    while (remain.length()) {
-        String chunk = remain.substring(0, maxChars);
-        remain.remove(0, chunk.length());
-        linesBuffer.emplace_back(chunk);
-        lineColors.emplace_back(valueColor);
-        lineFontSizes.emplace_back(sz);
-        lineRightText.emplace_back("");
-        lineRightColors.emplace_back(0);
-    }
-
-    _redraw = true;
+    // Overflow continuation lines in accent color (pixel-fit wrap).
+    if (remain.length()) addLine(remain, valueColor, sz);
+    else _redraw = true;
 }
 
 void ScrollableTextArea::draw(bool force) {

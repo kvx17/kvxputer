@@ -45,6 +45,11 @@ static unsigned long navNextRepeatTime = 0;
 static unsigned long navPrevRepeatTime = 0;
 static unsigned long navUpRepeatTime = 0;
 static unsigned long navDownRepeatTime = 0;
+// Esc (`): edge = back one level; hold 3s = forceHome. File-scoped so sleep /
+// charge reset can drop a stuck hold without missing the next press edge.
+static bool escWasHeld = false;
+static unsigned long escPressAt = 0;
+static bool escHoldHomeFired = false;
 // Printable keys currently held on TCA8418 (press/release tracked). Needed for
 // tap-vs-hold UX — KeyStroke is only a press pulse on ADV.
 static bool tcaCharHeld[128] = {};
@@ -64,6 +69,9 @@ void resetHeldNavKeys(void) {
     navPrevRepeatTime = 0;
     navUpRepeatTime = 0;
     navDownRepeatTime = 0;
+    escWasHeld = false;
+    escPressAt = 0;
+    escHoldHomeFired = false;
     NextPress = false;
     PrevPress = false;
     UpPress = false;
@@ -337,6 +345,7 @@ void InputHandler(void) {
     // While forceHome is still true, keep EscPress/returnToMenu sticky so
     // nested apps that only check Esc unwind all the way to the main grid.
     static constexpr unsigned long G0_HOLD_HOME_MS = 3000;
+    static constexpr unsigned long ESC_HOLD_HOME_MS = 3000;
     static bool g0WasLow = false;
     static unsigned long g0PressAt = 0;
     static bool g0HoldFired = false;
@@ -355,12 +364,6 @@ void InputHandler(void) {
             AnyKeyPress = true;
             if (isScreenOff) wakeUpScreen();
         }
-    }
-    // Sticky Esc while forceHome is pending (main menu clears it).
-    if (forceHome && kvxConfig.g0HoldHome) {
-        returnToMenu = true;
-        EscPress = true;
-        AnyKeyPress = true;
     }
     if (!g0Low && g0WasLow) {
         if (!g0HoldFired && (millis() - g0PressAt >= 50)) {
@@ -381,6 +384,37 @@ void InputHandler(void) {
         g0HoldFired = false;
     }
     g0WasLow = g0Low;
+
+    // Esc (`): press edge = back one level; hold 3s = force home.
+    // Must be edge-triggered — level EscPress while held cascaded through every
+    // nested loopOptions/app and dumped the user on the main grid.
+    {
+        const bool escHeld = isCardputerKeyHeld('`');
+        if (escHeld && !escWasHeld) {
+            escPressAt = millis();
+            escHoldHomeFired = false;
+            EscPress = true;
+            AnyKeyPress = true;
+        } else if (escHeld && !escHoldHomeFired && (millis() - escPressAt >= ESC_HOLD_HOME_MS)) {
+            escHoldHomeFired = true;
+            forceHome = true;
+            returnToMenu = true;
+            EscPress = true;
+            AnyKeyPress = true;
+            if (isScreenOff) wakeUpScreen();
+        } else if (!escHeld) {
+            escHoldHomeFired = false;
+        }
+        escWasHeld = escHeld;
+    }
+
+    // Sticky Esc while forceHome is pending (main menu clears it). Applies for
+    // both G0-hold and Esc-hold home so nested screens keep unwinding.
+    if (forceHome) {
+        returnToMenu = true;
+        EscPress = true;
+        AnyKeyPress = true;
+    }
 
     static unsigned long tm = 0;
 
@@ -590,7 +624,7 @@ void InputHandler(void) {
         UpPress = upPulse;
         DownPress = downPulse;
         if (!SelPress) SelPress = navHoldSel;
-        EscPress = navHoldEsc;
+        // EscPress is owned by the edge/hold logic above — do not level-drive it.
         tm = now;
     } else {
         Keyboard.update();
@@ -602,8 +636,8 @@ void InputHandler(void) {
             Keyboard_Class::KeysState status = Keyboard.keysState();
             for (auto i : status.hid_keys) key.hid_keys.emplace_back(i);
             for (auto i : status.word) {
-                // Esc is backtick only; KEY_BACKSPACE must not cancel menus/editors.
-                if (i == '`') EscPress = true;
+                // Esc (`): navigation is handled by edge/hold logic above.
+                // KEY_BACKSPACE must not cancel menus/editors.
 
                 if (i == ';') {
                     arrow_up = true;

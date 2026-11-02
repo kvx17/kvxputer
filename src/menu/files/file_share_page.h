@@ -193,7 +193,7 @@ async function uploadFiles(files){
   for(const f of files){
     $('status').textContent='Uploading '+f.name+'…';
     const fd=new FormData();fd.append('file',f,f.name);
-    const r=await api('/api/upload?vol='+encodeURIComponent(vol)+'&path='+encodeURIComponent(path),{method:'POST',body:fd});
+    const r=await api('/api/upload?vol='+encodeURIComponent(vol)+'&path='+encodeURIComponent(path)+'&size='+f.size,{method:'POST',body:fd});
     if(!r.ok){$('status').textContent=f.name+': '+await r.text();return}
   }
   $('status').textContent='Upload done';

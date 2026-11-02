@@ -9,6 +9,7 @@
 #include "root/storage/sd_functions.h"
 #include "root/ui/display.h"
 #include "root/ui/kvx_ui.h"
+#include "root/ui/scrollableTextArea.h"
 #include <AsyncTCP.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
@@ -20,6 +21,7 @@
 #include <esp_netif.h>
 #include <esp_wifi.h>
 #include <esp32-hal-psram.h>
+#include <cstdarg>
 #include <globals.h>
 #include <vector>
 
@@ -27,6 +29,9 @@ namespace {
 
 static constexpr uint8_t kMaxClients = 4;
 static constexpr size_t kNameMax = 48;
+static constexpr size_t kLogCap = 48;
+static constexpr size_t kLogLine = 52;
+static constexpr size_t kUploadUiStride = 16 * 1024;
 
 static AsyncWebServer *shareServer = nullptr;
 static DNSServer shareDns;
@@ -38,6 +43,16 @@ static bool sharePwdVisible = false;
 static bool shareUploadBusy = false;
 static uint8_t shareScreen = 0; // 0 info, 1 url QR, 2 wifi QR (AP only)
 static bool shareQrInvert = true;
+
+static volatile size_t shareUploadReceived = 0;
+static volatile size_t shareUploadTotal = 0; // 0 = unknown
+static volatile uint32_t shareUiSeq = 0;
+static char shareUploadName[kNameMax] = {};
+static size_t shareUploadUiMark = 0;
+
+static char shareLogLines[kLogCap][kLogLine];
+static uint8_t shareLogCount = 0;
+static uint8_t shareLogNext = 0;
 
 static void saveShareConfig() {
     kvxConfig.setFileShareSettings(
@@ -56,8 +71,16 @@ static String shareHttpUrl() { return String("http://") + shareDisplayIp(); }
 static std::vector<String> shareSessions;
 static FS *shareUploadFs = nullptr;
 static String shareUploadPath;
+static File shareUploadFile;
 static bool shareUploadFailed = false;
 static int shareUploadFailCode = 500; // 409 busy, 507 no space, else 500
+
+static void closeShareUploadFile() {
+    if (shareUploadFile) {
+        shareUploadFile.close();
+        shareUploadFile = File();
+    }
+}
 
 struct TransferEvent {
     uint32_t seq = 0;
@@ -67,6 +90,23 @@ struct TransferEvent {
 };
 static TransferEvent shareEvent;
 
+static void appendShareLog(const char *msg) {
+    if (!msg || !msg[0]) return;
+    snprintf(shareLogLines[shareLogNext], kLogLine, "%s", msg);
+    shareLogNext = (shareLogNext + 1) % kLogCap;
+    if (shareLogCount < kLogCap) shareLogCount++;
+    shareUiSeq++;
+}
+
+static void appendShareLogf(const char *fmt, ...) {
+    char buf[kLogLine];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    appendShareLog(buf);
+}
+
 static void noteTransfer(char direction, const String &name, bool ok) {
     shareEvent.direction = direction;
     shareEvent.ok = ok;
@@ -75,6 +115,24 @@ static void noteTransfer(char direction, const String &name, bool ok) {
     memcpy(shareEvent.name, name.c_str(), n);
     shareEvent.name[n] = 0;
     shareEvent.seq++;
+    shareUiSeq++;
+}
+
+static void resetUploadProgress() {
+    shareUploadReceived = 0;
+    shareUploadTotal = 0;
+    shareUploadUiMark = 0;
+    shareUploadName[0] = 0;
+}
+
+static void bumpUploadProgress(size_t received, size_t total, bool force = false) {
+    shareUploadReceived = received;
+    if (total) shareUploadTotal = total;
+    if (force || received >= shareUploadUiMark + kUploadUiStride ||
+        (shareUploadTotal && received >= shareUploadTotal)) {
+        shareUploadUiMark = received;
+        shareUiSeq++;
+    }
 }
 
 static String makeToken(int length = 24) {
@@ -212,8 +270,10 @@ static void stopShareServer() {
     shareUploadBusy = false;
     shareUploadFs = nullptr;
     shareUploadPath = "";
+    closeShareUploadFile();
     shareUploadFailed = false;
     shareUploadFailCode = 500;
+    resetUploadProgress();
 }
 
 static bool ensureApDhcpRunning() {
@@ -530,6 +590,7 @@ static void configureShareRoutes() {
             request->send(400, "text/plain", "not a file");
             return;
         }
+        size_t sz = f.size();
         f.close();
         String base = abs.substring(abs.lastIndexOf('/') + 1);
         // Keep path alive for the async FileResponse.
@@ -548,6 +609,7 @@ static void configureShareRoutes() {
         response->addHeader("Content-Disposition", disp);
         response->addHeader("Connection", "close");
         response->addHeader("Cache-Control", "no-store");
+        appendShareLogf("DN start %s (%s)", base.c_str(), humanSize(sz).c_str());
         noteTransfer('D', base, true);
         request->send(response);
     });
@@ -652,6 +714,8 @@ static void configureShareRoutes() {
         "/api/upload",
         HTTP_POST,
         [](AsyncWebServerRequest *request) {
+            closeShareUploadFile();
+            size_t got = shareUploadReceived;
             if (shareUploadFailed) {
                 int code = shareUploadFailCode;
                 String msg = "upload failed";
@@ -659,22 +723,28 @@ static void configureShareRoutes() {
                 else if (code == 507) msg = "no space";
                 else if (code == 403) msg = "read-only";
                 else if (code == 401) msg = "Unauthorized";
-                noteTransfer('U', shareUploadPath, false);
+                else if (code == 400) msg = "bad path";
+                appendShareLogf("UP fail %s @%s", shareUploadName, humanSize(got).c_str());
+                noteTransfer('U', shareUploadPath.length() ? shareUploadPath : String(shareUploadName), false);
                 shareUploadBusy = false;
                 shareUploadFailed = false;
                 shareUploadFailCode = 500;
                 shareUploadFs = nullptr;
                 shareUploadPath = "";
+                resetUploadProgress();
                 request->send(code, "text/plain", msg);
                 return;
             }
             String base = shareUploadPath;
             int slash = base.lastIndexOf('/');
             if (slash >= 0) base = base.substring(slash + 1);
+            if (base.length() == 0) base = shareUploadName;
+            appendShareLogf("UP done %s (%s)", base.c_str(), humanSize(got).c_str());
             noteTransfer('U', base, true);
             shareUploadBusy = false;
             shareUploadFs = nullptr;
             shareUploadPath = "";
+            resetUploadProgress();
             request->send(200, "text/plain", "ok");
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len,
@@ -696,22 +766,31 @@ static void configureShareRoutes() {
                     failUpload(409);
                     return;
                 }
-                String vol = request->hasParam("vol") ? request->getParam("vol")->value() : "";
-                String path = request->hasParam("path") ? request->getParam("path")->value() : "/";
+                String vol = request->hasParam("vol", true) ? request->getParam("vol", true)->value()
+                             : request->hasParam("vol")    ? request->getParam("vol")->value()
+                                                           : "";
+                String path = request->hasParam("path", true) ? request->getParam("path", true)->value()
+                              : request->hasParam("path")    ? request->getParam("path")->value()
+                                                             : "/";
                 FS *fs = nullptr;
                 String abs;
                 if (!resolveSharePath(vol, path, fs, abs, nullptr)) {
                     failUpload(400);
                     return;
                 }
-                if (filename.indexOf('/') >= 0 || filename == "." || filename == ".." ||
-                    filename.length() == 0) {
+                // Strip any client-supplied directory from multipart filename.
+                int slashInName = filename.lastIndexOf('/');
+                if (slashInName >= 0) filename = filename.substring(slashInName + 1);
+                slashInName = filename.lastIndexOf('\\');
+                if (slashInName >= 0) filename = filename.substring(slashInName + 1);
+                if (filename == "." || filename == ".." || filename.length() == 0) {
                     failUpload(400);
                     return;
                 }
-                if (request->contentLength() > 0) {
-                    bool isSd = (fs == &SD);
-                    if (request->contentLength() > freeBytes(*fs, isSd)) {
+                // Never call SD.usedBytes()/totalBytes() here — they walk the FAT from the
+                // AsyncTCP task (4K stack) and crash. LittleFS metadata is cheap.
+                if (request->contentLength() > 0 && fs == &LittleFS) {
+                    if (request->contentLength() > freeBytes(*fs, false)) {
                         failUpload(507);
                         return;
                     }
@@ -723,16 +802,63 @@ static void configureShareRoutes() {
                 shareUploadFailCode = 500;
                 shareUploadFs = fs;
                 shareUploadPath = full;
-                request->_tempFile = fs->open(full, "w");
-                if (!request->_tempFile) {
+                size_t n = unique.length();
+                if (n >= kNameMax) n = kNameMax - 1;
+                memcpy(shareUploadName, unique.c_str(), n);
+                shareUploadName[n] = 0;
+                // Prefer client file size — Content-Length is the multipart body
+                // (boundaries + headers), so progress would stall around ~80%.
+                size_t total = 0;
+                if (request->hasParam("size")) {
+                    total = (size_t)request->getParam("size")->value().toInt();
+                } else if (request->hasParam("size", true)) {
+                    total = (size_t)request->getParam("size", true)->value().toInt();
+                }
+                resetUploadProgress();
+                shareUploadTotal = total;
+                appendShareLogf(
+                    "UP start %s%s%s",
+                    shareUploadName,
+                    total ? " /" : "",
+                    total ? humanSize(total).c_str() : ""
+                );
+                closeShareUploadFile();
+                shareUploadFile = fs->open(full, FILE_WRITE);
+                if (!shareUploadFile) {
                     failUpload(500);
                     shareUploadBusy = false;
+                    shareUploadFs = nullptr;
+                    shareUploadPath = "";
+                    resetUploadProgress();
+                    return;
+                }
+                bumpUploadProgress(0, total, true);
+            }
+            if (shareUploadFailed) return;
+            if (len) {
+                if (!shareUploadFile) {
+                    failUpload(500);
+                    return;
+                }
+                size_t written = shareUploadFile.write(data, len);
+                if (written != len) {
+                    closeShareUploadFile();
+                    failUpload(500);
                     return;
                 }
             }
-            if (shareUploadFailed) return;
-            if (len && request->_tempFile) request->_tempFile.write(data, len);
-            if (final && request->_tempFile) request->_tempFile.close();
+            // index/len are file-part bytes only (not multipart overhead).
+            size_t got = index + len;
+            size_t total = shareUploadTotal;
+            if (final) {
+                // Snap to 100% even if client omitted size=.
+                if (!total || got > total) total = got;
+                bumpUploadProgress(got, total, true);
+                appendShareLogf("UP write %s (%s)", shareUploadName, humanSize(got).c_str());
+                closeShareUploadFile();
+            } else {
+                bumpUploadProgress(got, total, false);
+            }
         }
     );
 
@@ -762,8 +888,70 @@ static String lastTransferLine() {
     return "Last: " + d + String(shareEvent.name) + (shareEvent.ok ? " ok" : " fail");
 }
 
-static int shareLineY(int line, int sz = FP) {
-    return KVX_TOPBAR_H + 2 + line * (sz * LH + 2);
+static int shareLineY(int line) {
+    const int sz = uiBodyFont();
+    return KVX_TOPBAR_H + 2 + line * (uiLineH(sz) + 2);
+}
+
+static void drawShareProgressBar(int x, int y, int w, int h, size_t got, size_t total) {
+    const uint16_t border = kvxConfig.priColor;
+    const uint16_t fill = kvxConfig.secColor;
+    const uint16_t bg = kvxConfig.bgColor;
+    tft.drawRect(x, y, w, h, border);
+    tft.fillRect(x + 1, y + 1, w - 2, h - 2, bg);
+    int inner = w - 4;
+    if (inner <= 0) return;
+    int fillW = 0;
+    if (total > 0) {
+        fillW = (int)((got * (size_t)inner) / total);
+        if (fillW > inner) fillW = inner;
+    } else if (got > 0) {
+        // Unknown total: bounce a pulse based on bytes received.
+        fillW = (int)((got / 4096) % (size_t)inner);
+        if (fillW < 8) fillW = 8;
+        if (fillW > inner) fillW = inner;
+    }
+    if (fillW > 0) tft.fillRect(x + 2, y + 2, fillW, h - 4, fill);
+}
+
+static void sharePrintClipped(int x, int y, const String &text, int maxPx) {
+    tft.setCursor(x, y);
+    if (maxPx <= 0) {
+        tft.print(text);
+        return;
+    }
+    if (tft.textWidth(text) <= maxPx) {
+        tft.print(text);
+        return;
+    }
+    String s = text;
+    while (s.length() > 1 && tft.textWidth(s + "..") > maxPx) s.remove(s.length() - 1);
+    tft.print(s);
+    tft.print("..");
+}
+
+static void showShareLogs() {
+    ScrollableTextArea area("Share Logs");
+    if (shareLogCount == 0) {
+        area.addLine("(no transfers yet)");
+    } else {
+        const uint8_t start =
+            (shareLogCount < kLogCap) ? 0 : shareLogNext; // oldest in ring
+        for (uint8_t i = 0; i < shareLogCount; i++) {
+            uint8_t idx = (start + i) % kLogCap;
+            area.addLine(shareLogLines[idx]);
+        }
+        area.scrollToLine(area.getMaxLines());
+    }
+    // Keep captive DNS alive while browsing logs.
+    area.draw(true);
+    EscPress = false;
+    while (!returnToMenu && !forceHome) {
+        if (shareDnsRunning) shareDns.processNextRequest();
+        if (check(EscPress)) break;
+        area.updateSoft();
+        vTaskDelay(pdMS_TO_TICKS(40));
+    }
 }
 
 static void drawInfoScreen() {
@@ -784,51 +972,88 @@ static void drawInfoScreen() {
     const uint16_t green = TFT_GREEN;
     const uint16_t bg = kvxConfig.bgColor;
     const int padX = 6;
-    const int body = FP;
+    const int body = uiBodyFont();
+    const int footY = uiFooterY(body);
+    const int maxTextPx = tftWidth - padX - 4;
     int line = 0;
+
+    tft.setTextSize(body);
 
     auto labelVal = [&](const char *label, const String &val, bool valGreen) {
         int y = shareLineY(line++);
-        tft.setTextSize(body);
+        if (y + uiLineH(body) > footY - 2) return;
         tft.setTextColor(labelCol, bg);
         tft.setCursor(padX, y);
         tft.print(label);
+        int labelPx = tft.textWidth(label);
         tft.setTextColor(valGreen ? green : labelCol, bg);
-        String clipped = val;
-        int maxChars = max(4, (tftWidth - padX) / (body * LW) - (int)strlen(label));
-        if ((int)clipped.length() > maxChars) clipped = clipped.substring(0, maxChars);
-        tft.print(clipped);
+        sharePrintClipped(padX + labelPx, y, val, maxTextPx - labelPx);
     };
 
-    if (shareModeAp) {
-        labelVal("SSID: ", kvxConfig.fileShare.ssid, true);
-        labelVal("AP: ", maskPwd(kvxConfig.fileShare.pwd, sharePwdVisible), sharePwdVisible);
+    if (shareUploadBusy) {
+        // Compact layout so progress fits without overlapping the footer.
+        if (shareModeAp) labelVal("SSID: ", kvxConfig.fileShare.ssid, true);
+        else {
+            String net = WiFi.SSID();
+            if (net.length() == 0) net = "(wifi)";
+            labelVal("Net: ", net, true);
+        }
+        labelVal("IP: ", shareDisplayIp(), true);
+
+        size_t got = shareUploadReceived;
+        size_t total = shareUploadTotal;
+        int y = shareLineY(line++);
+        if (y + uiLineH(body) <= footY - 2) {
+            tft.setTextColor(labelCol, bg);
+            const char *upLab = "UP: ";
+            tft.setCursor(padX, y);
+            tft.print(upLab);
+            String name = shareUploadName[0] ? String(shareUploadName) : String("upload");
+            sharePrintClipped(padX + tft.textWidth(upLab), y, name, maxTextPx - tft.textWidth(upLab));
+        }
+
+        const int barH = max(8, uiLineH(body) - 4);
+        y = shareLineY(line++);
+        if (y + barH <= footY - 2) {
+            drawShareProgressBar(padX, y + 1, tftWidth - padX * 2, barH, got, total);
+        }
+
+        y = shareLineY(line++);
+        if (y + uiLineH(body) <= footY - 2) {
+            tft.setTextColor(green, bg);
+            if (total > 0) {
+                int pct = (int)((got * 100ULL) / total);
+                if (pct > 100) pct = 100;
+                char pctLine[48];
+                snprintf(
+                    pctLine, sizeof(pctLine), "%d%% %s/%s", pct, humanSize(got).c_str(),
+                    humanSize(total).c_str()
+                );
+                sharePrintClipped(padX, y, pctLine, maxTextPx);
+            } else {
+                sharePrintClipped(padX, y, humanSize(got) + " received", maxTextPx);
+            }
+        }
     } else {
-        String net = WiFi.SSID();
-        if (net.length() == 0) net = "(wifi)";
-        labelVal("Net: ", net, true);
+        if (shareModeAp) {
+            labelVal("SSID: ", kvxConfig.fileShare.ssid, true);
+            labelVal("AP: ", maskPwd(kvxConfig.fileShare.pwd, sharePwdVisible), sharePwdVisible);
+        } else {
+            String net = WiFi.SSID();
+            if (net.length() == 0) net = "(wifi)";
+            labelVal("Net: ", net, true);
+        }
+        labelVal("User: ", kvxConfig.fileShare.user, true);
+        labelVal("Pwd: ", maskPwd(kvxConfig.fileShare.portalPwd, sharePwdVisible), sharePwdVisible);
+        labelVal("IP: ", shareDisplayIp(), true);
+        labelVal("", lastTransferLine(), false);
     }
 
-    labelVal("User: ", kvxConfig.fileShare.user, true);
-    labelVal("Pwd: ", maskPwd(kvxConfig.fileShare.portalPwd, sharePwdVisible), sharePwdVisible);
-
-    int y = shareLineY(line++);
-    tft.setTextSize(FM);
-    tft.setTextColor(green, bg);
-    tft.setCursor(padX, y);
-    tft.print(shareDisplayIp());
-
-    y = shareLineY(line, 1);
-    tft.setTextSize(1);
-    tft.setTextColor(labelCol, bg);
-    tft.setCursor(padX, y);
-    String last = lastTransferLine();
-    if ((int)last.length() > 38) last = last.substring(0, 38);
-    tft.print(last);
-
+    tft.setTextSize(body);
     tft.setTextColor(TFT_RED, bg);
-    const char *foot = shareModeAp ? "Spc pwd  Next QR  ESC" : "Spc pwd  Next URL  ESC";
-    tft.drawCentreString(foot, tftWidth / 2, uiFooterY(1), 1);
+    const char *foot =
+        shareModeAp ? "Spc pwd  Sel logs  Next QR  ESC" : "Spc pwd  Sel logs  Next URL  ESC";
+    tft.drawCentreString(foot, tftWidth / 2, footY, 1);
 }
 
 static void drawQrScreen(const String &payload) {
@@ -845,9 +1070,10 @@ static void runShareLoop() {
     sharePwdVisible = false;
     shareScreen = 0;
     shareQrInvert = true;
-    uint32_t lastSeq = shareEvent.seq;
+    uint32_t lastUiSeq = shareUiSeq;
     uint8_t lastClients = 255;
     bool needDraw = true;
+    bool wasUploading = false;
 
     EscPress = false;
     NextPress = false;
@@ -864,7 +1090,7 @@ static void runShareLoop() {
                     tft.fillScreen(kvxConfig.bgColor);
                     drawKvxTopBar("File Share");
                     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
-                    tft.setTextSize(FP);
+                    tft.setTextSize(uiBodyFont());
                     tft.setCursor(8, shareLineY(1));
                     tft.print("Upload in progress");
                     tft.setCursor(8, shareLineY(2));
@@ -895,9 +1121,11 @@ static void runShareLoop() {
         }
 
         uint8_t clients = shareModeAp ? WiFi.softAPgetStationNum() : 0;
-        if (shareEvent.seq != lastSeq || clients != lastClients) {
-            lastSeq = shareEvent.seq;
+        if (shareUiSeq != lastUiSeq || clients != lastClients ||
+            shareUploadBusy != wasUploading) {
+            lastUiSeq = shareUiSeq;
             lastClients = clients;
+            wasUploading = shareUploadBusy;
             if (shareScreen == 0) needDraw = true;
         }
 
@@ -906,6 +1134,15 @@ static void runShareLoop() {
             shareScreen = (shareScreen + 1) % screens;
             shareQrInvert = true;
             needDraw = true;
+        }
+
+        if (shareScreen == 0 && check(SelPress)) {
+            showShareLogs();
+            needDraw = true;
+            EscPress = false;
+            SelPress = false;
+            KeyStroke.Clear();
+            continue;
         }
 
         if (KeyStroke.pressed) {
@@ -918,6 +1155,11 @@ static void runShareLoop() {
                         shareQrInvert = !shareQrInvert;
                         needDraw = true;
                     }
+                    break;
+                }
+                if ((c == 'l' || c == 'L') && shareScreen == 0) {
+                    showShareLogs();
+                    needDraw = true;
                     break;
                 }
             }
