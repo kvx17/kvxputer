@@ -215,28 +215,6 @@ static void teardownUsb(HidRemoteTransportSession &s) {
     s.connected = false;
 }
 
-static void prepareBleRam() {
-    // Free the big internal-DRAM holders *before* the DMA gate so BLE can
-    // start on Cardputer without the user hunting WiFi/SD menus first.
-    uiRamEnterHeavy();
-#ifdef HAS_RGB_LED
-    ledEffects(false);
-#endif
-    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
-        Serial.println("[HID] Releasing WiFi for BLE...");
-        wifiDisconnect();
-        delay(100);
-    }
-    if (WiFi.getMode() != WIFI_MODE_NULL) {
-        WiFi.mode(WIFI_OFF);
-        delay(50);
-    }
-    // Mode OFF can leave the driver loaded; deinit reclaims DMA buffers.
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    delay(80);
-}
-
 static bool ensureBle(HidRemoteTransportSession &s) {
 #if defined(KVX_NO_NIMBLE)
     (void)s;
@@ -268,15 +246,15 @@ static bool ensureBle(HidRemoteTransportSession &s) {
         s.bleHid = nullptr;
     }
 
-    if (NimBLEDevice::isInitialized()) {
+    // Keep Wi-Fi up. Only deinit NimBLE when Wi-Fi is off so a later
+    // controller init is not required under coexistence.
+    if (NimBLEDevice::isInitialized() && !radioWifiIsUp()) {
         NimBLEDevice::deinit(true);
         delay(150);
     }
 
-    prepareBleRam();
-
     if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+        displayError("BLE failed\nLow RAM", true);
         return false;
     }
 
@@ -352,14 +330,15 @@ static void teardownBle(HidRemoteTransportSession &s) {
 #if !defined(LITE_VERSION)
     if (hid_ble == p) hid_ble = nullptr;
 #endif
+    const bool deinitStack = !radioWifiIsUp();
     if (p != nullptr) {
-        p->end();
+        p->end(deinitStack);
         delete p;
-    } else if (NimBLEDevice::isInitialized()) {
+    } else if (deinitStack && NimBLEDevice::isInitialized()) {
         NimBLEDevice::deinit(true);
     }
     delay(50);
-    uiRamLeaveHeavy();
+    radioBleSessionEnd();
 #endif
 }
 

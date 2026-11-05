@@ -462,29 +462,27 @@ NimBLEScan *scannerBleStart() {
     portEXIT_CRITICAL(&g_advMux);
     g_advCount.store(0, std::memory_order_relaxed);
 
-    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
-        wifiDisconnect();
-        delay(200);
+    // radioHasMemForBle() pauses Wi-Fi for the BLE session, then reclaims canvas.
+    if (!radioHasMemForBle()) {
+        Serial.println("[scanner] low DMA for BLE");
+        return nullptr;
     }
-
-    uiRamEnterHeavy();
 
     if (NimBLEDevice::isInitialized()) {
         NimBLEScan *old = NimBLEDevice::getScan();
         if (old) {
             old->stop();
             delay(20);
+            old->clearResults();
         }
-        NimBLEDevice::deinit(true);
-        delay(80);
+    } else {
+        NimBLEDevice::init("");
+        delay(150);
     }
-
-    NimBLEDevice::init("");
-    delay(150);
 
     NimBLEScan *scan = NimBLEDevice::getScan();
     if (!scan) {
-        uiRamLeaveHeavy();
+        radioBleSessionEnd();
         return nullptr;
     }
 
@@ -503,7 +501,7 @@ NimBLEScan *scannerBleStart() {
     }
     if (!(ok || scan->isScanning())) {
         NimBLEDevice::deinit(true);
-        uiRamLeaveHeavy();
+        radioBleSessionEnd();
         return nullptr;
     }
     return scan;
@@ -549,5 +547,5 @@ void scannerBleTeardown(bool deinit) {
         delay(30);
         NimBLEDevice::deinit(true);
     }
-    uiRamLeaveHeavy();
+    radioBleSessionEnd();
 }

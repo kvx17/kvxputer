@@ -5,6 +5,7 @@
  */
 #include "findmy.h"
 #include "root/hal/ble/ble_backend.h"
+#include "root/hal/radio_mem.h"
 #include "root/input/mykeyboard.h"
 #if defined(EVIL_EXTENSIONS)
 #include "root/storage/paths.h"
@@ -72,9 +73,20 @@ void findMyMenu() {
     bleBackend().deinit();
     return;
 #else
-    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
-    NimBLEDevice::init("");
+    if (!radioHasMemForBle()) {
+        displayError("BLE failed\nLow RAM", true);
+        return;
+    }
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init("");
+    } else if (NimBLEDevice::getAdvertising()) {
+        NimBLEDevice::getAdvertising()->stop();
+    }
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+    if (!adv) {
+        radioBleSessionEnd();
+        return;
+    }
 
     auto buildPayload = [&](uint8_t *out, size_t &len) {
         out[0] = 0x4C;
@@ -115,7 +127,8 @@ void findMyMenu() {
         delay(20);
     }
     adv->stop();
-    NimBLEDevice::deinit(true);
+    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
+    radioBleSessionEnd();
 #endif
 }
 #endif

@@ -89,14 +89,16 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
             Serial.printf("[cleanupDuckyBLE] Active BLE instances: %d\n", activeBLEInstances);
         }
 
-        // CRITICAL: Only call end() if this is the LAST instance
-        // end() deinits the BLE stack, so we only want to do it once
+        // CRITICAL: Only call end() if this is the LAST instance.
+        // Keep the controller when Wi-Fi is up so coexistence does not force a
+        // later esp_bt_controller_init under DMA pressure.
         if (activeBLEInstances == 0) {
-            // Last instance - call end() to fully clean up
-            bleKb->end();
-            Serial.println("[cleanupDuckyBLE] Last instance: BleKeyboard::end() called (deinits BLE)");
+            const bool deinitStack = !radioWifiIsUp();
+            bleKb->end(deinitStack);
+            Serial.printf(
+                "[cleanupDuckyBLE] Last instance: BleKeyboard::end(deinit=%d)\n", deinitStack ? 1 : 0
+            );
         } else {
-            // Not the last instance - just delete the object without calling end()
             Serial.println("[cleanupDuckyBLE] Not last instance: deleting HID without end()");
         }
 
@@ -106,8 +108,7 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
         Serial.println("[cleanupDuckyBLE] hid deleted");
     }
 
-    // Only deinit BLE when NO instances are left (safety)
-    if (activeBLEInstances == 0 && NimBLEDevice::isInitialized()) {
+    if (activeBLEInstances == 0 && !radioWifiIsUp() && NimBLEDevice::isInitialized()) {
         Serial.println("[cleanupDuckyBLE] Last instance, ensuring BLE deinit...");
         NimBLEDevice::deinit();
         delay(50);
@@ -115,6 +116,7 @@ void cleanupDuckyBLE(HIDInterface *&hid) {
     }
 
     BLEConnected = false;
+    if (activeBLEInstances == 0) radioBleSessionEnd();
 }
 
 // ============================================================================
@@ -133,8 +135,8 @@ void safeCleanupDuckyBLE(HIDInterface *&hid) {
         delay(200);
     }
 
-    // Extra safety: if BLE is still initialized, force deinit
-    if (NimBLEDevice::isInitialized()) {
+    // Only force-deinit when Wi-Fi is off; coexistence leaves an idle host.
+    if (!radioWifiIsUp() && NimBLEDevice::isInitialized()) {
         Serial.println("[safeCleanupDuckyBLE] Force deinitializing BLE...");
         NimBLEDevice::deinit();
         delay(200);
@@ -591,11 +593,10 @@ void ducky_startKb(HIDInterface *&hid, bool ble, int functionId) {
         Serial.printf("Creating new HID instance for BLE=%d\n", ble);
         if (ble) {
             if (!radioHasMemForBle()) {
-                displayError("Low RAM: free WiFi/SD first", true);
+                displayError("BLE failed\nLow RAM", true);
                 returnToMenu = true;
                 return;
             }
-            uiRamEnterHeavy();
 
             // Set function-specific MAC address (Logitech OUIs)
             if (functionId >= 0 && functionId < 5) {

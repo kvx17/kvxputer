@@ -1,4 +1,5 @@
 #include "ble_menu.h"
+#include "root/hal/radio_mem.h"
 #include "root/ui/display.h"
 #include "root/app/utils.h"
 #include <globals.h>
@@ -26,10 +27,15 @@ void BleMenu::optionsMenu() {
 #if !defined(LITE_VERSION)
     if (BLEConnected) {
         options.push_back({"Disconnect", [=]() {
-                               BLEDevice::deinit();
+                               if (NimBLEDevice::isInitialized()) {
+                                   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+                                   if (adv) adv->stop();
+                                   BLEDevice::deinit();
+                               }
                                BLEConnected = false;
                                delete hid_ble;
                                hid_ble = nullptr;
+                               radioBleSessionEnd();
                            }});
     }
 #endif

@@ -305,13 +305,16 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
     }
 
     if (!radioHasMemForBle()) {
-        displayError("Low RAM: free WiFi/SD first", true);
+        displayError("BLE failed\nLow RAM", true);
         return false;
     }
-    uiRamEnterHeavy();
 
     std::string nameStr = name.c_str();
-    NimBLEDevice::init(nameStr);
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init(nameStr);
+    } else {
+        NimBLEDevice::setDeviceName(nameStr);
+    }
     NimBLEDevice::setPower((esp_power_level_t)powerLevel);
 
     currentDeviceName = name;
@@ -322,7 +325,20 @@ bool BLEStateManager::initBLE(const String &name, int powerLevel) {
 void BLEStateManager::deinitBLE(bool immediate) {
     if (!bleInitialized) return;
     if (immediate) cleanupAllClients();
-    NimBLEDevice::deinit(true);
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+        if (adv) adv->stop();
+        NimBLEScan *scan = NimBLEDevice::getScan();
+        if (scan) {
+            scan->stop();
+            scan->clearResults();
+        }
+    }
+    // Wi-Fi is paused for BLE; tear the controller down so radioBleSessionEnd
+    // can restore Wi-Fi safely.
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEDevice::deinit(true);
+    }
     bleInitialized = false;
     currentDeviceName = "";
     g_pBLEScan = nullptr;

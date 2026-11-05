@@ -63,7 +63,9 @@ public:
     void begin(const uint8_t *layout = KeyboardLayout_en_US) override { begin(layout, HID_KEYBOARD); };
     void begin(const uint8_t *layout, uint16_t showAs);
     void setLayout(const uint8_t *layout = KeyboardLayout_en_US) { _asciimap = layout; }
-    void end(void) override;
+    void end(void) override { end(true); }
+    // deinitStack=false leaves the NimBLE controller up (Wi-Fi coexistence).
+    void end(bool deinitStack);
     void sendReport(KeyReport *keys);
     void sendReport(MediaKeyReport *keys);
     void sendMouseReport(int8_t x, int8_t y, int8_t wheel = 0);
@@ -148,6 +150,7 @@ public:
     void begin(const uint8_t *layout, uint16_t) { (void)layout; }
     void setLayout(const uint8_t *layout = KeyboardLayout_en_US) { (void)layout; }
     void end(void) override {}
+    void end(bool) {}
     void sendReport(KeyReport *) {}
     void sendReport(MediaKeyReport *) {}
     void sendMouseReport(int8_t = 0, int8_t = 0, int8_t = 0) {}

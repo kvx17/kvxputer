@@ -60,9 +60,20 @@ void nameFloodMenu() {
     bleBackend().deinit();
     return;
 #else
-    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
-    NimBLEDevice::init(names[0].c_str());
+    if (!radioHasMemForBle()) {
+        displayError("BLE failed\nLow RAM", true);
+        return;
+    }
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init(names[0].c_str());
+    } else if (NimBLEDevice::getAdvertising()) {
+        NimBLEDevice::getAdvertising()->stop();
+    }
     NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+    if (!adv) {
+        radioBleSessionEnd();
+        return;
+    }
     adv->setName(names[0].c_str());
     adv->start();
 
@@ -87,7 +98,8 @@ void nameFloodMenu() {
         delay(10);
     }
     adv->stop();
-    NimBLEDevice::deinit(true);
+    if (NimBLEDevice::isInitialized()) NimBLEDevice::deinit(true);
+    radioBleSessionEnd();
 #endif
 }
 #endif

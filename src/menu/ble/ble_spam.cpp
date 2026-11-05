@@ -516,9 +516,16 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
     generateRandomMac(macAddr);
     esp_iface_mac_addr_set(macAddr, ESP_MAC_BT);
 
+    if (!radioHasMemForBle()) {
+        displayError("BLE failed\nLow RAM", true);
+        return;
+    }
+
     // FIX: Always init - if already init'd, it's a no-op
     // This handles the case where another module deinit'd the stack
-    BLEDevice::init(DeviceName);
+    if (!BLEDevice::isInitialized()) {
+        BLEDevice::init(DeviceName);
+    }
     vTaskDelay(5 / portTICK_PERIOD_MS);
     esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, MAX_TX_POWER);
 
@@ -561,9 +568,11 @@ void ibeacon(const char *DeviceName, const char *BEACON_UUID, int ManufacturerId
         Serial.println("Advertising stop");
     }
 
-    // Deinit the BLE stack - self-contained module
-    BLEDevice::deinit();
-    Serial.println("[iBeacon] BLE stack deinitialized");
+    if (BLEDevice::isInitialized()) {
+        BLEDevice::deinit();
+        Serial.println("[iBeacon] BLE stack deinitialized");
+    }
+    radioBleSessionEnd();
 #endif
 }
 
@@ -1596,40 +1605,34 @@ static bool bleSpamHeavyHeld = false;
 static void bleSpamReleaseHeavy() {
     if (!bleSpamHeavyHeld) return;
     bleSpamHeavyHeld = false;
-    uiRamLeaveHeavy();
+    radioBleSessionEnd();
 }
 
 static bool bleSpamInitAdvertiser(
     BleSpamRunState &state, const BleSpamConfig &config, const uint8_t *mac, bool resetStats
 ) {
-    // No-PSRAM boards (this Cardputer) keep the UI canvas and Wi-Fi in the same
-    // internal DMA heap the controller needs. esp_bt_controller_init fails and
-    // leaves the host mutex uncreated; the next ble_hs_lock() then asserts.
+    // Reclaim the UI canvas; leave Wi-Fi and SD up. radioHasMemForBle enters
+    // the heavy refcount — do not call uiRamEnterHeavy again.
     if (!bleSpamHeavyHeld) {
-        uiRamEnterHeavy();
+        if (!radioHasMemForBle()) {
+            Serial.printf("[ble-spam] not enough DMA (%u)\n", (unsigned)radioLargestDmaBlock());
+            return false;
+        }
         bleSpamHeavyHeld = true;
-    }
-    // Wi-Fi left running makes controller init smash the ipc0 stack when the
-    // UI canvas, SD, and Wi-Fi all share internal DRAM. PSRAM boards have room
-    // and keep those services up.
-    if (!psramFound()) radioReleaseContenders();
-    else if (!radioHasMemForBle()) {
-        Serial.printf("[ble-spam] not enough DMA (%u)\n", (unsigned)radioLargestDmaBlock());
-        bleSpamReleaseHeavy();
-        return false;
-    }
-    if (radioLargestDmaBlock() < RADIO_BLE_MIN_DMA_BLOCK) {
+    } else if (radioLargestDmaBlock() < RADIO_BLE_MIN_DMA_BLOCK) {
         Serial.printf("[ble-spam] not enough DMA (%u)\n", (unsigned)radioLargestDmaBlock());
         bleSpamReleaseHeavy();
         return false;
     }
 
-    if (!BLEDevice::init("")) {
-        Serial.printf("[ble-spam] init failed, dma=%u\n", (unsigned)radioLargestDmaBlock());
-        bleSpamReleaseHeavy();
-        return false;
+    if (!BLEDevice::isInitialized()) {
+        if (!BLEDevice::init("")) {
+            Serial.printf("[ble-spam] init failed, dma=%u\n", (unsigned)radioLargestDmaBlock());
+            bleSpamReleaseHeavy();
+            return false;
+        }
+        vTaskDelay(5 / portTICK_PERIOD_MS);
     }
-    vTaskDelay(5 / portTICK_PERIOD_MS);
     if (!BLEDevice::isInitialized()) {
         bleSpamReleaseHeavy();
         return false;
@@ -1637,7 +1640,7 @@ static bool bleSpamInitAdvertiser(
 
     pAdvertising = BLEDevice::getAdvertising();
     if (!pAdvertising) {
-        BLEDevice::deinit();
+        if (BLEDevice::isInitialized()) BLEDevice::deinit();
         bleSpamReleaseHeavy();
         return false;
     }

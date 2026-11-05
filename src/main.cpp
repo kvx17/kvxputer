@@ -473,20 +473,11 @@ void setup() {
     RAM_LOG("before-wifi-init"); // largest contiguous internal block here gates Wi-Fi/BLE
 
 #if !defined(ARDUINO_M5STACK_TAB5)
-    // Set WiFi country to avoid warnings and ensure max power
-    // Tab5: hosted C6 STA is gated in M1 — do not touch esp_wifi_* before a proven scan spike.
-    const wifi_country_t country = {
-        .cc = "US",
-        .schan = 1,
-        .nchan = 14,
-#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
-        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER, // 20
-#endif
-        .policy = WIFI_COUNTRY_POLICY_MANUAL
-    };
-
-    esp_wifi_set_max_tx_power(80); // 80 translates to 20dBm
-    esp_wifi_set_country(&country);
+    // Country / TX power require an initialized Wi-Fi driver. Doing this with
+    // raw esp_wifi_* before WiFi.mode() can leave the driver loaded while
+    // Arduino still reports WIFI_MODE_NULL, which then crashes the first
+    // esp_bt_controller_init (ipc0 overflow on no-PSRAM). Apply them on the
+    // first real STA/AP bring-up in wifi_common instead.
 #endif
 
     // Some GPIO Settings (such as CYD's brightness control must be set after tft and sdcard)
@@ -528,6 +519,7 @@ void setup() {
     } else {
         ledSetStatus(LED_STATUS_IDLE);
     }
+
     if (kvxConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
         xTaskCreate(

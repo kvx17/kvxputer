@@ -9,7 +9,9 @@
 #if !defined(LITE_VERSION)
 #include "ble_ninebot.h"
 #include "root/hal/ble/ble_backend.h"
+#include "root/hal/radio_mem.h"
 #include "root/input/mykeyboard.h"
+#include "root/ui/display.h"
 #include "root/app/utils.h"
 #include <functional>
 #include <vector>
@@ -101,7 +103,13 @@ void BLENinebot::setup() {
     tft.setTextSize(1);
     tft.setTextColor(kvxConfig.priColor, kvxConfig.bgColor);
 
-    NimBLEDevice::init("");
+    if (!radioHasMemForBle()) {
+        displayError("BLE failed\nLow RAM", true);
+        return;
+    }
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init("");
+    }
     pBLEScan = NimBLEDevice::getScan();
     pBLEScan->setActiveScan(true);
     pBLEScan->setInterval(SCAN_INTERVAL);

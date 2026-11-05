@@ -17,6 +17,27 @@
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
 
+#if !defined(ARDUINO_M5STACK_TAB5)
+// Apply after WiFi.mode() so the driver is initialized through Arduino (keeps
+// lowLevelInitDone in sync). Do not call raw esp_wifi_* at boot before mode().
+static void wifiApplyCountryAndTxPower() {
+    static bool applied = false;
+    if (applied) return;
+    const wifi_country_t country = {
+        .cc = "US",
+        .schan = 1,
+        .nchan = 14,
+#ifdef CONFIG_ESP_PHY_MAX_TX_POWER
+        .max_tx_power = CONFIG_ESP_PHY_MAX_TX_POWER,
+#endif
+        .policy = WIFI_COUNTRY_POLICY_MANUAL
+    };
+    esp_wifi_set_max_tx_power(80); // 80 → 20 dBm
+    esp_wifi_set_country(&country);
+    applied = true;
+}
+#endif
+
 #if defined(ARDUINO_M5STACK_TAB5)
 // ESP32-P4 talks to the on-board C6 over SDIO. Pins are set by M5.begin /
 // BOARD_HAS_SDIO_ESP_HOSTED defaults, but the slave needs a settle window after
@@ -265,22 +286,33 @@ bool wifiStartPortalAp(
     wifiPrepareTab5Hosted();
 #endif
 
-    if (!WiFi.mode(mode)) {
-        Serial.println("[WiFi] portal AP mode failed");
+    if (!radioHasMemForWifi()) {
+        Serial.println("[WiFi] portal AP: low DMA");
         return false;
     }
+
+    if (!WiFi.mode(mode)) {
+        Serial.println("[WiFi] portal AP mode failed");
+        uiRamLeaveHeavy();
+        return false;
+    }
+#if !defined(ARDUINO_M5STACK_TAB5)
+    wifiApplyCountryAndTxPower();
+#endif
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // dns1 (4th) = DHCP pool start (0 → AP+1). dns2 (5th) = DNS handed to clients.
     // Without dns2, phones keep 8.8.8.8 and never hit our captive DNS/HTTP.
     if (!WiFi.softAPConfig(apIp, apIp, IPAddress(255, 255, 255, 0), IPAddress((uint32_t)0), apIp)) {
         Serial.println("[WiFi] softAPConfig failed");
+        uiRamLeaveHeavy();
         return false;
     }
 
     const char *pass = passphrase.length() > 0 ? passphrase.c_str() : nullptr;
     if (!WiFi.softAP(apSsid.c_str(), pass, channel, 0, 4, false)) {
         Serial.printf("[WiFi] softAP failed ssid='%s' ch=%u\n", apSsid.c_str(), (unsigned)channel);
+        uiRamLeaveHeavy();
         return false;
     }
     esp_wifi_set_ps(WIFI_PS_NONE);
@@ -293,18 +325,21 @@ bool wifiStartPortalAp(
         Serial.println("[WiFi] DHCP captive URI unavailable; recovering DHCPS");
         if (!wifiEnsureApDhcpRunning()) {
             Serial.println("[WiFi] DHCPS recover failed");
+            uiRamLeaveHeavy();
             return false;
         }
     }
 #else
     if (!wifiEnsureApDhcpRunning()) {
         Serial.println("[WiFi] DHCPS start failed");
+        uiRamLeaveHeavy();
         return false;
     }
 #endif
 
     if (!wifiEnsureApDhcpRunning()) {
         Serial.println("[WiFi] DHCPS not running after AP start");
+        uiRamLeaveHeavy();
         return false;
     }
 
@@ -414,14 +449,20 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 
     switch (mode) {
         case WIFI_AP: // access point
+            if (!radioHasMemForWifi()) {
+                displayError("Low RAM: free BLE/SD first", true);
+                return false;
+            }
 #if defined(ARDUINO_M5STACK_TAB5)
             ensureTab5HostedWifi();
             if (!WiFi.mode(WIFI_AP)) {
                 displayError("WiFi radio failed\n(C6 hosted)", true);
+                uiRamLeaveHeavy();
                 return false;
             }
 #else
             WiFi.mode(WIFI_AP);
+            wifiApplyCountryAndTxPower();
 #endif
             return _setupAP();
             break;
@@ -432,7 +473,6 @@ bool wifiConnectMenu(wifi_mode_t mode) {
                 displayError("Low RAM: free BLE/SD first", true);
                 return false;
             }
-            uiRamEnterHeavy();
 #if defined(ARDUINO_M5STACK_TAB5)
             if (!tab5WifiModeSta()) {
                 displayError("WiFi radio failed\n(C6 hosted)", true);
@@ -441,6 +481,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             }
 #else
             WiFi.mode(WIFI_MODE_STA);
+            wifiApplyCountryAndTxPower();
 #endif
 
             // wifiMACMenu();
@@ -549,10 +590,10 @@ void wifiConnectTask(void *pvParameters) {
     // small (e.g. BLE already active) — the scan would half-init the driver and
     // crash on teardown. Silent bail: this is a background auto-connect task.
     if (!radioHasMemForWifi()) {
+        Serial.println("[WiFi] wifiConnectTask: low DMA, skip");
         vTaskDelete(NULL);
         return;
     }
-    uiRamEnterHeavy();
 
 #if defined(ARDUINO_M5STACK_TAB5)
     if (!tab5WifiModeSta()) {
@@ -562,6 +603,7 @@ void wifiConnectTask(void *pvParameters) {
     }
 #else
     WiFi.mode(WIFI_MODE_STA);
+    wifiApplyCountryAndTxPower();
 #endif
     int nets = WiFi.scanNetworks();
     if (nets < 0) {
@@ -596,6 +638,9 @@ void wifiConnectTask(void *pvParameters) {
     }
     WiFi.scanDelete();
 
+    // Associated Wi-Fi keeps the driver; drop the canvas-suppress refcount so
+    // the main menu can paint. wifiDisconnect() will leave again if depth > 0.
+    uiRamLeaveHeavy();
     vTaskDelete(NULL);
     return;
 }
@@ -622,7 +667,6 @@ bool wifiConnecttoKnownNet(void) {
         displayError("Low RAM: free BLE/SD first", true);
         return false;
     }
-    uiRamEnterHeavy();
 
     bool result = false;
     int nets;
@@ -632,6 +676,9 @@ bool wifiConnecttoKnownNet(void) {
         uiRamLeaveHeavy();
         return false;
     }
+#else
+    WiFi.mode(WIFI_MODE_STA);
+    wifiApplyCountryAndTxPower();
 #endif
     displayTextLine("Scanning Networks..");
     WiFi.disconnect(true, true);

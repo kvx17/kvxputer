@@ -269,7 +269,7 @@ void BleKeyboard::begin(const uint8_t *layout, uint16_t showAs) {
     hid->setBatteryLevel(batteryLevel);
 }
 
-void BleKeyboard::end(void) {
+void BleKeyboard::end(bool deinitStack) {
     if (pServer != nullptr) {
         // Disconnect all peers using index 0 repeatedly (count shrinks as we disconnect).
         // Cap the wait — some hosts never drop cleanly and an unbounded loop freezes the UI.
@@ -279,12 +279,15 @@ void BleKeyboard::end(void) {
             delay(40);
         }
     }
+    if (advertising != nullptr) {
+        advertising->stop();
+    }
     if (hid != nullptr) {
         delete hid;
         hid = nullptr;
     }
 
-    if (BLEDevice::isInitialized()) {
+    if (deinitStack && BLEDevice::isInitialized()) {
         BLEDevice::deinit(true);
     }
     this->connected = false;

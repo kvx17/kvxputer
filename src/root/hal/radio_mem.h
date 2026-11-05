@@ -11,21 +11,25 @@
     half-initialized state, which then crashes (LoadProhibited / abort()) on the
     next operation.
 
-    These helpers let callers refuse to start a radio *before* touching it when
-    there isn't enough contiguous DMA memory, turning an unavoidable crash into a
-    clean, user-visible error.
+    BLE policy: when Bluetooth starts, Wi-Fi is interrupted automatically (not a
+    user-facing "Low RAM: free WiFi" dialog). On no-PSRAM that is also required
+    to avoid an ipc0 stack overflow inside esp_bt_controller_init. Wi-Fi that
+    was associated is restored when the BLE session ends.
 */
+#include <Arduino.h>
 #include <esp_heap_caps.h>
 #include <stddef.h>
-#include "root/net/wifi_common.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp32-hal-psram.h>
+#include <globals.h>
+#include "root/net/wifi_common.h"
 #ifdef HAS_RGB_LED
 #include "root/hal/led_control.h"
 #endif
-// Declared in sd_functions.h; avoid pulling FS headers into every radio caller.
-void closeSdCard();
-extern bool sdcardMounted;
+#if !defined(KVX_NO_NIMBLE)
+#include <NimBLEDevice.h>
+#endif
 
 // Implemented in display.cpp. Frees the offscreen UI canvas so BLE/WiFi can
 // reclaim the contiguous internal-DRAM block it occupies on no-PSRAM boards.
@@ -47,32 +51,6 @@ constexpr size_t RADIO_WIFI_MIN_DMA_BLOCK = 15 * 1024;
 
 // Minimum contiguous DMA block required before bringing the BLE stack up.
 constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
-
-// Drop the other internal-DRAM users before the controller is created.
-// On no-PSRAM boards, esp_bt_controller_init overflows the ipc0 stack while
-// Wi-Fi is still running, and a failed init leaves the host mutex uncreated so
-// the next host call asserts. Callers that are about to start BLE should run
-// this first, then check radioLargestDmaBlock().
-static inline void radioReleaseContenders() {
-    tftReleaseFrameCanvas();
-#ifdef HAS_RGB_LED
-    ledEffects(false);
-    delay(30);
-#endif
-    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
-        wifiDisconnect();
-        delay(100);
-    }
-    WiFi.mode(WIFI_OFF);
-    delay(50);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    delay(200);
-    if (sdcardMounted) {
-        closeSdCard();
-        delay(100);
-    }
-}
 
 // Session-level RAM gate: drop the UI canvas and FastLED effect task while a
 // heavy app (Wi-Fi/BLE/media) holds DRAM. Nested enter/leave is refcounted.
@@ -105,78 +83,186 @@ static inline void uiRamLeaveHeavy() {
 #endif
 }
 
-static inline bool radioHasMemForWifi() {
-    // return true; // uncomment to disable it
-    auto enough = []() { return radioLargestDmaBlock() >= RADIO_WIFI_MIN_DMA_BLOCK; };
-    if (enough()) return true;
-    tftReleaseFrameCanvas();
-    if (enough()) return true;
-#ifdef HAS_RGB_LED
-    // Match BLE: Battery Status / other effects keep a 2KB task in internal RAM.
-    ledEffects(false);
-    delay(30);
+static inline bool radioWifiIsUp() {
+    return WiFi.getMode() != WIFI_MODE_NULL || wifiConnected;
+}
+
+static inline int radioNimbleInitialized() {
+#if defined(KVX_NO_NIMBLE)
+    return 0;
+#else
+    return NimBLEDevice::isInitialized() ? 1 : 0;
 #endif
-    return enough();
+}
+
+struct RadioWifiPauseState {
+    bool paused = false;
+    bool wasConnected = false;
+};
+
+static inline RadioWifiPauseState &radioWifiPauseState() {
+    static RadioWifiPauseState s;
+    return s;
+}
+
+static inline void radioPrepareLog(const char *tag, size_t minBlock, bool ok) {
+    Serial.printf(
+        "[RAM] %s ok=%d need=%u dma=%u internal_free=%u internal_largest=%u "
+        "wifiMode=%d wifi=%d ble=%d nimble=%d sd=%d heavy=%d pausedWifi=%d\n",
+        tag,
+        ok ? 1 : 0,
+        (unsigned)minBlock,
+        (unsigned)radioLargestDmaBlock(),
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+        (int)WiFi.getMode(),
+        wifiConnected ? 1 : 0,
+        BLEConnected ? 1 : 0,
+        radioNimbleInitialized(),
+        sdcardMounted ? 1 : 0,
+        uiRamHeavyDepth(),
+        radioWifiPauseState().paused ? 1 : 0
+    );
+}
+
+// Drop reclaimable non-radio DRAM (frame canvas; LED effects if still tight on
+// no-PSRAM), then remeasure. On success the heavy refcount stays elevated for
+// the tool — callers must not call uiRamEnterHeavy() again after a true return.
+// On failure the enter is undone.
+//
+// skipDmaGate: the target stack is already initialized (reuse path).
+static inline bool radioPrepare(size_t minBlock, bool skipDmaGate = false) {
+    // return true; // uncomment to disable it
+    uiRamEnterHeavy();
+
+    if (skipDmaGate) {
+        radioPrepareLog("prepare-reuse", minBlock, true);
+        return true;
+    }
+
+    auto enough = [&]() { return radioLargestDmaBlock() >= minBlock; };
+
+    if (!enough() && !psramFound()) {
+#ifdef HAS_RGB_LED
+        ledEffects(false);
+        delay(30);
+#endif
+    }
+
+    if (enough()) {
+        radioPrepareLog("prepare", minBlock, true);
+        return true;
+    }
+
+    radioPrepareLog("prepare", minBlock, false);
+    uiRamLeaveHeavy();
+    return false;
+}
+
+static inline bool radioHasMemForWifi() {
+    return radioPrepare(RADIO_WIFI_MIN_DMA_BLOCK, radioWifiIsUp());
+}
+
+// Interrupt Wi-Fi for a BLE session. Must run BEFORE radioPrepare (wifiDisconnect
+// leaves the heavy refcount). Tab5 hosted Wi-Fi stays alone on the C6.
+static inline void radioPauseWifiForBle() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    return;
+#else
+    RadioWifiPauseState &st = radioWifiPauseState();
+    if (st.paused) return;
+
+    wifi_mode_t idfMode = WIFI_MODE_NULL;
+    const bool idfDriverUp = (esp_wifi_get_mode(&idfMode) == ESP_OK);
+    if (!idfDriverUp && !radioWifiIsUp()) return;
+
+    st.wasConnected = WiFi.isConnected() || wifiConnected;
+    st.paused = true;
+
+    Serial.printf(
+        "[RAM] Pausing WiFi for BLE (connected=%d arduinoUp=%d idfMode=%d)\n",
+        st.wasConnected ? 1 : 0,
+        radioWifiIsUp() ? 1 : 0,
+        (int)idfMode
+    );
+
+    if (radioWifiIsUp()) {
+        wifiDisconnect();
+        delay(50);
+    } else {
+        // Driver loaded outside Arduino mode tracking — STA→OFF keeps state consistent.
+        WiFi.mode(WIFI_MODE_STA);
+        delay(30);
+        WiFi.mode(WIFI_OFF);
+    }
+    delay(150);
+
+    if (esp_wifi_get_mode(&idfMode) == ESP_OK) {
+        Serial.println("[RAM] WiFi driver still up after pause — force stop/deinit");
+        esp_wifi_stop();
+        esp_wifi_deinit();
+        delay(100);
+    }
+    wifiConnected = false;
+#endif
+}
+
+// Restore Wi-Fi that was paused for BLE. Deinits NimBLE first on no-PSRAM so
+// esp_wifi_init does not race a live controller. Safe / idempotent.
+static inline void radioResumeWifiAfterBle() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    return;
+#else
+    RadioWifiPauseState &st = radioWifiPauseState();
+    if (!st.paused) return;
+
+    const bool reconnect = st.wasConnected;
+    st.paused = false;
+    st.wasConnected = false;
+
+#if !defined(KVX_NO_NIMBLE)
+    // Wi-Fi bring-up while the BLE controller is still live is unsafe on
+    // no-PSRAM (and unnecessary once the BLE tool has finished).
+    if (NimBLEDevice::isInitialized()) {
+        NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+        if (adv) adv->stop();
+        NimBLEScan *scan = NimBLEDevice::getScan();
+        if (scan) {
+            scan->stop();
+            scan->clearResults();
+        }
+        NimBLEDevice::deinit(true);
+        delay(80);
+    }
+#endif
+
+    if (!reconnect) {
+        Serial.println("[RAM] BLE done; WiFi was idle — not reconnecting");
+        return;
+    }
+
+    Serial.println("[RAM] BLE done; restoring WiFi");
+    // Background known-net connect — do not block the UI thread on a scan.
+    xTaskCreate(wifiConnectTask, "wifiAfterBle", 4096, NULL, 2, NULL);
+#endif
+}
+
+// End a BLE tool session: drop heavy UI hold and restore paused Wi-Fi.
+static inline void radioBleSessionEnd() {
+    uiRamLeaveHeavy();
+    radioResumeWifiAfterBle();
 }
 
 static inline bool radioHasMemForBle() {
-    // return true; // uncomment to disable it
+    // Always interrupt Wi-Fi before measuring / bringing the controller up.
+    // Do not ask the user to "free WiFi" — pause it for the BLE session.
+    radioPauseWifiForBle();
 
-    auto enough = []() { return radioLargestDmaBlock() >= RADIO_BLE_MIN_DMA_BLOCK; };
+    // NimBLE host already up — only reclaim canvas.
+    if (radioPrepare(RADIO_BLE_MIN_DMA_BLOCK, radioNimbleInitialized() != 0)) return true;
 
-    if (enough()) return true;
-
-    // Full-screen UI canvas (~64KB) sits in internal DRAM on no-PSRAM boards.
-    Serial.println("[RAM] Low DMA for BLE, releasing display canvas...");
-    tftReleaseFrameCanvas();
-    if (enough()) {
-        Serial.printf("[RAM] Display canvas freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
-        return true;
-    }
-
-#ifdef HAS_RGB_LED
-    // Battery Status / other effects keep a 2KB task in internal RAM.
-    Serial.println("[RAM] Low DMA for BLE, stopping LED effects...");
-    ledEffects(false);
-    delay(30);
-    if (enough()) {
-        Serial.printf("[RAM] LED task freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
-        return true;
-    }
-#endif
-
-    // Free WiFi stack (mode OFF alone can leave DMA buffers allocated).
-    Serial.println("[RAM] Low contiguous DMA memory for BLE, attempting to free WiFi...");
-    if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {
-        wifiDisconnect();
-        delay(100);
-    }
-    WiFi.mode(WIFI_OFF);
-    delay(50);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-    delay(200);
-    if (enough()) {
-        Serial.printf("[RAM] WiFi freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
-        return true;
-    }
-
-    // SD SPI DMA buffers also sit in internal DRAM on Cardputer.
-    if (sdcardMounted) {
-        Serial.println("[RAM] Still low DMA, unmounting SD...");
-        closeSdCard();
-        delay(100);
-        if (enough()) {
-            Serial.printf("[RAM] SD freed, DMA block: %u bytes\n", (unsigned)radioLargestDmaBlock());
-            return true;
-        }
-    }
-
-    Serial.printf(
-        "[RAM] Still only %u bytes DMA block, minimum %u needed\n",
-        (unsigned)radioLargestDmaBlock(),
-        (unsigned)RADIO_BLE_MIN_DMA_BLOCK
-    );
+    // Could not start BLE — put Wi-Fi back if we paused it.
+    radioResumeWifiAfterBle();
     return false;
 }
 

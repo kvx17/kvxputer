@@ -1,5 +1,7 @@
 #if !defined(LITE_VERSION) && !defined(KVX_NO_NIMBLE)
 #include "ble_api.hpp"
+#include "root/hal/radio_mem.h"
+#include "root/ui/display.h"
 #include <NimBLEDevice.h>
 #include <root/serial/USBSerial/USBSerial.h>
 #include <globals.h>
@@ -20,7 +22,13 @@ public:
 };
 
 void BLE_API::setup() {
-    NimBLEDevice::init("Bruce");
+    if (!radioHasMemForBle()) {
+        displayError("BLE failed\nLow RAM", true);
+        return;
+    }
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init("Bruce");
+    }
     NimBLEDevice::setPower(ESP_PWR_LVL_P9); // 9 dBm, tweak if you want
 
     pServer = NimBLEDevice::createServer();
@@ -45,7 +53,8 @@ void BLE_API::update_mtu(uint16_t mtu) {
 void BLE_API::end() {
     battery_service.end();
     serial_service.end();
-    BLEDevice::deinit();
+    if (BLEDevice::isInitialized()) BLEDevice::deinit();
     serialDevice = &USBserial;
+    radioBleSessionEnd();
 }
 #endif
