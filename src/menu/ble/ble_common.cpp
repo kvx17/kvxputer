@@ -135,6 +135,13 @@ void stopBLEStack() {
     radioBleSessionEnd();
 }
 
+extern "C" void kvxBeforeNimbleHci(void) {
+    // The controller has just been enabled and has taken the big free hole.
+    // Host HCI pools need one contiguous internal block larger than what is
+    // left (6132 bytes failed with ESP_ERR_NO_MEM). The 16 KiB reserve is that block.
+    radioReleaseReserve();
+}
+
 bool ble_scan_setup() {
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         if (WiFi.getMode() != WIFI_MODE_NULL || wifiConnected) {

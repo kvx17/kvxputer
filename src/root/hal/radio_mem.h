@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
+#include <esp_bt.h>
 #include <esp32-hal-psram.h>
 #include <globals.h>
 #include "root/net/wifi_common.h"
@@ -54,7 +55,9 @@ constexpr size_t RADIO_BLE_MIN_DMA_BLOCK = 15 * 1024;
 
 // Session-level RAM gate: drop the UI canvas and FastLED effect task while a
 // heavy app (Wi-Fi/BLE/media) holds DRAM. Nested enter/leave is refcounted.
-static inline int &uiRamHeavyDepth() {
+// External linkage so every file shares one heavy-refcount. A static inline
+// would give each translation unit its own counter and its own pause flag.
+inline int &uiRamHeavyDepth() {
     static int depth = 0;
     return depth;
 }
@@ -98,31 +101,53 @@ static inline int radioNimbleInitialized() {
 struct RadioWifiPauseState {
     bool paused = false;
     bool wasConnected = false;
+    wifi_mode_t mode = WIFI_MODE_NULL;
 };
 
-static inline RadioWifiPauseState &radioWifiPauseState() {
+inline RadioWifiPauseState &radioWifiPauseState() {
     static RadioWifiPauseState s;
     return s;
 }
 
-static inline void radioPrepareLog(const char *tag, size_t minBlock, bool ok) {
-    Serial.printf(
-        "[RAM] %s ok=%d need=%u dma=%u internal_free=%u internal_largest=%u "
-        "wifiMode=%d wifi=%d ble=%d nimble=%d sd=%d heavy=%d pausedWifi=%d\n",
-        tag,
-        ok ? 1 : 0,
-        (unsigned)minBlock,
-        (unsigned)radioLargestDmaBlock(),
-        (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
-        (int)WiFi.getMode(),
-        wifiConnected ? 1 : 0,
-        BLEConnected ? 1 : 0,
-        radioNimbleInitialized(),
-        sdcardMounted ? 1 : 0,
-        uiRamHeavyDepth(),
-        radioWifiPauseState().paused ? 1 : 0
-    );
+inline bool &radioDriverTouched() {
+    static bool touched = false;
+    return touched;
+}
+
+// One contiguous DMA block taken while the heap is still intact (before the first
+// Wi-Fi init). After Wi-Fi stops, the freed driver buffers come back as several
+// holes under 15 KiB, so BLE would fail the gate. This block stays allocated
+// through the Wi-Fi session and is released only when a radio start is short.
+constexpr size_t RADIO_DMA_RESERVE = 16 * 1024;
+
+struct RadioDmaReserve {
+    void *ptr = nullptr;
+};
+
+inline RadioDmaReserve &radioDmaReserve() {
+    static RadioDmaReserve reserve;
+    return reserve;
+}
+
+static inline void radioReleaseReserve() {
+    RadioDmaReserve &reserve = radioDmaReserve();
+    if (!reserve.ptr) return;
+    heap_caps_free(reserve.ptr);
+    reserve.ptr = nullptr;
+}
+
+static inline void radioEnsureReserve() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    return;
+#else
+    if (psramFound()) return;
+    RadioDmaReserve &reserve = radioDmaReserve();
+    if (reserve.ptr) return;
+    if (radioLargestDmaBlock() < RADIO_DMA_RESERVE + RADIO_WIFI_MIN_DMA_BLOCK) return;
+    void *block = heap_caps_malloc(RADIO_DMA_RESERVE, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (!block) return;
+    reserve.ptr = block;
+#endif
 }
 
 // Drop reclaimable non-radio DRAM (frame canvas; LED effects if still tight on
@@ -132,13 +157,9 @@ static inline void radioPrepareLog(const char *tag, size_t minBlock, bool ok) {
 //
 // skipDmaGate: the target stack is already initialized (reuse path).
 static inline bool radioPrepare(size_t minBlock, bool skipDmaGate = false) {
-    // return true; // uncomment to disable it
     uiRamEnterHeavy();
 
-    if (skipDmaGate) {
-        radioPrepareLog("prepare-reuse", minBlock, true);
-        return true;
-    }
+    if (skipDmaGate) return true;
 
     auto enough = [&]() { return radioLargestDmaBlock() >= minBlock; };
 
@@ -149,17 +170,16 @@ static inline bool radioPrepare(size_t minBlock, bool skipDmaGate = false) {
 #endif
     }
 
-    if (enough()) {
-        radioPrepareLog("prepare", minBlock, true);
-        return true;
-    }
+    if (!enough() && radioDmaReserve().ptr) radioReleaseReserve();
 
-    radioPrepareLog("prepare", minBlock, false);
+    if (enough()) return true;
+
     uiRamLeaveHeavy();
     return false;
 }
 
 static inline bool radioHasMemForWifi() {
+    radioEnsureReserve();
     return radioPrepare(RADIO_WIFI_MIN_DMA_BLOCK, radioWifiIsUp());
 }
 
@@ -177,6 +197,8 @@ static inline void radioPauseWifiForBle() {
     if (!idfDriverUp && !radioWifiIsUp()) return;
 
     st.wasConnected = WiFi.isConnected() || wifiConnected;
+    st.mode = WiFi.getMode();
+    if (st.mode == WIFI_MODE_NULL && idfDriverUp) st.mode = idfMode;
     st.paused = true;
 
     Serial.printf(
@@ -204,6 +226,30 @@ static inline void radioPauseWifiForBle() {
         delay(100);
     }
     wifiConnected = false;
+    radioDriverTouched() = true;
+#endif
+}
+
+// BLE-before-any-Wi-Fi crashed in a core-0 task whose entry pointer was null.
+// A Wi-Fi init/deinit leaves the PHY and coexistence callbacks installed, which
+// is the state in which later BLE scans stayed up. Do this only once, and only
+// when the driver has never been loaded.
+static inline void radioTouchDriver() {
+#if defined(ARDUINO_M5STACK_TAB5)
+    return;
+#else
+    if (radioDriverTouched()) return;
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    if (esp_wifi_get_mode(&mode) == ESP_OK) {
+        radioDriverTouched() = true;
+        return;
+    }
+    WiFi.persistent(false);
+    WiFi.mode(WIFI_MODE_STA);
+    delay(20);
+    WiFi.mode(WIFI_OFF);
+    delay(20);
+    radioDriverTouched() = true;
 #endif
 }
 
@@ -214,11 +260,11 @@ static inline void radioResumeWifiAfterBle() {
     return;
 #else
     RadioWifiPauseState &st = radioWifiPauseState();
-    if (!st.paused) return;
-
-    const bool reconnect = st.wasConnected;
+    const bool reconnect = st.paused && st.wasConnected;
+    const wifi_mode_t restoreMode = st.paused ? st.mode : WIFI_MODE_NULL;
     st.paused = false;
     st.wasConnected = false;
+    st.mode = WIFI_MODE_NULL;
 
 #if !defined(KVX_NO_NIMBLE)
     // Wi-Fi bring-up while the BLE controller is still live is unsafe on
@@ -236,14 +282,53 @@ static inline void radioResumeWifiAfterBle() {
     }
 #endif
 
-    if (!reconnect) {
-        Serial.println("[RAM] BLE done; WiFi was idle — not reconnecting");
+    // NimBLEDevice::deinit() reports the host down while the controller task is
+    // still allocated. That left 8 KB free and the Wi-Fi restore's scan failed.
+#if defined(CONFIG_BT_CONTROLLER_ENABLED)
+    {
+        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+            esp_bt_controller_disable();
+            for (int i = 0; i < 50 && esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED; ++i) {
+                delay(10);
+            }
+        }
+        if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_INITED) {
+            esp_bt_controller_deinit();
+            delay(20);
+        }
+        if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+            Serial.println("[RAM] BLE controller still up; not restoring WiFi");
+            return;
+        }
+    }
+#endif
+
+    if (reconnect) {
+        Serial.println("[RAM] BLE done; restoring WiFi");
+        // Rebuild the BLE reserve only when the leftover hole can still start Wi-Fi.
+        radioEnsureReserve();
+        // Static-stack task. A heap stack of 4096 here shrank the largest DMA
+        // block from 19444 to 15348 and the 15 KiB gate refused the restore.
+        wifiScheduleConnect();
         return;
     }
 
-    Serial.println("[RAM] BLE done; restoring WiFi");
-    // Background known-net connect — do not block the UI thread on a scan.
-    xTaskCreate(wifiConnectTask, "wifiAfterBle", 4096, NULL, 2, NULL);
+    // The STA/AP driver was up but not associated (startup scan leaves it that
+    // way). Put that mode back so the next Wi-Fi scan is not talking to a
+    // driver that was torn down.
+    if (restoreMode != WIFI_MODE_NULL) {
+        Serial.printf("[RAM] BLE done; restoring WiFi mode %d\n", (int)restoreMode);
+        radioEnsureReserve();
+        if (!radioHasMemForWifi()) {
+            Serial.println("[RAM] WiFi mode restore refused");
+            return;
+        }
+        WiFi.mode(restoreMode);
+        uiRamLeaveHeavy();
+        return;
+    }
+
+    Serial.println("[RAM] BLE done; WiFi was idle — not reconnecting");
 #endif
 }
 
@@ -256,6 +341,8 @@ static inline void radioBleSessionEnd() {
 static inline bool radioHasMemForBle() {
     // Always interrupt Wi-Fi before measuring / bringing the controller up.
     // Do not ask the user to "free WiFi" — pause it for the BLE session.
+    radioEnsureReserve();
+    radioTouchDriver();
     radioPauseWifiForBle();
 
     // NimBLE host already up — only reclaim canvas.

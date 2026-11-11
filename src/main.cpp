@@ -522,14 +522,7 @@ void setup() {
 
     if (kvxConfig.wifiAtStartup) {
         log_i("Loading Wifi at Startup");
-        xTaskCreate(
-            wifiConnectTask,   // Task function
-            "wifiConnectTask", // Task Name
-            4096,              // Stack size
-            NULL,              // Task parameters
-            2,                 // Task priority (0 to 3), loopTask has priority 2.
-            NULL               // Task handle (not used)
-        );
+        wifiScheduleConnect();
     }
 #endif
     //  start a task to handle serial commands while the webui is running

@@ -67,6 +67,9 @@ esp_err_t wifiRawTx(wifi_interface_t ifx, const void *frame, int len, uint8_t re
  * @TODO fix: rn it skips open networks due to password == "" check
  */
 void wifiConnectTask(void *pvParameters);
+// One long-lived task with a static stack. Spawning a 4096-byte heap stack
+// at resume time was cutting the largest DMA block to just under 15 KiB.
+void wifiScheduleConnect();
 
 /**
  * @brief Ensures esp_netif and the default event loop are initialized (idempotent)

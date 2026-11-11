@@ -16,6 +16,7 @@
 
 static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
+volatile int gRadioWifiTaskAlive = 0;
 
 #if !defined(ARDUINO_M5STACK_TAB5)
 // Apply after WiFi.mode() so the driver is initialized through Arduino (keeps
@@ -464,7 +465,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             WiFi.mode(WIFI_AP);
             wifiApplyCountryAndTxPower();
 #endif
-            return _setupAP();
+            _setupAP();
             break;
 
         case WIFI_STA: { // station mode
@@ -569,11 +570,20 @@ bool wifiConnectMenu(wifi_mode_t mode) {
         wifiDisconnect(); // Forced turning off the wifi module if exiting back to the menu
         return false;
     }
+    // radioHasMemForWifi() entered the heavy refcount. Drop it once the radio
+    // is up so a later BLE pause is not balancing a depth this menu still holds.
+    uiRamLeaveHeavy();
     return wifiConnected;
 }
 
-void wifiConnectTask(void *pvParameters) {
-    if (WiFi.isConnected()) return;
+static void wifiConnectOnce() {
+    gRadioWifiTaskAlive = 1;
+    auto taskExit = []() { gRadioWifiTaskAlive = 0; };
+
+    if (WiFi.isConnected()) {
+        taskExit();
+        return;
+    }
 
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         stopBLEStack();
@@ -582,7 +592,7 @@ void wifiConnectTask(void *pvParameters) {
 
     // Check if WiFi is in transition
     if (wifiTransitioning) {
-        vTaskDelete(NULL);
+        taskExit();
         return;
     }
 
@@ -591,14 +601,14 @@ void wifiConnectTask(void *pvParameters) {
     // crash on teardown. Silent bail: this is a background auto-connect task.
     if (!radioHasMemForWifi()) {
         Serial.println("[WiFi] wifiConnectTask: low DMA, skip");
-        vTaskDelete(NULL);
+        taskExit();
         return;
     }
 
 #if defined(ARDUINO_M5STACK_TAB5)
     if (!tab5WifiModeSta()) {
         uiRamLeaveHeavy();
-        vTaskDelete(NULL);
+        taskExit();
         return;
     }
 #else
@@ -608,7 +618,7 @@ void wifiConnectTask(void *pvParameters) {
     int nets = WiFi.scanNetworks();
     if (nets < 0) {
         uiRamLeaveHeavy();
-        vTaskDelete(NULL);
+        taskExit();
         return;
     }
     String ssid;
@@ -641,8 +651,35 @@ void wifiConnectTask(void *pvParameters) {
     // Associated Wi-Fi keeps the driver; drop the canvas-suppress refcount so
     // the main menu can paint. wifiDisconnect() will leave again if depth > 0.
     uiRamLeaveHeavy();
-    vTaskDelete(NULL);
-    return;
+    taskExit();
+}
+
+static StackType_t sWifiConnectStack[4096];
+static StaticTask_t sWifiConnectTCB;
+static TaskHandle_t sWifiConnectTask = nullptr;
+
+void wifiConnectTask(void *pvParameters) {
+    (void)pvParameters;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        wifiConnectOnce();
+    }
+}
+
+void wifiScheduleConnect() {
+    if (sWifiConnectTask == nullptr) {
+        sWifiConnectTask = xTaskCreateStatic(
+            wifiConnectTask,
+            "wifiConnectTask",
+            sizeof(sWifiConnectStack),
+            nullptr,
+            2,
+            sWifiConnectStack,
+            &sWifiConnectTCB
+        );
+    }
+    if (sWifiConnectTask == nullptr || gRadioWifiTaskAlive) return;
+    xTaskNotifyGive(sWifiConnectTask);
 }
 
 String checkMAC() { return String(WiFi.macAddress()); }
