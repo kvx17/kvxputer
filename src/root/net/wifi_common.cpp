@@ -14,8 +14,27 @@
 #include <esp_netif.h>
 #include <globals.h>
 
-static TaskHandle_t timezoneTaskHandle = NULL;
 static bool wifiTransitioning = false;
+static StackType_t sNtpStack[6144];
+static StaticTask_t sNtpTCB;
+static TaskHandle_t sNtpTask = nullptr;
+
+static void onStaGotIp(arduino_event_id_t event) {
+    if (event != ARDUINO_EVENT_WIFI_STA_GOT_IP || sNtpTask == nullptr) return;
+    xTaskNotifyGive(sNtpTask);
+}
+
+void wifiArmNtpOnConnect() {
+    if (sNtpTask == nullptr) {
+        sNtpTask = xTaskCreateStatic(
+            updateTimezoneTask, "updateTimezone", sizeof(sNtpStack), nullptr, 1, sNtpStack, &sNtpTCB
+        );
+    }
+    static bool armed = false;
+    if (armed) return;
+    WiFi.onEvent(onStaGotIp, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+    armed = true;
+}
 volatile int gRadioWifiTaskAlive = 0;
 
 #if !defined(ARDUINO_M5STACK_TAB5)
@@ -139,6 +158,7 @@ void ensureWifiPlatform() {
 }
 
 bool _wifiConnect(const String &ssid, int encryption) {
+    wifiArmNtpOnConnect();
     String password = kvxConfig.getWifiPassword(ssid);
     if (password == "" && encryption > 0) { password = keyboard(password, 63, "Network Password:", true); }
     if (password == "\x1B") return false;
@@ -171,11 +191,7 @@ bool _wifiConnect(const String &ssid, int encryption) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
         kvxConfig.addWifiCredential(ssid, password);
-
-        // Start timezone update in background if not already running
-        if (timezoneTaskHandle == NULL) {
-            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
-        }
+        if (sNtpTask) xTaskNotifyGive(sNtpTask);
     }
 
     delay(200);
@@ -469,6 +485,7 @@ bool wifiConnectMenu(wifi_mode_t mode) {
             break;
 
         case WIFI_STA: { // station mode
+            wifiArmNtpOnConnect();
             int nets;
             if (!radioHasMemForWifi()) {
                 displayError("Low RAM: free BLE/SD first", true);
@@ -577,10 +594,12 @@ bool wifiConnectMenu(wifi_mode_t mode) {
 }
 
 static void wifiConnectOnce() {
+    wifiArmNtpOnConnect();
     gRadioWifiTaskAlive = 1;
     auto taskExit = []() { gRadioWifiTaskAlive = 0; };
 
     if (WiFi.isConnected()) {
+        if (sNtpTask) xTaskNotifyGive(sNtpTask);
         taskExit();
         return;
     }
@@ -623,24 +642,23 @@ static void wifiConnectOnce() {
     }
     String ssid;
     String pwd;
+    bool joined = false;
 
-    for (int i = 0; i < nets; i++) {
+    for (int i = 0; i < nets && !joined; i++) {
         ssid = WiFi.SSID(i);
         pwd = kvxConfig.getWifiPassword(ssid);
         if (pwd == "") continue;
 
         WiFi.begin(ssid, pwd);
-        for (int i = 0; i < 50; i++) {
+        for (int attempt = 0; attempt < 50; attempt++) {
             if (WiFi.isConnected()) {
                 wifiConnected = true;
                 wifiIP = WiFi.localIP().toString();
-
-                // Start timezone update in background if not already running
-                if (timezoneTaskHandle == NULL) {
-                    xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
-                }
                 // Do not draw UI from this task — it races the main menu / apps
                 // and previously stamped the theme border onto the kvx grid.
+                // Stop here. Another WiFi.begin() would drop this association
+                // before the NTP task sees a link.
+                joined = true;
                 break;
             }
             vTaskDelay(100 / portTICK_RATE_MS);
@@ -685,7 +703,11 @@ void wifiScheduleConnect() {
 String checkMAC() { return String(WiFi.macAddress()); }
 
 bool wifiConnecttoKnownNet(void) {
-    if (WiFi.isConnected()) return true; // safeguard
+    wifiArmNtpOnConnect();
+    if (WiFi.isConnected()) {
+        if (sNtpTask) xTaskNotifyGive(sNtpTask);
+        return true; // safeguard
+    }
 
     if (FORCE_RADIO_TEARDOWN_ON_SWITCH) {
         stopBLEStack();
@@ -744,23 +766,32 @@ bool wifiConnecttoKnownNet(void) {
     if (WiFi.isConnected()) {
         wifiConnected = true;
         wifiIP = WiFi.localIP().toString();
-
-        // Start timezone update in background if not already running
-        if (timezoneTaskHandle == NULL) {
-            xTaskCreate(updateTimezoneTask, "updateTimezone", 4096, NULL, 1, &timezoneTaskHandle);
-        }
+        if (sNtpTask) xTaskNotifyGive(sNtpTask);
     }
     return result;
 }
 
 void updateTimezoneTask(void *pvParameters) {
-    // Wait a bit for connection to stabilize before updating timezone
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    (void)pvParameters;
+    for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        // DHCP has already finished (this runs from STA-got-IP). Give DNS a
+        // moment, then drop extra notifies so one connect is one sync.
+        vTaskDelay(pdMS_TO_TICKS(500));
+        while (ulTaskNotifyTake(pdTRUE, 0) > 0) {}
 
-    // Only update timezone if WiFi is still connected
-    if (WiFi.isConnected() && wifiConnected) { updateClockTimezone(); }
-
-    // Clear the task handle before deleting
-    timezoneTaskHandle = NULL;
-    vTaskDelete(NULL);
+        bool ok = false;
+        for (int attempt = 0; attempt < 3 && WiFi.isConnected(); ++attempt) {
+            if (attempt == 2) timeClient.setPoolServerName("162.159.200.1");
+            else timeClient.setPoolServerName("pool.ntp.org");
+            if (attempt) vTaskDelay(pdMS_TO_TICKS(2000));
+            Serial.printf("[NTP] query attempt %d\n", attempt + 1);
+            if (updateClockTimezone()) {
+                ok = true;
+                break;
+            }
+        }
+        timeClient.setPoolServerName("pool.ntp.org");
+        if (WiFi.isConnected()) Serial.println(ok ? "[NTP] clock set" : "[NTP] sync failed");
+    }
 }

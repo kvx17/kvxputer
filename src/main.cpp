@@ -465,6 +465,7 @@ void setup() {
     RAM_LOG("after-storage"); // kvxConfig/kvxConfigPins loaded from FS
     begin_tft();
     init_clock();
+    wifiArmNtpOnConnect();
     init_led();
     RAM_LOG("after-tft-clock-led");
 

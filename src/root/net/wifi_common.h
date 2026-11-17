@@ -112,6 +112,10 @@ bool wifiStartPortalAp(
     wifi_mode_t mode = WIFI_AP
 );
 
+// Register the STA-got-IP hook and the static NTP task. Safe to call more than once.
+// The task stack is static: a heap task created after Wi-Fi init fails once the
+// last contiguous block is held by the driver and the DMA reserve.
+void wifiArmNtpOnConnect();
 void updateTimezoneTask(void *pvParameters);
 
 #endif
