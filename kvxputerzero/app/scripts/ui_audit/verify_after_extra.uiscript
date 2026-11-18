@@ -1,0 +1,65 @@
+# Supplemental after shots: clock, eth link, light Doc/Info, export focus
+wait 200
+theme dark
+wait 80
+
+# Clock via page2 nav: home → page2 → col2 row1
+home
+wait 100
+key 8
+wait 50
+key 8
+wait 80
+# page2 starts at index 12; clock is index 17 = slot 5 = col2 row1
+# from page base focus (slot0): right right down
+key right
+wait 40
+key right
+wait 40
+key down
+wait 60
+shot after_home_clock_selected
+key enter
+wait 300
+shot after_clock_face
+key esc
+wait 80
+
+# Eth link: open ethernet channel menu then first item Link status
+home
+wait 80
+key 8
+wait 60
+key right
+wait 60
+shot after_home_eth_selected
+key enter
+wait 200
+shot after_ethernet_menu2
+# first entry should be Link status
+key enter
+wait 250
+shot after_eth_link
+key esc
+wait 60
+key esc
+wait 80
+
+# Light theme: Doc + Info + home (bg flip check)
+theme light
+wait 150
+home
+wait 120
+shot after_home_light2
+open pcconnect_howto
+wait 150
+shot after_pcconnect_howto_light
+open rf_status
+wait 180
+shot after_rf_status_light
+open ssh_hint
+wait 120
+shot after_ssh_hint_light
+theme dark
+wait 80
+quit

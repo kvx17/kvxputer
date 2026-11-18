@@ -2,6 +2,7 @@
 
 #include "action_bar.h"
 #include "base_viewmodel.h"
+#include "kvx_style.h"
 #include "lvgl.h"
 #include "titlebar.h"
 
@@ -48,6 +49,7 @@ protected:
     lv_color_t pri_color() const;
     lv_color_t sec_color() const;
     lv_color_t bg_color() const;
+    view::KvxTokens tokens() const;
 
 private:
     static bool on_global_key(uint32_t key, const char* key_name, bool long_pressed, void* user_data);

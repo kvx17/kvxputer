@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 struct SDL_Renderer;
@@ -40,6 +41,11 @@ public:
     lv_display_t* display() const;
     bool process_events();
     void bind_dark_mode(lv_subject_t* dark_mode_subject);
+
+    // Deterministic desktop automation (KVX_UI_SCRIPT). Returns false if keypad missing.
+    bool inject_named_key(const std::string& name);
+    bool inject_char(char ch);
+    void inject_text(const std::string& text);
 
 private:
     static void flush_cb(lv_display_t* display, const lv_area_t* area, uint8_t* px_map);

@@ -15,8 +15,7 @@ constexpr std::array<const char*, 5> kKeyLabels = {"4", "5", "6", "7", "8"};
 
 ActionBar::ActionBar(lv_obj_t* parent,
                      app::AssetManager& assets,
-                     lv_color_t bar_color,
-                     lv_color_t accent,
+                     const view::KvxTokens& tokens,
                      std::array<ActionSlot, 5> slots,
                      const char* hint) {
     bool any_action = false;
@@ -31,15 +30,14 @@ ActionBar::ActionBar(lv_obj_t* parent,
     lv_obj_remove_style_all(root_);
     lv_obj_set_size(root_, view::kScreenWidth, view::kActionBarHeight);
     lv_obj_align(root_, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(root_, bar_color, 0);
-    lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
+    view::style_bar(root_, tokens);
     lv_obj_clear_flag(root_, LV_OBJ_FLAG_SCROLLABLE);
 
     auto* rule = lv_obj_create(root_);
     lv_obj_remove_style_all(rule);
     lv_obj_set_size(rule, view::kScreenWidth, 1);
     lv_obj_align(rule, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_color(rule, accent, 0);
+    lv_obj_set_style_bg_color(rule, tokens.accent, 0);
     lv_obj_set_style_bg_opa(rule, LV_OPA_COVER, 0);
 
     if (!any_action) {
@@ -47,7 +45,7 @@ ActionBar::ActionBar(lv_obj_t* parent,
         lv_label_set_text(label, hint && hint[0] ? hint : "Fn + key types");
         auto* font = assets.load_standard_font(11);
         lv_obj_set_style_text_font(label, font ? font : &lv_font_montserrat_12, 0);
-        lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(label, tokens.ink, 0);
         lv_obj_center(label);
         return;
     }
@@ -80,13 +78,13 @@ ActionBar::ActionBar(lv_obj_t* parent,
         auto* key = lv_label_create(button);
         lv_label_set_text(key, kKeyLabels[i]);
         lv_obj_set_style_text_font(key, key_font, 0);
-        lv_obj_set_style_text_color(key, accent, 0);
+        lv_obj_set_style_text_color(key, tokens.accent, 0);
 
         if (slots[i].icon && slots[i].icon[0] != '\0') {
             auto* icon = lv_label_create(button);
             lv_label_set_text(icon, slots[i].icon);
             lv_obj_set_style_text_font(icon, icon_font ? icon_font : &lv_font_montserrat_14, 0);
-            lv_obj_set_style_text_color(icon, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_text_color(icon, tokens.ink, 0);
         }
 
         if (slots[i].on_press) {

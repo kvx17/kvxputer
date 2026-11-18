@@ -4,6 +4,10 @@ After=multi-user.target
 
 [Service]
 Type=simple
+User=pi
+Group=pi
+# DRM + keypad need these groups on Cardputer Zero; pi is normally already a member.
+SupplementaryGroups=video input render spi i2c dialout
 ExecStart=/usr/bin/@PROJECT_NAME@
 Restart=on-failure
 RestartSec=2

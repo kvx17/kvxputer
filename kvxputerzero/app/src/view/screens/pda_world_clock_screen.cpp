@@ -2,6 +2,7 @@
 
 #include "asset_manager.h"
 #include "device_status.h"
+#include "kvx_style.h"
 #include "pda_lib.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -77,6 +78,7 @@ void PdaWorldClockScreen::confirm_set_tz() {
 
 void PdaWorldClockScreen::draw_cities(bool /*full*/) {
     lv_obj_clean(body_);
+    const auto tok = tokens();
     auto* font = assets().load_standard_font(12);
     auto* font14 = assets().load_standard_font(14);
     const bool clock24 = view_model().model().clock24hr();
@@ -85,14 +87,14 @@ void PdaWorldClockScreen::draw_cities(bool /*full*/) {
 
     auto* local = lv_label_create(body_);
     lv_obj_set_style_text_font(local, font14 ? font14 : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(local, pri_color(), 0);
+    lv_obj_set_style_text_color(local, tok.ink, 0);
     lv_label_set_text_fmt(local, "Local  %s%s", tools::pda::format_hm(now, clock24).c_str(),
                           tools::pda::clock_looks_set() ? "" : "  (unset)");
     lv_obj_align(local, LV_ALIGN_TOP_LEFT, 4, 2);
 
     auto* tz = lv_label_create(body_);
     lv_obj_set_style_text_font(tz, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(tz, sec_color(), 0);
+    lv_obj_set_style_text_color(tz, tok.ink_dim, 0);
     lv_label_set_text_fmt(tz, "TZ UTC%+.1f%s", view_model().model().tmz(),
                           view_model().model().dst() ? " DST" : "");
     lv_obj_align(tz, LV_ALIGN_TOP_LEFT, 4, 18);
@@ -100,13 +102,14 @@ void PdaWorldClockScreen::draw_cities(bool /*full*/) {
     if (confirm_tz_) {
         auto* ask = lv_label_create(body_);
         lv_obj_set_style_text_font(ask, font14 ? font14 : &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(ask, sec_color(), 0);
+        lv_obj_set_style_text_color(ask, tok.accent, 0);
         lv_label_set_text_fmt(ask, "Set TZ from %s? Enter=Yes Esc=No", selected.name);
         lv_obj_align(ask, LV_ALIGN_CENTER, 0, 10);
         return;
     }
 
-    constexpr int max_rows = 5;
+    // Leave room for the footer hint under the city list (content ~116px tall).
+    constexpr int max_rows = 4;
     int start = city_;
     if (start > tools::pda::city_count() - max_rows) start = tools::pda::city_count() - max_rows;
     if (start < 0) start = 0;
@@ -117,34 +120,45 @@ void PdaWorldClockScreen::draw_cities(bool /*full*/) {
         const int idx = start + i;
         const auto& c = tools::pda::cities()[idx];
         const auto t = tools::pda::city_tm(c.utc_offset);
-        char name[8];
-        std::snprintf(name, sizeof(name), "%.6s", c.name);
+        char name[12];
+        std::snprintf(name, sizeof(name), "%.10s", c.name);
         std::string line = std::string(name) + " " + tools::pda::format_hm(t, clock24) + " " +
                            tools::pda::format_offset(c.utc_offset);
 
         auto* row = lv_obj_create(body_);
         lv_obj_remove_style_all(row);
         lv_obj_set_size(row, view::kScreenWidth - 8, 16);
-        lv_obj_set_pos(row, 4, 36 + i * 16);
+        lv_obj_set_pos(row, 4, 34 + i * 16);
+        lv_obj_set_style_radius(row, 5, 0);
         lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_opa(row, LV_OPA_COVER, 0);
         const bool hi = (idx == city_);
-        lv_obj_set_style_bg_color(row, hi ? sec_color() : bg_color(), 0);
+        lv_obj_set_style_bg_color(row, hi ? tok.surface_sel : tok.surface, 0);
+        if (hi) {
+            lv_obj_set_style_border_width(row, 1, 0);
+            lv_obj_set_style_border_color(row, tok.accent, 0);
+        } else {
+            lv_obj_set_style_border_width(row, 0, 0);
+        }
         auto* lab = lv_label_create(row);
         lv_label_set_text(lab, line.c_str());
+        lv_label_set_long_mode(lab, LV_LABEL_LONG_DOT);
+        lv_obj_set_width(lab, view::kScreenWidth - 20);
         lv_obj_set_style_text_font(lab, font ? font : &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(lab, hi ? bg_color() : pri_color(), 0);
-        lv_obj_align(lab, LV_ALIGN_LEFT_MID, 2, 0);
+        lv_obj_set_style_text_color(lab, hi ? tok.ink : tok.ink_dim, 0);
+        lv_obj_align(lab, LV_ALIGN_LEFT_MID, 4, 0);
     }
 
     auto* foot = lv_label_create(body_);
     lv_obj_set_style_text_font(foot, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(foot, sec_color(), 0);
-    lv_label_set_text(foot, "OK set TZ  [] face  H 12/24");
-    lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -2);
+    lv_obj_set_style_text_color(foot, tok.ink_dim, 0);
+    lv_label_set_text(foot, "OK set TZ  Z/C face  Y 12/24");
+    lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -1);
 }
 
 void PdaWorldClockScreen::draw_charge() {
     lv_obj_clean(body_);
+    const auto tok = tokens();
     auto* font = assets().load_standard_font(12);
     auto* font28 = assets().load_standard_font(28);
     const bool clock24 = view_model().model().clock24hr();
@@ -162,23 +176,22 @@ void PdaWorldClockScreen::draw_charge() {
 
     auto* date = lv_label_create(body_);
     lv_obj_set_style_text_font(date, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(date, pri_color(), 0);
+    lv_obj_set_style_text_color(date, tok.ink_dim, 0);
     lv_label_set_text(date, date_buf);
     lv_obj_align(date, LV_ALIGN_TOP_MID, 0, 2);
 
     auto* time_l = lv_label_create(body_);
     lv_obj_set_style_text_font(time_l, font28 ? font28 : &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(time_l, pri_color(), 0);
+    lv_obj_set_style_text_color(time_l, tok.ink, 0);
     lv_label_set_text(time_l, tools::pda::format_hms(t, clock24).c_str());
     lv_obj_align(time_l, LV_ALIGN_TOP_LEFT, 8, 18);
 
     auto* pct = lv_label_create(body_);
     lv_obj_set_style_text_font(pct, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(pct, pri_color(), 0);
+    lv_obj_set_style_text_color(pct, tok.accent, 0);
     lv_label_set_text_fmt(pct, "%d%%", bat);
     lv_obj_align(pct, LV_ALIGN_TOP_RIGHT, -6, 22);
 
-    // Mini month calendar
     const int year = t.tm_year + 1900;
     const int month = t.tm_mon + 1;
     const int first = tools::pda::day_of_week(year, month, 1);
@@ -195,37 +208,39 @@ void PdaWorldClockScreen::draw_charge() {
         lv_label_set_text_fmt(lab, "%d", d);
         lv_obj_set_style_text_font(lab, f10 ? f10 : &lv_font_montserrat_14, 0);
         const bool today = (d == t.tm_mday);
-        lv_obj_set_style_text_color(lab, today ? sec_color() : pri_color(), 0);
+        lv_obj_set_style_text_color(lab, today ? tok.accent : tok.ink_dim, 0);
         lv_obj_set_pos(lab, 8 + col * (cw / 2), cal_y + r * ch);
     }
 
-    // Charge bar
     auto* bar_bg = lv_obj_create(body_);
     lv_obj_remove_style_all(bar_bg);
     lv_obj_set_size(bar_bg, view::kScreenWidth - 16, 10);
     lv_obj_align(bar_bg, LV_ALIGN_BOTTOM_MID, 0, -4);
     lv_obj_set_style_radius(bar_bg, 3, 0);
     lv_obj_set_style_border_width(bar_bg, 1, 0);
-    lv_obj_set_style_border_color(bar_bg, pri_color(), 0);
-    lv_obj_set_style_bg_opa(bar_bg, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_color(bar_bg, tok.rule, 0);
+    lv_obj_set_style_bg_color(bar_bg, tok.surface, 0);
+    lv_obj_set_style_bg_opa(bar_bg, LV_OPA_COVER, 0);
 
     auto* bar_fill = lv_obj_create(bar_bg);
     lv_obj_remove_style_all(bar_fill);
     const int fill_w = (view::kScreenWidth - 20) * bat / 100;
     lv_obj_set_size(bar_fill, fill_w > 0 ? fill_w : 1, 6);
     lv_obj_set_pos(bar_fill, 2, 2);
-    lv_obj_set_style_bg_color(bar_fill, pri_color(), 0);
+    lv_obj_set_style_bg_color(bar_fill, tok.accent, 0);
     lv_obj_set_style_bg_opa(bar_fill, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(bar_fill, 2, 0);
 
     auto* foot = lv_label_create(body_);
     lv_obj_set_style_text_font(foot, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(foot, sec_color(), 0);
+    lv_obj_set_style_text_color(foot, tok.ink_dim, 0);
     lv_label_set_text_fmt(foot, "%s  [] face", c.name);
     lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -16);
 }
 
 void PdaWorldClockScreen::draw_digital() {
     lv_obj_clean(body_);
+    const auto tok = tokens();
     auto* font28 = assets().load_standard_font(28);
     auto* font = assets().load_standard_font(12);
     const bool clock24 = view_model().model().clock24hr();
@@ -236,19 +251,21 @@ void PdaWorldClockScreen::draw_digital() {
     lv_obj_remove_style_all(border);
     lv_obj_set_size(border, view::kScreenWidth - 16, view::kContentHeight - 40);
     lv_obj_align(border, LV_ALIGN_TOP_MID, 0, 4);
+    lv_obj_set_style_radius(border, 8, 0);
     lv_obj_set_style_border_width(border, 1, 0);
-    lv_obj_set_style_border_color(border, pri_color(), 0);
-    lv_obj_set_style_bg_opa(border, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_color(border, tok.rule, 0);
+    lv_obj_set_style_bg_color(border, tok.surface, 0);
+    lv_obj_set_style_bg_opa(border, LV_OPA_COVER, 0);
 
     auto* time_l = lv_label_create(body_);
     lv_obj_set_style_text_font(time_l, font28 ? font28 : &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(time_l, pri_color(), 0);
+    lv_obj_set_style_text_color(time_l, tok.ink, 0);
     lv_label_set_text(time_l, tools::pda::format_hms(t, clock24).c_str());
     lv_obj_align(time_l, LV_ALIGN_CENTER, 0, -4);
 
     auto* foot = lv_label_create(body_);
     lv_obj_set_style_text_font(foot, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(foot, sec_color(), 0);
+    lv_obj_set_style_text_color(foot, tok.ink_dim, 0);
     lv_label_set_text_fmt(foot, "%s  [] face", c.name);
     lv_obj_align(foot, LV_ALIGN_BOTTOM_MID, 0, -2);
 }
@@ -261,7 +278,6 @@ void PdaWorldClockScreen::redraw(bool full) {
     if (!full && std::strcmp(key, last_key_) == 0) return;
     std::strncpy(last_key_, key, sizeof(last_key_) - 1);
 
-    // Update header status with city name via recreate is heavy; faces draw their own chrome.
     if (face_ == 0) draw_cities(full);
     else if (face_ == 1) draw_charge();
     else draw_digital();
@@ -281,11 +297,12 @@ bool PdaWorldClockScreen::handle_key(uint32_t key) {
         }
         return true;
     }
-    if (key == '[') {
+    // Faces: Z/C. Cities: F/X. 12/24: Y (Sym+Y is =).
+    if (key == LV_KEY_LEFT || key == LV_KEY_PREV || key == '[') {
         cycle_face(-1);
         return true;
     }
-    if (key == ']') {
+    if (key == LV_KEY_RIGHT || key == LV_KEY_NEXT || key == ']') {
         cycle_face(1);
         return true;
     }
@@ -301,7 +318,7 @@ bool PdaWorldClockScreen::handle_key(uint32_t key) {
         confirm_set_tz();
         return true;
     }
-    if (key == 'h' || key == 'H') {
+    if (key == 'y' || key == 'Y' || key == 'h' || key == 'H') {
         view_model().model().set_clock24hr(!view_model().model().clock24hr());
         view_model().persist_pda_config();
         last_key_[0] = '\0';

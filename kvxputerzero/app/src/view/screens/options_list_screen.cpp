@@ -1,6 +1,7 @@
 #include "options_list_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -17,27 +18,19 @@ OptionsListScreen::OptionsListScreen(viewmodel::BaseViewModel& view_model,
 void OptionsListScreen::build() {
     make_header(content(), title_.c_str());
 
-    list_ = lv_obj_create(content());
-    lv_obj_remove_style_all(list_);
-    lv_obj_set_size(list_, view::kScreenWidth, view::kContentHeight - 18);
-    lv_obj_align(list_, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_set_flex_flow(list_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(list_, 2, 0);
-    lv_obj_set_style_pad_all(list_, 4, 0);
-    lv_obj_add_flag(list_, LV_OBJ_FLAG_SCROLLABLE);
+    const auto tok = tokens();
+    list_ = view::make_list(content(), 18);
 
     auto* font = assets().load_standard_font(14);
+    auto* icon_font = assets().load_font("Phosphor-Fill.ttf", 14);
     for (size_t i = 0; i < entries_.size(); ++i) {
-        auto* row = lv_obj_create(list_);
-        lv_obj_remove_style_all(row);
-        lv_obj_set_size(row, view::kScreenWidth - 8, 20);
-        lv_obj_set_style_radius(row, 4, 0);
-        lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-
-        auto* label = lv_label_create(row);
-        lv_label_set_text(label, entries_[i].label.c_str());
-        lv_obj_set_style_text_font(label, font ? font : &lv_font_montserrat_14, 0);
-        lv_obj_align(label, LV_ALIGN_LEFT_MID, 6, 0);
+        auto* row = view::make_list_row(list_,
+                                        entries_[i].label.c_str(),
+                                        entries_[i].icon,
+                                        font ? font : &lv_font_montserrat_14,
+                                        icon_font,
+                                        tok,
+                                        entries_[i].swatch);
         rows_.push_back(row);
     }
     refresh();
@@ -48,13 +41,9 @@ void OptionsListScreen::refresh() {
     if (selected_ < 0) selected_ = 0;
     if (selected_ >= static_cast<int>(entries_.size())) selected_ = static_cast<int>(entries_.size()) - 1;
 
+    const auto tok = tokens();
     for (size_t i = 0; i < rows_.size(); ++i) {
-        const bool on = static_cast<int>(i) == selected_;
-        lv_obj_set_style_bg_color(rows_[i], on ? pri_color() : lv_color_hex(0x1A1A22), 0);
-        auto* label = lv_obj_get_child(rows_[i], 0);
-        if (label) {
-            lv_obj_set_style_text_color(label, on ? lv_color_hex(0xFFFFFF) : sec_color(), 0);
-        }
+        view::apply_row_state(rows_[i], static_cast<int>(i) == selected_, tok);
     }
     if (!rows_.empty()) {
         lv_obj_scroll_to_view(rows_[static_cast<size_t>(selected_)], LV_ANIM_OFF);

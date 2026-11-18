@@ -1,0 +1,95 @@
+#pragma once
+
+#include "kvx_screen.h"
+
+#include <atomic>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+namespace screen {
+
+// One captured network (or BLE device) shown as a table row.
+struct WardriveRow {
+    std::string key;
+    std::string name;
+    std::string channel;
+    std::string rssi;
+    std::string mark;
+    std::vector<std::pair<std::string, std::string>> details;
+};
+
+// Live wardrive table. The worker keeps scanning; Enter or a row click expands that network.
+class WardriveScreen final : public KvxScreen {
+public:
+    using RowsFn = std::function<void(std::vector<WardriveRow>)>;
+    using StatusFn = std::function<void(const std::string&)>;
+    using WorkerFn = std::function<void(std::atomic<bool>& cancel, const RowsFn& set_rows, const StatusFn& set_status)>;
+
+    WardriveScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
+                   std::string name_column, WorkerFn worker);
+    ~WardriveScreen() override;
+
+    void flush_pending();
+
+protected:
+    void build() override;
+    bool handle_key(uint32_t key) override;
+    std::array<view::widgets::ActionSlot, 5> nav_actions() override;
+
+private:
+    struct Cols {
+        lv_obj_t* row{nullptr};
+        lv_obj_t* name{nullptr};
+        lv_obj_t* channel{nullptr};
+        lv_obj_t* rssi{nullptr};
+        lv_obj_t* mark{nullptr};
+    };
+
+    static void on_row_clicked(lv_event_t* event);
+    Cols make_cols(lv_obj_t* parent, int width);
+    void paint_row(const Cols& cols, const WardriveRow* data, bool selected);
+    void refresh_table();
+    void move_selection(int delta);
+    void expand_selected();
+    void collapse();
+    void rebuild_detail();
+    void leave();
+    void go_home();
+    void stop_worker();
+
+    std::string title_;
+    std::string name_column_;
+    WorkerFn worker_;
+
+    lv_obj_t* status_label_{nullptr};
+    lv_obj_t* header_{nullptr};
+    lv_obj_t* list_{nullptr};
+    lv_obj_t* empty_label_{nullptr};
+    lv_obj_t* detail_{nullptr};
+    std::vector<Cols> rows_ui_;
+    std::vector<std::string> detail_labels_;
+    std::vector<lv_obj_t*> detail_values_;
+    lv_timer_t* poll_timer_{nullptr};
+    const lv_font_t* font_{nullptr};
+
+    std::atomic<bool> cancel_{false};
+    std::thread worker_thread_;
+    std::mutex mu_;
+    std::string status_;
+    std::vector<WardriveRow> pending_rows_;
+    bool rows_dirty_{false};
+    bool worker_done_{false};
+
+    std::vector<WardriveRow> rows_;
+    int selected_{0};
+    bool selection_pinned_{false};
+    std::string selected_key_;
+    bool expanded_{false};
+    std::string expanded_key_;
+};
+
+} // namespace screen

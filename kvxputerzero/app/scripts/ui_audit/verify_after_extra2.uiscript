@@ -1,0 +1,66 @@
+# Eth link + Charge calendar + light Info (with esc between opens)
+wait 200
+theme dark
+wait 80
+
+# Ethernet menu: page1 col1 (ethernet is index 9 = page1 slot3 = col0 row1? )
+# page0: wifi,netops,rf,discovery,ble,nrf24 (0-5)
+# page1: lora,fm,ir,ethernet,usb,gps (6-11)
+# ethernet = index 9 = page1 slot 3 = col0 row1
+home
+wait 100
+key 8
+wait 80
+key down
+wait 60
+shot after_home_eth_selected2
+key enter
+wait 200
+shot after_ethernet_menu_ok
+# first item Link status
+key enter
+wait 250
+shot after_eth_link_ok
+key esc
+wait 60
+key esc
+wait 80
+
+# Charge face (calendar chrome) — page3 first tile
+home
+wait 80
+key 8
+wait 40
+key 8
+wait 40
+key 8
+wait 100
+shot after_home_charge_selected
+key enter
+wait 300
+shot after_charge_face
+key esc
+wait 80
+
+# Light theme samples with Esc between
+theme light
+wait 200
+home
+wait 150
+shot after_home_light_ok
+open rf_status
+wait 200
+shot after_rf_status_light_ok
+key esc
+wait 80
+open ssh_hint
+wait 150
+shot after_ssh_hint_light_ok
+key esc
+wait 80
+open wifi_ap_info
+wait 200
+shot after_wifi_ap_info_light
+theme dark
+wait 80
+quit

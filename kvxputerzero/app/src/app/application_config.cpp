@@ -90,7 +90,8 @@ bool load_application_config(const std::string& path,
         }
 
         const auto key = lowercase(trim(line.substr(0, separator)));
-        if (section == "application" && key == "dark_mode") {
+        // Colors and dark_mode are stored under [theme]. Older files used [application].
+        if ((section == "theme" || section == "application") && key == "dark_mode") {
             if (!parse_bool(line.substr(separator + 1), config.dark_mode)) {
                 error = "invalid dark_mode value at line " + std::to_string(line_number);
                 return false;

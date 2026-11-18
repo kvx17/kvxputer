@@ -29,6 +29,7 @@ bool last_key_pressed = false;
 bool nav_shortcut_mode = false;
 bool fn_held = false;
 bool shift_held = false;
+bool sym_held = false;
 uint32_t pressed_key = 0;
 uint32_t press_started_at = 0;
 bool long_press_sent = false;
@@ -230,22 +231,53 @@ uint32_t map_evdev_key(uint16_t code) {
         case KEY_SYSRQ:
             return kKeyPrintScreen;
         case KEY_HELP:
-        case KEY_F1:
             return kKeyHelp;
-        // Cardputer-style ; , . / navigation aliases.
+        // Hardware Sym layer may emit these directly (tca8418 rewrite).
         case KEY_SEMICOLON:
-            return LV_KEY_UP;
+            return ';';
         case KEY_COMMA:
-            return LV_KEY_LEFT;
+            return ',';
         case KEY_DOT:
-            return LV_KEY_DOWN;
+            return '.';
         case KEY_SLASH:
-            return LV_KEY_RIGHT;
+            return '/';
+        case KEY_APOSTROPHE:
+            return '\'';
+        case KEY_GRAVE:
+            return '`';
+        case KEY_MINUS:
+            return '-';
+        case KEY_EQUAL:
+            return '=';
+        case KEY_LEFTBRACE:
+            return '[';
+        case KEY_RIGHTBRACE:
+            return ']';
+        case KEY_BACKSLASH:
+            return '\\';
+        // Sym+1..8 on Zero often arrive as KEY_F13..KEY_F20 (= !@#$%^&*).
+        case KEY_F13:
+            return '!';
+        case KEY_F14:
+            return '@';
+        case KEY_F15:
+            return '#';
+        case KEY_F16:
+            return '$';
+        case KEY_F17:
+            return '%';
+        case KEY_F18:
+            return '^';
+        case KEY_F19:
+            return '&';
+        case KEY_F20:
+            return '*';
+        case KEY_F1:
+            return kKeyF1;
         default:
             break;
     }
 
-    // Alphanumeric / punctuation for typing and WASD nav.
     if (code >= KEY_1 && code <= KEY_9) {
         return static_cast<uint32_t>('1' + (code - KEY_1));
     }
@@ -255,24 +287,7 @@ uint32_t map_evdev_key(uint16_t code) {
     if (code >= KEY_A && code <= KEY_Z) {
         return static_cast<uint32_t>('a' + (code - KEY_A));
     }
-    switch (code) {
-        case KEY_MINUS:
-            return '-';
-        case KEY_EQUAL:
-            return '=';
-        case KEY_LEFTBRACE:
-            return '[';
-        case KEY_RIGHTBRACE:
-            return ']';
-        case KEY_APOSTROPHE:
-            return '\'';
-        case KEY_GRAVE:
-            return '`';
-        case KEY_BACKSLASH:
-            return '\\';
-        default:
-            return 0;
-    }
+    return 0;
 }
 
 bool has_key_bit(const unsigned long* key_bits, int code) {
@@ -322,10 +337,12 @@ uint32_t resolve_evdev_key(uint16_t code) {
 
     const auto mapped = map_evdev_key(code);
     if (mapped >= 'a' && mapped <= 'z') {
-        return resolve_printed_key(static_cast<char>(mapped), 0, fn_held, shift_held, false);
+        const char base = static_cast<char>(mapped);
+        return resolve_printed_key(base, sym_char(base), fn_held, shift_held, sym_held);
     }
     if (mapped >= '0' && mapped <= '9') {
-        return resolve_printed_key(static_cast<char>(mapped), 0, fn_held, false, false);
+        const char base = static_cast<char>(mapped);
+        return resolve_printed_key(base, sym_char(base), fn_held, false, sym_held);
     }
     return mapped;
 }
@@ -361,6 +378,14 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
         }
         if (input.code == KEY_LEFTSHIFT || input.code == KEY_RIGHTSHIFT) {
             shift_held = input.value != 0;
+            continue;
+        }
+        // Sym may appear as Compose/Meta/Alt/Caps. Many Sym+chords are also
+        // rewritten by the tca8418 keymap to KEY_DOT / KEY_F13… (no modifier).
+        if (input.code == KEY_COMPOSE || input.code == KEY_LEFTMETA ||
+            input.code == KEY_RIGHTMETA || input.code == KEY_CAPSLOCK ||
+            input.code == KEY_LEFTALT || input.code == KEY_RIGHTALT) {
+            sym_held = input.value != 0;
             continue;
         }
         if (input.value == 2) {
@@ -666,6 +691,77 @@ const char* describe_key(uint32_t key) {
     return buffer;
 }
 
+char sym_char(char base) {
+    switch (base) {
+        case '1':
+            return '!';
+        case '2':
+            return '@';
+        case '3':
+            return '#';
+        case '4':
+            return '$';
+        case '5':
+            return '%';
+        case '6':
+            return '^';
+        case '7':
+            return '&';
+        case '8':
+            return '*';
+        case '9':
+            return '(';
+        case '0':
+            return ')';
+        case 'q':
+            return '~';
+        case 'w':
+            return '`';
+        case 'e':
+            return '_';
+        case 'r':
+            return '-';
+        case 't':
+            return '+';
+        case 'y':
+            return '=';
+        case 'u':
+            return '[';
+        case 'i':
+            return ']';
+        case 'o':
+            return '{';
+        case 'p':
+            return '}';
+        case 'a':
+            return ';';
+        case 's':
+            return ':';
+        case 'd':
+            return '\'';
+        case 'g':
+            return '"';
+        case 'h':
+            return '<';
+        case 'j':
+            return '>';
+        case 'k':
+            return '\\';
+        case 'l':
+            return '|';
+        case 'v':
+            return ',';
+        case 'b':
+            return '.';
+        case 'n':
+            return '/';
+        case 'm':
+            return '?';
+        default:
+            return 0;
+    }
+}
+
 uint32_t fn_legend(char base) {
     switch (base) {
         case '1':
@@ -737,24 +833,49 @@ uint32_t fn_legend(char base) {
 
 uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool symbol_mode) {
     const bool letter = base >= 'a' && base <= 'z';
+    const bool digit = base >= '0' && base <= '9';
     const auto legend = fn_legend(base);
+    const char punct = (sym != 0) ? sym : sym_char(base);
+    const bool arrow = legend == LV_KEY_UP || legend == LV_KEY_DOWN || legend == LV_KEY_LEFT ||
+                       legend == LV_KEY_RIGHT;
 
-    if (fn_held && letter) {
+    auto letter_out = [&]() -> uint32_t {
+        if (!letter) return 0;
         return static_cast<uint32_t>(shift ? (base - 'a' + 'A') : base);
+    };
+
+    // Digits: bare stays 0-9 (menu row). Sym → !@#. Fn → F1-F10.
+    if (digit) {
+        if (fn_held && legend != 0) return legend;
+        if (symbol_mode && punct != 0) {
+            return static_cast<uint32_t>(static_cast<unsigned char>(punct));
+        }
+        return static_cast<uint32_t>(static_cast<unsigned char>(base));
     }
-    if (symbol_mode && sym != 0) {
-        return static_cast<uint32_t>(static_cast<unsigned char>(sym));
+
+    if (letter) {
+        // Sym+key → punctuation printed on the keycap (B→. N→/ …).
+        if (symbol_mode && punct != 0) {
+            return static_cast<uint32_t>(static_cast<unsigned char>(punct));
+        }
+        // Fn+key: orange legend (Help, Insert, media…). Fn+arrow types the letter.
+        if (fn_held) {
+            if (arrow || legend == 0) {
+                return letter_out();
+            }
+            return legend;
+        }
+        // Bare F/Z/X/C stay arrows for navigation.
+        if (arrow) {
+            return legend;
+        }
+        // Bare letter keycodes type the letter. Hardware Sym chords that already
+        // arrive as KEY_DOT / KEY_COMMA / F13… never reach this branch.
+        return letter_out();
     }
-    // Letters take their orange Fn legend as the bare key. Digits stay digits
-    // so 4-8 remain the menu row; Fn+digit still selects F1-F10.
-    if (letter && legend != 0 && !fn_held) {
-        return legend;
-    }
-    if (fn_held && legend != 0) {
-        return legend;
-    }
+
     if (shift && letter) {
-        return static_cast<uint32_t>(base - 'a' + 'A');
+        return letter_out();
     }
     if (base == 0) {
         return 0;

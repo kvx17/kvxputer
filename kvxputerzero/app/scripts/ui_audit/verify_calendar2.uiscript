@@ -1,0 +1,35 @@
+# Minimal: Charge face only from cold boot (index 0)
+wait 300
+shot after_cal2_boot_home
+key 8
+wait 80
+shot after_cal2_page1
+key 8
+wait 80
+shot after_cal2_page2
+key 8
+wait 100
+shot after_cal2_page3
+key enter
+wait 400
+shot after_cal2_charge
+key esc
+wait 100
+# Clock from page3: skip back once to page2, then to clock tile
+key 4
+wait 80
+shot after_cal2_page2b
+key right
+wait 40
+key right
+wait 40
+key down
+wait 60
+shot after_cal2_clock_sel
+key enter
+wait 300
+shot after_cal2_clock_dig
+key left
+wait 300
+shot after_cal2_clock_cal
+quit

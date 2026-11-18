@@ -123,12 +123,26 @@ uint32_t BaseModel::sec_color() const {
     return sec_color_;
 }
 
+uint32_t BaseModel::bg_color() const {
+    return bg_color_;
+}
+
 void BaseModel::set_pri_color(uint32_t rgb) {
     pri_color_ = rgb & 0xFFFFFFu;
 }
 
 void BaseModel::set_sec_color(uint32_t rgb) {
     sec_color_ = rgb & 0xFFFFFFu;
+}
+
+void BaseModel::set_bg_color(uint32_t rgb) {
+    bg_color_ = rgb & 0xFFFFFFu;
+}
+
+void BaseModel::reset_colors() {
+    pri_color_ = kPriDefault;
+    sec_color_ = kSecFrom565;
+    bg_color_ = kBgDefault;
 }
 
 int BaseModel::timer_seconds() const {
@@ -139,6 +153,33 @@ void BaseModel::set_timer_seconds(int seconds) {
     if (seconds < 1) seconds = 1;
     if (seconds > 36000) seconds = 36000;
     timer_seconds_ = seconds;
+}
+
+int BaseModel::dim_seconds() const {
+    return dim_seconds_;
+}
+
+void BaseModel::set_dim_seconds(int seconds) {
+    if (seconds != 0 && seconds != 15 && seconds != 30 && seconds != 60) seconds = 0;
+    dim_seconds_ = seconds;
+}
+
+bool BaseModel::sound_enabled() const {
+    return sound_enabled_;
+}
+
+void BaseModel::set_sound_enabled(bool enabled) {
+    sound_enabled_ = enabled;
+}
+
+int BaseModel::sound_volume() const {
+    return sound_volume_;
+}
+
+void BaseModel::set_sound_volume(int volume) {
+    if (volume < 0) volume = 0;
+    if (volume > 100) volume = 100;
+    sound_volume_ = volume;
 }
 
 const std::string& BaseModel::work_input() const {
@@ -370,6 +411,9 @@ void BaseModel::load_user_config() {
     std::ifstream in(path);
     if (!in) {
         dark_mode_ = true;
+        pri_color_ = kPriDefault;
+        sec_color_ = kSecFrom565;
+        bg_color_ = kBgDefault;
         return;
     }
     std::string line;
@@ -390,9 +434,23 @@ void BaseModel::load_user_config() {
             if (key == "dark_mode") {
                 dark_mode_ = (val == "yes" || val == "true" || val == "1");
             } else if (key == "pri_color") {
-                pri_color_ = parse_hex_rgb(val, kPriFrom565);
+                pri_color_ = parse_hex_rgb(val, kPriDefault);
             } else if (key == "sec_color") {
                 sec_color_ = parse_hex_rgb(val, kSecFrom565);
+            } else if (key == "bg_color") {
+                bg_color_ = parse_hex_rgb(val, kBgDefault);
+            } else if (key == "dim_seconds") {
+                try {
+                    set_dim_seconds(std::stoi(val));
+                } catch (...) {
+                }
+            } else if (key == "sound_enabled") {
+                sound_enabled_ = (val == "yes" || val == "true" || val == "1");
+            } else if (key == "sound_volume") {
+                try {
+                    set_sound_volume(std::stoi(val));
+                } catch (...) {
+                }
             }
         }
         if (section == "pda" || section.empty()) {
@@ -437,11 +495,15 @@ void BaseModel::save_user_config() const {
     std::ofstream out(path);
     if (!out) return;
     out << "[application]\n";
-    out << "dark_mode=" << (dark_mode_ ? "yes" : "no") << "\n";
     out << "[theme]\n";
+    out << "dark_mode=" << (dark_mode_ ? "yes" : "no") << "\n";
     out << "pri_color=0x" << std::hex << pri_color_ << "\n";
     out << "sec_color=0x" << sec_color_ << "\n";
+    out << "bg_color=0x" << bg_color_ << "\n";
     out << std::dec;
+    out << "dim_seconds=" << dim_seconds_ << "\n";
+    out << "sound_enabled=" << (sound_enabled_ ? "yes" : "no") << "\n";
+    out << "sound_volume=" << sound_volume_ << "\n";
     out << "[pda]\n";
     out << "tmz=" << tmz_ << "\n";
     out << "dst=" << (dst_ ? "yes" : "no") << "\n";
@@ -453,6 +515,30 @@ void BaseModel::save_user_config() const {
         out << static_cast<int>(pda_key_bind_[static_cast<size_t>(i)]);
     }
     out << "\n";
+}
+
+ToolId BaseModel::active_tool_id() const {
+    return active_tool_id_;
+}
+
+void BaseModel::set_active_tool_id(ToolId id) {
+    active_tool_id_ = id;
+}
+
+const std::string& BaseModel::tool_param() const {
+    return tool_param_;
+}
+
+void BaseModel::set_tool_param(std::string value) {
+    tool_param_ = std::move(value);
+}
+
+const std::string& BaseModel::discovery_filter() const {
+    return discovery_filter_;
+}
+
+void BaseModel::set_discovery_filter(std::string value) {
+    discovery_filter_ = std::move(value);
 }
 
 } // namespace model

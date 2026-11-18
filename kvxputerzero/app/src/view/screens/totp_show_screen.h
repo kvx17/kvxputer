@@ -15,6 +15,7 @@ public:
 protected:
     void build() override;
     bool handle_key(uint32_t key) override;
+    std::array<view::widgets::ActionSlot, 5> nav_actions() override;
 
 private:
     static void on_tick(lv_timer_t* timer);
@@ -22,7 +23,9 @@ private:
     void move_account(int delta);
 
     std::vector<tools::totp::Account> accounts_;
-    lv_obj_t* body_{nullptr};
+    lv_obj_t* name_{nullptr};
+    lv_obj_t* code_{nullptr};
+    lv_obj_t* meta_{nullptr};
     lv_timer_t* tick_{nullptr};
 };
 

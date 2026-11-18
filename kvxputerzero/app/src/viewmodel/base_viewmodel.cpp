@@ -1,5 +1,6 @@
 #include "base_viewmodel.h"
 
+#include <cstdio>
 #include <ctime>
 
 namespace viewmodel {
@@ -20,6 +21,7 @@ BaseViewModel::BaseViewModel()
       menu_index_subject_(model_.menu_index()),
       pri_color_subject_(static_cast<int>(model_.pri_color())),
       sec_color_subject_(static_cast<int>(model_.sec_color())),
+      bg_color_subject_(static_cast<int>(model_.bg_color())),
       counter_subject_(0),
       bold_text_subject_(false),
       info_visible_subject_(false),
@@ -59,6 +61,10 @@ lv_subject_t* BaseViewModel::sec_color_subject() {
     return sec_color_subject_.native();
 }
 
+lv_subject_t* BaseViewModel::bg_color_subject() {
+    return bg_color_subject_.native();
+}
+
 lv_subject_t* BaseViewModel::counter_subject() {
     return counter_subject_.native();
 }
@@ -81,14 +87,21 @@ bool BaseViewModel::is_dark_mode() const {
 
 void BaseViewModel::set_dark_mode(bool enabled) {
     model_.set_dark_mode(enabled);
+    // KvxScreens paint from pri/sec/bg tokens, not LVGL's dark flag alone.
+    if (enabled) {
+        if (model_.bg_color() == 0xFFFFFF || model_.bg_color() == 0xF0F0F0 ||
+            model_.bg_color() == 0xF5F5F5) {
+            model_.set_bg_color(model::kBgDefault);
+        }
+    } else if (model_.bg_color() == 0x000000 || model_.bg_color() == model::kBgDefault) {
+        model_.set_bg_color(0xF0F0F0);
+    }
     model_.save_user_config();
     publish_all();
 }
 
 void BaseViewModel::toggle_dark_mode() {
-    model_.toggle_dark_mode();
-    model_.save_user_config();
-    publish_all();
+    set_dark_mode(!model_.dark_mode());
 }
 
 model::AppPage BaseViewModel::current_page() const {
@@ -114,6 +127,9 @@ void BaseViewModel::go_back() {
         break;
     case model::AppPage::EngCalcWork:
         show_page(model::AppPage::EngCalcMenu);
+        break;
+    case model::AppPage::ColorHex:
+        show_page(model::AppPage::ColorPicker);
         break;
     case model::AppPage::ColorPicker:
     case model::AppPage::About:
@@ -158,18 +174,58 @@ void BaseViewModel::go_back() {
     case model::AppPage::PdaCalendar:
     case model::AppPage::PdaWorldClock:
     case model::AppPage::PdaRebind:
-    case model::AppPage::PdaStockCalc:
         show_page(model::AppPage::PdaHub);
+        break;
+    case model::AppPage::Calculator:
+        if (model_.pda_path() == "__from_pda__") {
+            model_.set_pda_path("");
+            show_page(model::AppPage::PdaHub);
+        } else {
+            show_page(model::AppPage::ChannelMenu);
+        }
+        break;
+    case model::AppPage::Brightness:
+    case model::AppPage::DimTime:
+    case model::AppPage::SoundMenu:
+    case model::AppPage::PowerMenu:
+        show_page(model::AppPage::ConfigMenu);
         break;
     case model::AppPage::PdaHub:
         show_page(model::AppPage::ChannelMenu);
         break;
+    case model::AppPage::ClockSubMenu:
+        show_page(model::AppPage::ClockFace);
+        break;
     case model::AppPage::Timer:
         if (model_.current_channel().kind == model::ChannelKind::ClockFill) {
-            show_page(model::AppPage::ChannelGrid);
+            show_page(model::AppPage::ClockSubMenu);
         } else {
             show_page(model::AppPage::ChannelMenu);
         }
+        break;
+    case model::AppPage::ClockFace:
+    case model::AppPage::ChargeFace:
+        show_page(model::AppPage::ChannelGrid);
+        break;
+    case model::AppPage::Matrix:
+        show_page(model::AppPage::ChannelMenu);
+        break;
+    case model::AppPage::ToolRun:
+    case model::AppPage::ToolPrompt: {
+        // Nested tool steps store stage in tool_param; Esc returns to the channel tool menu
+        // (or Tools / Discovery), not the previous sub-step.
+        if (model_.current_channel().kind == model::ChannelKind::DiscoveryFill) {
+            show_page(model::AppPage::Discovery);
+        } else if (model_.current_channel().kind == model::ChannelKind::ToolsFill) {
+            show_page(model::AppPage::ChannelMenu);
+        } else {
+            show_page(model::AppPage::ToolMenu);
+        }
+        break;
+    }
+    case model::AppPage::ToolMenu:
+    case model::AppPage::Discovery:
+        show_page(model::AppPage::ChannelGrid);
         break;
     case model::AppPage::CodecMenu:
     case model::AppPage::EngCalcMenu:
@@ -217,13 +273,57 @@ void BaseViewModel::open_selected_channel() {
         show_page(model::AppPage::ConfigMenu);
         break;
     case model::ChannelKind::ClockFill:
-        show_page(model::AppPage::Timer);
+        show_page(model::AppPage::ClockFace);
+        break;
+    case model::ChannelKind::ChargeFill:
+        show_page(model::AppPage::ChargeFace);
+        break;
+    case model::ChannelKind::ChannelFill:
+        open_tool_menu();
+        break;
+    case model::ChannelKind::DiscoveryFill:
+        model_.set_discovery_filter("");
+        open_discovery();
         break;
     case model::ChannelKind::ComingSoon:
     case model::ChannelKind::UseStock:
         show_page(model::AppPage::Placeholder);
         break;
     }
+}
+
+void BaseViewModel::open_tool_menu() {
+    show_page(model::AppPage::ToolMenu);
+}
+
+void BaseViewModel::open_tool(model::ToolId id, std::string param) {
+    if (id == model::ToolId::Calculator) {
+        open_calculator();
+        return;
+    }
+    model_.set_active_tool_id(id);
+    model_.set_tool_param(std::move(param));
+    show_page(model::AppPage::ToolRun);
+}
+
+void BaseViewModel::open_discovery() {
+    show_page(model::AppPage::Discovery);
+}
+
+model::ToolId BaseViewModel::active_tool_id() const {
+    return model_.active_tool_id();
+}
+
+const std::string& BaseViewModel::tool_param() const {
+    return model_.tool_param();
+}
+
+const std::string& BaseViewModel::discovery_filter() const {
+    return model_.discovery_filter();
+}
+
+void BaseViewModel::set_discovery_filter(std::string value) {
+    model_.set_discovery_filter(std::move(value));
 }
 
 int BaseViewModel::menu_index() const {
@@ -265,6 +365,10 @@ void BaseViewModel::open_timer() {
     show_page(model::AppPage::Timer);
 }
 
+void BaseViewModel::open_matrix() {
+    show_page(model::AppPage::Matrix);
+}
+
 void BaseViewModel::open_config_menu() {
     show_page(model::AppPage::ConfigMenu);
 }
@@ -274,8 +378,30 @@ void BaseViewModel::open_color_picker(model::ColorTarget target) {
     show_page(model::AppPage::ColorPicker);
 }
 
+void BaseViewModel::open_color_hex() {
+    char buf[16];
+    uint32_t rgb = model_.pri_color();
+    if (model_.color_target() == model::ColorTarget::Accent) {
+        rgb = model_.sec_color();
+    } else if (model_.color_target() == model::ColorTarget::Background) {
+        rgb = model_.bg_color();
+    }
+    std::snprintf(buf, sizeof(buf), "%06X", rgb & 0xFFFFFFu);
+    model_.set_work_input(buf);
+    model_.set_work_output("");
+    show_page(model::AppPage::ColorHex);
+}
+
 void BaseViewModel::open_about() {
     show_page(model::AppPage::About);
+}
+
+void BaseViewModel::reset_colors() {
+    model_.reset_colors();
+    pri_color_subject_.set(static_cast<int>(model_.pri_color()));
+    sec_color_subject_.set(static_cast<int>(model_.sec_color()));
+    bg_color_subject_.set(static_cast<int>(model_.bg_color()));
+    persist_theme();
 }
 
 void BaseViewModel::open_passgen() {
@@ -445,7 +571,29 @@ void BaseViewModel::open_pda_rebind() {
 }
 
 void BaseViewModel::open_pda_stock_calc() {
-    show_page(model::AppPage::PdaStockCalc);
+    model_.set_pda_path("__from_pda__");
+    show_page(model::AppPage::Calculator);
+}
+
+void BaseViewModel::open_calculator() {
+    model_.set_pda_path("");
+    show_page(model::AppPage::Calculator);
+}
+
+void BaseViewModel::open_brightness() {
+    show_page(model::AppPage::Brightness);
+}
+
+void BaseViewModel::open_dim_time() {
+    show_page(model::AppPage::DimTime);
+}
+
+void BaseViewModel::open_sound_menu() {
+    show_page(model::AppPage::SoundMenu);
+}
+
+void BaseViewModel::open_power_menu() {
+    show_page(model::AppPage::PowerMenu);
 }
 
 void BaseViewModel::persist_pda_config() {
@@ -479,6 +627,10 @@ uint32_t BaseViewModel::sec_color() const {
     return model_.sec_color();
 }
 
+uint32_t BaseViewModel::bg_color() const {
+    return model_.bg_color();
+}
+
 void BaseViewModel::set_pri_color(uint32_t rgb) {
     model_.set_pri_color(rgb);
     pri_color_subject_.set(static_cast<int>(model_.pri_color()));
@@ -487,6 +639,11 @@ void BaseViewModel::set_pri_color(uint32_t rgb) {
 void BaseViewModel::set_sec_color(uint32_t rgb) {
     model_.set_sec_color(rgb);
     sec_color_subject_.set(static_cast<int>(model_.sec_color()));
+}
+
+void BaseViewModel::set_bg_color(uint32_t rgb) {
+    model_.set_bg_color(rgb);
+    bg_color_subject_.set(static_cast<int>(model_.bg_color()));
 }
 
 void BaseViewModel::persist_theme() {
@@ -613,6 +770,7 @@ void BaseViewModel::publish_all() {
     menu_index_subject_.set(model_.menu_index());
     pri_color_subject_.set(static_cast<int>(model_.pri_color()));
     sec_color_subject_.set(static_cast<int>(model_.sec_color()));
+    bg_color_subject_.set(static_cast<int>(model_.bg_color()));
 }
 
 } // namespace viewmodel

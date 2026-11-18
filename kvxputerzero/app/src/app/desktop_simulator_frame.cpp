@@ -18,6 +18,9 @@
 #include <png.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <string>
 #include <vector>
 
 namespace app {
@@ -326,6 +329,48 @@ bool DesktopSimulatorFrame::process_events() {
     while (SDL_PollEvent(&event)) {
         handle_event(event, running);
     }
+
+    // Desktop debug: /tmp/kvx_inject_keys — one token per frame (Esc Enter Sym letter/digit).
+    if (keypad_) {
+        std::ifstream inject("/tmp/kvx_inject_keys");
+        if (inject) {
+            std::vector<std::string> tokens;
+            for (std::string token; inject >> token;) tokens.push_back(std::move(token));
+            inject.close();
+            std::remove("/tmp/kvx_inject_keys");
+            if (!tokens.empty()) {
+                const std::string token = tokens.front();
+                if (token == "Esc" || token == "Escape") {
+                    keypad_->emit_key(LV_KEY_ESC);
+                } else if (token == "Enter" || token == "Return") {
+                    keypad_->emit_key(LV_KEY_ENTER);
+                } else if (token == "Sym") {
+                    keypad_->handle_pointer(8 + 25, 195 + 49 + 23, true);
+                    keypad_->handle_pointer(8 + 25, 195 + 49 + 23, false);
+                } else if (token.size() == 1) {
+                    const char ch = token[0];
+                    if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+                        keypad_->host_key_event(ch, true);
+                        keypad_->host_key_event(ch, false);
+                    } else if (ch >= 'A' && ch <= 'Z') {
+                        keypad_->set_host_shift(true);
+                        keypad_->host_key_event(static_cast<char>(ch - 'A' + 'a'), true);
+                        keypad_->host_key_event(static_cast<char>(ch - 'A' + 'a'), false);
+                        keypad_->set_host_shift(false);
+                    } else {
+                        keypad_->emit_key(static_cast<uint32_t>(static_cast<unsigned char>(ch)));
+                    }
+                }
+                if (tokens.size() > 1) {
+                    std::ofstream rest("/tmp/kvx_inject_keys");
+                    for (size_t i = 1; i < tokens.size(); ++i) {
+                        if (i > 1) rest << ' ';
+                        rest << tokens[i];
+                    }
+                }
+            }
+        }
+    }
     return running;
 }
 
@@ -461,6 +506,98 @@ void DesktopSimulatorFrame::render() {
     if (keypad_) keypad_->render(renderer_);
     if (lvgl_texture_) SDL_RenderCopy(renderer_, lvgl_texture_, nullptr, &kScreenRect);
     SDL_RenderPresent(renderer_);
+}
+
+bool DesktopSimulatorFrame::inject_named_key(const std::string& name) {
+    if (!keypad_ || name.empty()) return false;
+
+    auto lower = name;
+    for (char& c : lower) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    }
+
+    if (lower == "up") {
+        keypad_->emit_key(LV_KEY_UP);
+        return true;
+    }
+    if (lower == "down") {
+        keypad_->emit_key(LV_KEY_DOWN);
+        return true;
+    }
+    if (lower == "left") {
+        keypad_->emit_key(LV_KEY_LEFT);
+        return true;
+    }
+    if (lower == "right") {
+        keypad_->emit_key(LV_KEY_RIGHT);
+        return true;
+    }
+    if (lower == "enter" || lower == "return" || lower == "ok") {
+        keypad_->emit_key(LV_KEY_ENTER);
+        return true;
+    }
+    if (lower == "esc" || lower == "escape" || lower == "back") {
+        keypad_->emit_key(LV_KEY_ESC);
+        return true;
+    }
+    if (lower == "backspace" || lower == "del" || lower == "delete") {
+        keypad_->emit_key(LV_KEY_BACKSPACE);
+        return true;
+    }
+    if (lower == "tab") {
+        keypad_->emit_key(LV_KEY_NEXT);
+        return true;
+    }
+    if (lower == "home") {
+        // Action-bar slot 8 → house
+        keypad_->emit_key(static_cast<uint32_t>('8'));
+        return true;
+    }
+    if (lower == "fn+h" || lower == "help") {
+        keypad_->emit_key(platform::kKeyHelp);
+        return true;
+    }
+    if (lower == "fn+j" || lower == "printscreen" || lower == "screenshot") {
+        keypad_->emit_key(platform::kKeyPrintScreen);
+        return true;
+    }
+    if (lower.rfind("fn+", 0) == 0 && lower.size() == 4) {
+        const char base = lower[3];
+        keypad_->set_host_fn(true);
+        keypad_->host_key_event(base, true);
+        keypad_->host_key_event(base, false);
+        keypad_->set_host_fn(false);
+        return true;
+    }
+    if (name.size() == 1) {
+        return inject_char(name[0]);
+    }
+    LOG_WARN("ui script: unknown key '{}'", name);
+    return false;
+}
+
+bool DesktopSimulatorFrame::inject_char(char ch) {
+    if (!keypad_) return false;
+    if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+        keypad_->host_key_event(ch, true);
+        keypad_->host_key_event(ch, false);
+        return true;
+    }
+    if (ch >= 'A' && ch <= 'Z') {
+        keypad_->set_host_shift(true);
+        keypad_->host_key_event(static_cast<char>(ch - 'A' + 'a'), true);
+        keypad_->host_key_event(static_cast<char>(ch - 'A' + 'a'), false);
+        keypad_->set_host_shift(false);
+        return true;
+    }
+    keypad_->emit_key(static_cast<uint32_t>(static_cast<unsigned char>(ch)));
+    return true;
+}
+
+void DesktopSimulatorFrame::inject_text(const std::string& text) {
+    for (char ch : text) {
+        inject_char(ch);
+    }
 }
 
 } // namespace app

@@ -34,6 +34,8 @@ private:
     model::AppPage loaded_page_ = model::AppPage::ChannelGrid;
     bool has_loaded_page_ = false;
     bool page_switch_scheduled_ = false;
+    // When a bounce (A→B→A) coalesces into one async flush, still rebuild A.
+    bool force_reload_ = false;
 };
 
 } // namespace app

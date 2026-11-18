@@ -1,6 +1,7 @@
 #pragma once
 
 #include "channel_registry.h"
+#include "tool_registry.h"
 
 #include <array>
 #include <cstdint>
@@ -12,14 +13,20 @@ namespace model {
 enum class AppPage {
     ChannelGrid = 0,
     ChannelMenu,
+    ToolMenu,
+    ToolRun,
+    ToolPrompt,
+    Discovery,
     Placeholder,
     CodecMenu,
     CodecWork,
     EngCalcMenu,
     EngCalcWork,
     Timer,
+    Matrix,
     ConfigMenu,
     ColorPicker,
+    ColorHex,
     About,
     Passgen,
     TotpMenu,
@@ -47,12 +54,22 @@ enum class AppPage {
     PdaDay,
     PdaWorldClock,
     PdaRebind,
-    PdaStockCalc,
+    Calculator,
+    ClockFace,
+    ClockSubMenu,
+    ChargeFace,
+    FilesBrowser,
+    MediaPlayer,
+    Brightness,
+    DimTime,
+    SoundMenu,
+    PowerMenu,
 };
 
 enum class ColorTarget {
     Primary = 0,
     Accent = 1,
+    Background = 2,
 };
 
 enum class GlyphKind {
@@ -110,11 +127,21 @@ public:
 
     uint32_t pri_color() const;
     uint32_t sec_color() const;
+    uint32_t bg_color() const;
     void set_pri_color(uint32_t rgb);
     void set_sec_color(uint32_t rgb);
+    void set_bg_color(uint32_t rgb);
+    void reset_colors();
 
     int timer_seconds() const;
     void set_timer_seconds(int seconds);
+
+    int dim_seconds() const; // 0 = off, else 15/30/60
+    void set_dim_seconds(int seconds);
+    bool sound_enabled() const;
+    void set_sound_enabled(bool enabled);
+    int sound_volume() const; // 0-100
+    void set_sound_volume(int volume);
 
     const std::string& work_input() const;
     void set_work_input(std::string value);
@@ -177,6 +204,13 @@ public:
     int pda_rebind_key() const;
     void set_pda_rebind_key(int key1to8);
 
+    ToolId active_tool_id() const;
+    void set_active_tool_id(ToolId id);
+    const std::string& tool_param() const;
+    void set_tool_param(std::string value);
+    const std::string& discovery_filter() const;
+    void set_discovery_filter(std::string value);
+
     void load_user_config();
     void save_user_config() const;
 
@@ -188,9 +222,13 @@ private:
     int codec_op_ = 0;
     int eng_calc_op_ = 0;
     ColorTarget color_target_ = ColorTarget::Primary;
-    uint32_t pri_color_ = kPriFrom565;
+    uint32_t pri_color_ = kPriDefault;
     uint32_t sec_color_ = kSecFrom565;
+    uint32_t bg_color_ = kBgDefault;
     int timer_seconds_ = 60;
+    int dim_seconds_ = 0;
+    bool sound_enabled_ = true;
+    int sound_volume_ = 70;
     std::string work_input_;
     std::string work_output_;
     int barcode_type_ = 0;
@@ -220,6 +258,10 @@ private:
     bool clock24hr_ = true;
     std::array<uint8_t, 8> pda_key_bind_{{0, 1, 2, 3, 4, 5, 6, 7}};
     int pda_rebind_key_ = 1;
+
+    ToolId active_tool_id_ = ToolId::None;
+    std::string tool_param_;
+    std::string discovery_filter_;
 };
 
 } // namespace model

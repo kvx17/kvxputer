@@ -1,6 +1,7 @@
 #include "pda_calendar_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -33,10 +34,11 @@ void PdaCalendarScreen::build() {
     lv_obj_align(grid_, LV_ALIGN_TOP_MID, 0, 18);
     lv_obj_clear_flag(grid_, LV_OBJ_FLAG_SCROLLABLE);
 
+    const auto tok = tokens();
     header_label_ = lv_label_create(grid_);
     auto* font = assets().load_standard_font(12);
     lv_obj_set_style_text_font(header_label_, font ? font : &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(header_label_, sec_color(), 0);
+    lv_obj_set_style_text_color(header_label_, tok.ink, 0);
     lv_obj_align(header_label_, LV_ALIGN_TOP_MID, 0, 0);
 
     const char* wd[] = {"S", "M", "T", "W", "T", "F", "S"};
@@ -44,7 +46,7 @@ void PdaCalendarScreen::build() {
         auto* l = lv_label_create(grid_);
         lv_label_set_text(l, wd[i]);
         lv_obj_set_style_text_font(l, font ? font : &lv_font_montserrat_14, 0);
-        lv_obj_set_style_text_color(l, sec_color(), 0);
+        lv_obj_set_style_text_color(l, tok.ink_dim, 0);
         // positions set in redraw
     }
 
@@ -92,6 +94,11 @@ void PdaCalendarScreen::redraw() {
     const int first_dow = tools::pda::day_of_week(year_, month_, 1);
     const int dim = tools::pda::days_in_month(year_, month_);
     const auto now = tools::pda::local_now();
+    const auto tok = tokens();
+
+    if (header_label_) {
+        lv_obj_set_style_text_color(header_label_, tok.ink, 0);
+    }
 
     for (int d = 1; d <= 31; ++d) {
         auto* cell = cells_[d];
@@ -111,19 +118,22 @@ void PdaCalendarScreen::redraw() {
             (now.tm_year + 1900 == year_ && now.tm_mon + 1 == month_ && now.tm_mday == d);
         const bool is_cursor = (d == day_);
         if (is_cursor) {
-            lv_obj_set_style_bg_color(cell, sec_color(), 0);
-            lv_obj_set_style_border_color(cell, sec_color(), 0);
+            lv_obj_set_style_bg_color(cell, tok.accent, 0);
+            lv_obj_set_style_border_width(cell, 1, 0);
+            lv_obj_set_style_border_color(cell, tok.accent, 0);
         } else if (is_today) {
-            lv_obj_set_style_bg_color(cell, bg_color(), 0);
-            lv_obj_set_style_border_color(cell, sec_color(), 0);
+            lv_obj_set_style_bg_color(cell, tok.bg, 0);
+            lv_obj_set_style_border_width(cell, 1, 0);
+            lv_obj_set_style_border_color(cell, tok.accent, 0);
         } else {
-            lv_obj_set_style_bg_color(cell, bg_color(), 0);
-            lv_obj_set_style_border_color(cell, bg_color(), 0);
+            lv_obj_set_style_bg_color(cell, tok.bg, 0);
+            lv_obj_set_style_border_width(cell, 0, 0);
+            lv_obj_set_style_border_color(cell, tok.bg, 0);
         }
         auto* lab = lv_obj_get_child(cell, 0);
         if (lab) {
             lv_label_set_text_fmt(lab, "%d%s", d, event_count_[d] > 0 ? "." : "");
-            lv_obj_set_style_text_color(lab, is_cursor ? bg_color() : pri_color(), 0);
+            lv_obj_set_style_text_color(lab, is_cursor ? tok.bg : tok.ink, 0);
         }
     }
 }
@@ -134,6 +144,7 @@ void PdaCalendarScreen::open_day() {
 }
 
 bool PdaCalendarScreen::handle_key(uint32_t key) {
+    // Zero arrows: F/Z/X/C. Month: L/M. Year: -/+ (bare R/T) or Sym+R/T.
     if (key == LV_KEY_LEFT || key == 'a' || key == 'A') {
         tools::pda::add_days(year_, month_, day_, -1);
         redraw();
@@ -154,22 +165,22 @@ bool PdaCalendarScreen::handle_key(uint32_t key) {
         redraw();
         return true;
     }
-    if (key == '[') {
+    if (key == LV_KEY_PREV || key == '[' || key == '-') {
         tools::pda::add_months(year_, month_, day_, -1);
         redraw();
         return true;
     }
-    if (key == ']') {
+    if (key == LV_KEY_NEXT || key == ']' || key == '=') {
         tools::pda::add_months(year_, month_, day_, 1);
         redraw();
         return true;
     }
-    if (key == ';') {
+    if (key == '-' || key == 'r' || key == 'R') {
         tools::pda::add_months(year_, month_, day_, -12);
         redraw();
         return true;
     }
-    if (key == '.') {
+    if (key == '+' || key == 't' || key == 'T') {
         tools::pda::add_months(year_, month_, day_, 12);
         redraw();
         return true;
@@ -210,15 +221,7 @@ void PdaDayScreen::build() {
     char title[32];
     std::snprintf(title, sizeof(title), "%s", date_.c_str());
     make_header(content(), title);
-
-    list_ = lv_obj_create(content());
-    lv_obj_remove_style_all(list_);
-    lv_obj_set_size(list_, view::kScreenWidth, view::kContentHeight - 18);
-    lv_obj_align(list_, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_set_flex_flow(list_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(list_, 2, 0);
-    lv_obj_set_style_pad_all(list_, 4, 0);
-    lv_obj_add_flag(list_, LV_OBJ_FLAG_SCROLLABLE);
+    list_ = view::make_list(content(), 18);
     reload();
 }
 
@@ -231,17 +234,11 @@ void PdaDayScreen::reload() {
     tools::pda::load_events(all_events_, error);
     tools::pda::events_for_day(all_events_, date_, day_events_);
 
+    const auto tok = tokens();
     auto* font = assets().load_standard_font(14);
     auto add_row = [&](const char* text) {
-        auto* row = lv_obj_create(list_);
-        lv_obj_remove_style_all(row);
-        lv_obj_set_size(row, view::kScreenWidth - 8, 20);
-        lv_obj_set_style_radius(row, 4, 0);
-        lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-        auto* label = lv_label_create(row);
-        lv_label_set_text(label, text);
-        lv_obj_set_style_text_font(label, font ? font : &lv_font_montserrat_14, 0);
-        lv_obj_align(label, LV_ALIGN_LEFT_MID, 6, 0);
+        auto* row = view::make_list_row(list_, text, nullptr, font ? font : &lv_font_montserrat_14,
+                                        nullptr, tok);
         rows_.push_back(row);
     };
 
@@ -259,11 +256,9 @@ void PdaDayScreen::refresh() {
     if (rows_.empty()) return;
     if (selected_ < 0) selected_ = 0;
     if (selected_ >= static_cast<int>(rows_.size())) selected_ = static_cast<int>(rows_.size()) - 1;
+    const auto tok = tokens();
     for (size_t i = 0; i < rows_.size(); ++i) {
-        const bool on = static_cast<int>(i) == selected_;
-        lv_obj_set_style_bg_color(rows_[i], on ? pri_color() : lv_color_hex(0x1A1A22), 0);
-        auto* label = lv_obj_get_child(rows_[i], 0);
-        if (label) lv_obj_set_style_text_color(label, on ? lv_color_hex(0xFFFFFF) : sec_color(), 0);
+        view::apply_row_state(rows_[i], static_cast<int>(i) == selected_, tok);
     }
 }
 
@@ -315,7 +310,8 @@ bool PdaDayScreen::handle_key(uint32_t key) {
         else delete_selected(); // Enter on event opens delete confirm via immediate delete (Cardputer submenu Delete)
         return true;
     }
-    if (key == 'x' || key == 'X' || key == LV_KEY_DEL) {
+    // Bare X is Down on Zero; Del or Fn+X ('x') deletes. Bare N is End — use Fn+N or row 0.
+    if (key == LV_KEY_DEL || key == 'x' || key == 'X') {
         delete_selected();
         return true;
     }

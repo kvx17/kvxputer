@@ -2,7 +2,7 @@
 
 **kvxputerzero** is a Cardputer Zero app: a Wii-style channel home (like Cardputer kvxputer) with Tools, Config, and placeholders for later channels.
 
-On launch it plays the same Cardputer intro GIF (`assets/images/boot.gif`); **press any key to skip**. APPLaunch icons are derived from that intro frame.
+On launch it plays a live matrix rain with the **KVXPUTER** wordmark for 5 seconds. **Press any key to skip.** The same animation is in **Tools → Matrix**.
 
 This guide covers **how to use the app**, **how to run the desktop emulator**, and **how to build and install it on a Cardputer Zero**.
 
@@ -19,38 +19,62 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row. The green number is the 
 | Control | Action |
 | --- | --- |
 | **F / X / Z / C** | Up / down / left / right |
-| **Fn + letter** | Type that letter (on a PC keyboard, hold **Left Alt** as Fn) |
+| **Letter key** | Types the letter (desktop and device) |
+| **Sym + letter** | Punctuation on that key (**Sym+B**=`.` **Sym+V**=`,` **Sym+N**=`/` …). On device many Sym chords arrive as ready-made codes (`KEY_DOT`, `F13`…). Desktop: click **sym** or hold **Left Alt** |
+| **Fn + letter** | Orange Fn legend (Help, Insert, media…). **Fn+F/Z/X/C** types those letters |
 | **4 / 8** on the channel home | Previous / next page |
 | **5 / 7 / 6** on the channel home | Up / down / open |
 | **4 / 5 / 6 / 7 / 8** on a menu | Back / up / select / down / home |
 | **Enter** or **Space** | Open or activate |
 | **Esc** | Go back one screen |
 | **Hold Esc** (on home) | Quit the app |
-| **H** | Keyboard help overlay (**Fn+H** types h) |
-| **J** | Save a screenshot (**Fn+J** types j) |
+| **Fn+H** | Keyboard help overlay |
+| **Fn+J** | Screenshot |
 
-Keys that have an orange Fn legend on the Cardputer Zero use that legend by themselves. **Fn** types the printed letter instead. Number keys stay numbers, so **4–8** keep driving the bar; **Fn+1** through **Fn+0** are still F1–F10. Letters with no legend (`g r t y v`) type normally.
+Letters are bare keys. **Sym** (or the firmware’s rewritten Sym codes) types the printed punctuation. Number keys stay digits so **4–8** keep driving the bar; **Fn+1**…**0** are F1–F10; **Sym+1**… emit `!@#…`.
 
 ### What’s available now
 
 | Channel | What you get |
 | --- | --- |
-| **Tools** | Codec / Hash, Engineering Calculators, Passgen, TOTP, Combo, QRCodes, Barcode, **PDA**, Timer |
-| **Clock** | Timer (countdown; adjust with ←/→ or `+`/`-`, Enter to start/pause) |
-| **Config** | UI color, accent color, dark mode, About |
-| Other tiles | Short “Coming soon” or “Use stock …” message (stock OS/Cap apps cover those domains) |
+| **Tools** | **Calculator** (scientific), Calculators (engineering), Codec / Hash, Passgen, TOTP, Combo, QR / Barcode, **PDA**, Media Player, Timer, **Matrix**, DTMF, Morse, Microphone, MQTT, LLM Chat, Drone ID (BLE), iButton hint |
+| **WiFi / NetOps** | Connect, Disconnect, AP info, Net Toolkit, Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
+| **BLE** | Scan, Hunter, Sniffer UI, Wall Of Flipper / Airtag, Skimmer Detector, Disconnect; Ninebot / Amiibolink / PN532 / Chameleon status (connect/read only) |
+| **Ethernet** | Link status, Scan Hosts (onboard NIC) |
+| **Infrared** | Use, Learn, Browse, Read, Favorites (NEC / LIRC); TV-B-Gone, TagTinker ESL, IR Carrier |
+| **Files** | Browse home / mounts, text preview, confirmed delete; File Share stays under Wi-Fi |
+| **GPS** | View Captures (CSV); Live Wardrive table of networks (Enter expands a row). Scans continue, logs 0,0, retries GPS every 60s until the first fix |
+| **Scripts** | Local allowlist runner under `~/.config/kvxputerzero/scripts/`; PC Connect script browser + how-to |
+| **PC Connect** | How to use / what you need; browse bundled host scripts; export to `~/.config/kvxputerzero/pcconnect/` (for a Cardputer running kvxputer PC Connect — not on Zero) |
+| **Modules** | Cap Probe, Bus / I2C scan, Unit Scroll, UART Shell, PaHub scan, iButton, PN532Killer UART, UART LLM, Joystick presence |
+| **RF** | Cap-CC1101 status, spectrum, listen, record `.sub`, library / replay, test TX (no jammer/bruteforce) |
+| **NRF24** | Info, status, spectrum, listen, send payload (no MouseJack / jammer) |
+| **LoRa** | Cap-SX1262 status, chat, antenna check, frequency / username; Meshtastic Nodes/Chat over USB CDC PhoneAPI (or TEXTMSG when `lora/mesh_mode.txt` is `text`), else one clear “no mesh serial API” row |
+| **RFID / NFC** | PN532 status, read/scan UID, load/save dumps (no emulate/write) |
+| **FM** | Si4713 status, broadcast, stop, spectrum (no TA hijack) |
+| **Discovery** | Filterable index of every registered tool |
+| **Clock** | Live face (digital / charge-style); Enter → Timer |
+| **Charge** | Charge-style face, color cycle, backlight steps |
+| **Config** | Colors, brightness, dim time, sound, power (reboot / off), About |
+| **USB** | Placeholder (ESP HID / gadget unavailable) |
 
-Theme colors and PDA prefs are saved under `~/.config/kvxputerzero/` (on device or desktop).
+Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI with soft-CS **GPIO22** (SPI mode 1), not PN532 I2C. Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
+
+Meshtastic serial prefs (under `~/.config/kvxputerzero/lora/`): `mesh_port.txt` (e.g. `/dev/ttyACM0`), optional `mesh_baud.txt`, and `mesh_mode.txt`=`text` for TEXTMSG line mode. Cap-LoRa GPS UART (`/dev/serial0`) is not used as a mesh API.
+
+Theme colors, PDA prefs, and tool data live under `~/.config/kvxputerzero/` (on device or desktop). Network / BLE / audio helpers need the matching host tools (`nmcli`, `bluetoothctl`, `aplay`/`arecord`, …); desktop builds show a clear error instead of hanging.
 
 ### Tools briefly
 
-1. Open **Tools** → pick Codec / Hash, Calculators, Passgen, TOTP, Combo, QRCodes, Barcode, PDA, or Timer.
-2. On Codec/Calc/Combo work screens: type input in the field, press **Enter** to run, **Esc** to go back to that tool’s menu (then Esc again to Tools).
-3. Calculators expect formats shown in the on-screen hint (e.g. subnet `192.168.1.10/24`, or a mode token first).
-4. **Passgen**: `;`/`.` length, `,` count, `U`/`L`/`D`/`C` charsets, `G` generate, `S` append to `~/.config/kvxputerzero/passwords.txt`.
-5. **TOTP**: accounts stored plaintext in `~/.config/kvxputerzero/totp.json` (mode 0600). Needs correct system time.
-6. **QR / Barcode**: Enter on the work screen draws the glyph; **Space** inverts QR; Esc returns to the tool menu.
-7. **PDA**: 4×2 hub (Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, Calculator). Arrows move; Enter opens; keys **1–8** open the bound channel; **9** rebinds. Calculator tile points at the stock Calculator app. Data lives under `~/.config/kvxputerzero/pda/` (notes/, memos.txt, todo.txt, calendar/events.txt, contacts.txt, alarms.txt). Calendar: ←/→ day, ↑/↓ week, `[` `]` month, `;` `.` year. World Clock: `[` `]` cycle cities / charge / digital faces; Enter sets app TZ offset (not OS timezone); **H** toggles 12/24h. Alarms fire only while this app is open (about every 15s); any key dismisses.
+1. Open **Tools** → pick Calculator, Calculators, Codec / Hash, Passgen, TOTP, Combo, QRCodes, Barcode, PDA, Media Player, Timer, Matrix, DTMF, Morse, Microphone, MQTT, LLM, or Drone ID. Matrix plays the boot rain for 5 seconds; any key leaves it early.
+2. **Calculator**: type an expression (`sin(90)`, `2^10`, `ans*2`). **Enter** evaluates; empty field + **D** toggles DEG/RAD. PDA → Calc opens the same screen.
+3. On Codec/engineering-Calculators/Combo work screens: type input in the field, press **Enter** to run, **Esc** to go back to that tool’s menu (then Esc again to Tools).
+4. Engineering Calculators expect formats shown in the on-screen hint (e.g. subnet `192.168.1.10/24`, or a mode token first).
+5. **Passgen**: **Z/C** length, **F/X** count, **Enter** / **Sym+G** generate, **Sym+U/L/D/C** charsets, **Sym+S** append to `~/.config/kvxputerzero/passwords.txt`.
+6. **TOTP**: accounts stored plaintext in `~/.config/kvxputerzero/totp.json` (mode 0600). Needs correct system time. **Z/C** switch accounts.
+7. **QR / Barcode**: Enter on the work screen draws the glyph; **Space** inverts QR; Esc returns to the tool menu. Type **B** for `.` in URLs / IPs.
+8. **PDA**: 4×2 hub (Notes, Memos, To-Do, Calendar, Contacts, Alarms, World Clock, Calculator). **F/X/Z/C** move; Enter opens; keys **1–8** open the bound channel; **9** rebinds. Calculator tile opens the in-app scientific Calculator. Data lives under `~/.config/kvxputerzero/pda/` (notes/, memos.txt, todo.txt, calendar/events.txt, contacts.txt, alarms.txt). Lists: **Del** deletes; **8** / **Sym+N** new. Calendar: **Z/C** day, **F/X** week, **L/M** month, **-/+** (bare R/T) year. World Clock: **Z/C** cycle faces; Enter sets app TZ offset (not OS timezone); **Sym+Y** toggles 12/24h. Alarms fire only while this app is open (about every 15s); any key dismisses.
+9. **Run screens** (scans, shares, BLE, UART, IR, media, …): Esc cancels the worker and returns. Optional save writes under `~/.config/kvxputerzero/scans/`.
 
 ---
 
@@ -213,9 +237,12 @@ Publishing to the Cardputer Zero Store is separate from installing on your own d
 
 | Path | Role |
 | --- | --- |
-| `src/model/channel_registry.h` | Channel IDs / labels |
+| `src/model/channel_registry.h` | Channel IDs / labels / kinds |
+| `src/model/tool_registry.h` | Shared tool ids across channels |
+| `src/app/tool_screens.*` | Channel tool menus + every ToolId screen |
+| `src/platform/` | net / wifi / ble / tcp / dns / http / audio / i2c / uart helpers |
 | `src/view/screens/channel_grid_screen.*` | 3×2 home |
-| `src/tools/` | Codec / EngCalc logic |
+| `src/tools/` | Codec / EngCalc / PDA / … logic |
 | `app-builder.json` | Store listing |
 | `deploy.sh` | Cross package + `scp` to device |
 

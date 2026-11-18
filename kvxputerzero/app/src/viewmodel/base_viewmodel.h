@@ -26,6 +26,7 @@ public:
     lv_subject_t* menu_index_subject();
     lv_subject_t* pri_color_subject();
     lv_subject_t* sec_color_subject();
+    lv_subject_t* bg_color_subject();
     lv_subject_t* quit_requested_subject();
 
     lv_subject_t* greeting_subject();
@@ -47,6 +48,14 @@ public:
     void move_channel(int delta);
     void open_selected_channel();
 
+    void open_tool_menu();
+    void open_tool(model::ToolId id, std::string param = {});
+    void open_discovery();
+    model::ToolId active_tool_id() const;
+    const std::string& tool_param() const;
+    const std::string& discovery_filter() const;
+    void set_discovery_filter(std::string value);
+
     int menu_index() const;
     void set_menu_index(int index);
     void move_menu(int delta);
@@ -56,9 +65,12 @@ public:
     void open_eng_calc_menu();
     void open_eng_calc_op(int op);
     void open_timer();
+    void open_matrix();
     void open_config_menu();
     void open_color_picker(model::ColorTarget target);
+    void open_color_hex();
     void open_about();
+    void reset_colors();
 
     void open_passgen();
     void open_totp_menu();
@@ -90,13 +102,20 @@ public:
     void open_pda_world_clock();
     void open_pda_rebind();
     void open_pda_stock_calc();
+    void open_calculator();
+    void open_brightness();
+    void open_dim_time();
+    void open_sound_menu();
+    void open_power_menu();
     void persist_pda_config();
 
     model::ColorTarget color_target() const;
     uint32_t pri_color() const;
     uint32_t sec_color() const;
+    uint32_t bg_color() const;
     void set_pri_color(uint32_t rgb);
     void set_sec_color(uint32_t rgb);
+    void set_bg_color(uint32_t rgb);
     void persist_theme();
 
     int codec_op() const;
@@ -146,6 +165,7 @@ private:
     reactive::IntSubject menu_index_subject_;
     reactive::IntSubject pri_color_subject_;
     reactive::IntSubject sec_color_subject_;
+    reactive::IntSubject bg_color_subject_;
     reactive::IntSubject counter_subject_;
     reactive::BoolSubject bold_text_subject_;
     reactive::BoolSubject info_visible_subject_;

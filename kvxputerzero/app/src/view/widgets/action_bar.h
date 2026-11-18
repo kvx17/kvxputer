@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kvx_style.h"
 #include "lvgl.h"
 
 #include <array>
@@ -21,8 +22,7 @@ class ActionBar {
 public:
     ActionBar(lv_obj_t* parent,
               app::AssetManager& assets,
-              lv_color_t bar_color,
-              lv_color_t accent,
+              const view::KvxTokens& tokens,
               std::array<ActionSlot, 5> slots,
               const char* hint);
     ~ActionBar();

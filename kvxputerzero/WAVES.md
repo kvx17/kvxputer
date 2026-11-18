@@ -8,7 +8,7 @@ Stock Cardputer Zero already ships Launcher, Files, Store, FactoryTest, Camera, 
 
 **Focus:** network / RF-adjacent tools, scanners, specialized IR, offline crypto, BLE detectors, engineering calculators — not a second Files or Calculator.
 
-**MVP shipped in `app/`:** Codec/Hash, Engineering Calculators (full suite), Passgen, TOTP, Combo, QRCodes, Barcode, Timer, **PDA** (hub + Notes/Memos/To-Do/Calendar/Contacts/Alarms/World Clock faces), Config colors, channel placeholders.
+**Shipped in `app/`:** Scientific Calculator (+ PDA Calc tile), Codec/Hash, Engineering Calculators, Passgen, TOTP, Combo, QRCodes, Barcode, Timer, **PDA**, Media Player; Clock face + Charge channel; Files browser; Infrared Use/Learn/Browse/Read/Favorites (NEC/LIRC) plus TV-B-Gone, TagTinker ESL (LED/ping/refresh/page-flip), IR Carrier check; Config colors/brightness/dim/sound/power/About; Wi-Fi Connect/Disconnect/AP info; Tools leftovers (DTMF dialer/listen, Morse, Microphone, MQTT, LLM HTTP, Drone ID BLE); Scripts allowlist runner + **PC Connect** channel (how-to / needs / browse / export host scripts for Cardputer+kvxputer); GPS View Captures + Live Wardrive (logs 0,0 until a fix); Wi-Fi/NetOps/Ethernet shared tools (Net Toolkit, Scan Hosts, TCP/Telnet/SOCKS4, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot); offline Loot Console / Check Handshakes / NTLM Clean; read-only SMB Status / SIP OPTIONS / LDAP Read; BLE passive suite + Ninebot/Amiibolink/PN532/Chameleon status (connect/read only); **Cap channels** — RF (CC1101 status/spectrum/listen/record/library/test TX), NRF24 (status/spectrum/listen/send), LoRa SX1262 (status/chat/antenna/freq/user + Meshtastic serial Nodes/Chat when USB CDC PhoneAPI or configured TEXTMSG answers, else one status row), RFID/NFC (PN532 read/scan/load/save), FM Si4713 (status/broadcast/stop/spectrum); Modules Cap Probe, PaHub scan, iButton, PN532Killer UART, UART LLM; Discovery index. Cap GPS UART and `meshtasticd` TCP stay out of this package. Attack / ESP-radio / USB-gadget / jammer / MouseJack leaves stay out (see AUDIT / Leave out below).
 
 ## Shared constraints (every wave)
 
@@ -31,6 +31,7 @@ Stock Cardputer Zero already ships Launcher, Files, Store, FactoryTest, Camera, 
 | Codec / Hash | Base64 / Hex / URL / MD5 / SHA | `codec` |
 | Loot Console / View Captures / Check Handshakes / Aircrack offline / WiFi Pass Recovery / NTLM crack-clean | Offline FS/CPU tools | NetOps / WiFi / GPS WD viewer |
 | Scripts runner | BJS or host scripts — not Store | Scripts |
+| PC Connect host scripts | Browse/export bundled `PCConnect/` Python host; device USB protocol stays Cardputer-only | Scripts + PC Connect |
 
 ---
 
@@ -71,18 +72,11 @@ Ordinary sockets / SoftAP **tool UIs** / BlueZ **scan**. Not “Connect to WiFi�
 
 ---
 
-## Suggested order for the later port plan
+## Port status
 
-1. Wave 1 engineering calculators or TOTP/Codec (prove Template → `.deb`).
-2. Wave 1 QR/Barcode or PDA Notes.
-3. Wave 3 Net Toolkit or Roku (sockets).
-4. Wave 3 File Share / Evil Portal class HTTP tools.
-5. Wave 3 BLE Scan / Wall Of Flipper / Skimmer Detector.
-6. Wave 2 TV-B-Gone or TagTinker (IR extras).
-7. Wave 2 Mic/DTMF or Ethernet Scan Hosts.
-8. Wave 1 Scripts runner (larger).
+Waves 1–3, everyday apps, gap tools, and Cap/Grove accessory channels are implemented inside `app/` via `tool_registry` + `tool_screens` + `cap_screens`. Caps are driven over Linux `spidev` / I2C / UART when present; desktop builds report Cap not present without hanging. Stock Cap Store apps may still be installed but are not required.
 
-No Wave for Calculator, Files, Calendar, Music, IR-Remote, Cap-LoRa/CC1101/NFC, RFID, Wi-Fi connect UI, or Setting shell.
+Still intentionally out: Evil Portal / poison / starvation / wordlist password recovery / reverse-shell class leaves; IR Jammer multi-mode and TagTinker raw-hex; Amiibo/PN532/Chameleon write/emulate; RF/NRF jammer and bruteforce; NRF MouseJack HID; Ninebot tune writes; Ethernet MAC Flooding / DHCP Starvation; Karma Spear; FM TA hijack; companion `.bin`. Stock Calendar / Music / Piano / Recorder / launcher Setting shell are not duplicated beyond what PDA and Config already cover.
 
 ---
 

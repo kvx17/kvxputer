@@ -1,6 +1,7 @@
 #include "passgen_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -16,7 +17,7 @@ void PassgenScreen::build() {
     body_ = lv_label_create(content());
     auto* font = assets().load_standard_font(12);
     lv_obj_set_style_text_font(body_, font ? font : &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(body_, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_text_color(body_, tokens().ink, 0);
     lv_label_set_long_mode(body_, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(body_, view::kScreenWidth - 8);
     lv_obj_align(body_, LV_ALIGN_TOP_LEFT, 4, 20);
@@ -30,9 +31,10 @@ void PassgenScreen::refresh() {
     text += opt_.lower ? "[L] " : " L  ";
     text += opt_.digits ? "[D] " : " D  ";
     text += opt_.symbols ? "[C]\n" : " C\n";
-    text += ";/. len  , cnt  G gen  S save\n";
+    text += "Z/C len  F/X cnt  Enter gen\n";
+    text += "U/L/D/C sets  S save\n";
     if (passwords_.empty()) {
-        text += "Press G to generate";
+        text += "Enter / G to generate";
     } else {
         for (size_t i = 0; i < passwords_.size(); ++i) {
             text += std::to_string(i + 1) + ") " + passwords_[i] + "\n";
@@ -67,19 +69,27 @@ void PassgenScreen::save() {
 }
 
 bool PassgenScreen::handle_key(uint32_t key) {
-    if (key == ';' || key == LV_KEY_LEFT) {
+    // Zero arrows: F/Z/X/C → LV_KEY_*. Length on left/right, count on up/down.
+    // Charset / save need Fn+letter (bare U/L/D/C/S are legends on Zero).
+    if (key == LV_KEY_LEFT) {
         if (opt_.length > 4) --opt_.length;
         regenerate();
         return true;
     }
-    if (key == '.' || key == LV_KEY_RIGHT) {
+    if (key == LV_KEY_RIGHT) {
         if (opt_.length < 64) ++opt_.length;
         regenerate();
         return true;
     }
-    if (key == ',') {
+    if (key == LV_KEY_UP) {
         if (opt_.count < 8) ++opt_.count;
         else opt_.count = 1;
+        regenerate();
+        return true;
+    }
+    if (key == LV_KEY_DOWN) {
+        if (opt_.count > 1) --opt_.count;
+        else opt_.count = 8;
         regenerate();
         return true;
     }

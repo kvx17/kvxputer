@@ -23,6 +23,9 @@ private:
     void open_bound(int key1to8);
 
     lv_obj_t* tiles_[8]{};
+    lv_obj_t* tile_icons_[8]{};
+    lv_obj_t* tile_labels_[8]{};
+    lv_obj_t* tile_digits_[8]{};
     lv_obj_t* footer_{nullptr};
     int selected_ = 0;
 };

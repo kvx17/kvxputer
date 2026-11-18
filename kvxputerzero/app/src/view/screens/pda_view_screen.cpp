@@ -1,6 +1,7 @@
 #include "pda_view_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "pda_lib.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -33,15 +34,19 @@ void PdaViewScreen::build() {
     }
     make_header(content(), title);
 
+    const auto tok = tokens();
     body_ = lv_label_create(content());
     lv_obj_set_size(body_, view::kScreenWidth - 12, view::kContentHeight - 22);
     lv_obj_align(body_, LV_ALIGN_TOP_LEFT, 6, 20);
     lv_label_set_long_mode(body_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_color(body_, sec_color(), 0);
+    lv_obj_set_style_text_color(body_, tok.ink, 0);
     auto* font = assets().load_standard_font(14);
     lv_obj_set_style_text_font(body_, font ? font : &lv_font_montserrat_14, 0);
     const std::string& text = view_model().work_output();
     lv_label_set_text(body_, text.empty() ? "(empty)" : text.c_str());
+    if (text.empty()) {
+        lv_obj_set_style_text_color(body_, tok.ink_dim, 0);
+    }
 }
 
 void PdaViewScreen::open_edit() {

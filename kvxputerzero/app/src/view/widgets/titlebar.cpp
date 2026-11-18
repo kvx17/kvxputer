@@ -12,8 +12,8 @@
 #include <ctime>
 
 #include "asset_manager.h"
-#include "bindings.h"
 #include "device_status.h"
+#include "kvx_style.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -54,16 +54,6 @@ const char* battery_icon(int32_t capacity_percent, bool charging) {
     return ICON_BAT_EMPTY;
 }
 
-void configure_label(lv_obj_t* label,
-                     lv_subject_t* dark_mode_subject,
-                     const lv_font_t* font,
-                     int32_t width) {
-    lv_obj_set_width(label, width);
-    lv_obj_set_style_text_font(label, font, 0);
-    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    reactive::bind_theme(label, dark_mode_subject, reactive::ThemeRole::Text);
-}
-
 void set_visible(lv_obj_t* obj, bool visible) {
     if (visible) {
         lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
@@ -90,17 +80,18 @@ void TitleBar::build() {
         return;
     }
 
+    const auto tokens = view::make_tokens(view_model_.pri_color(), view_model_.sec_color(),
+                                          view_model_.bg_color());
+
     core_obj_ = lv_obj_create(parent_);
     lv_obj_remove_style_all(core_obj_);
     lv_obj_set_size(core_obj_, LV_PCT(100), kTitleBarHeight);
     lv_obj_align(core_obj_, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_clear_flag(core_obj_, LV_OBJ_FLAG_SCROLLABLE);
-    // Cardputer-style dark status strip (not the Template light "Bar" swatch).
-    lv_obj_set_style_bg_color(core_obj_, lv_color_hex(0x101014), 0);
-    lv_obj_set_style_bg_opa(core_obj_, LV_OPA_COVER, 0);
+    view::style_bar(core_obj_, tokens);
     lv_obj_set_style_border_width(core_obj_, 1, 0);
     lv_obj_set_style_border_side(core_obj_, LV_BORDER_SIDE_BOTTOM, 0);
-    lv_obj_set_style_border_color(core_obj_, lv_color_hex(0x2A2A32), 0);
+    lv_obj_set_style_border_color(core_obj_, tokens.rule, 0);
     lv_obj_set_style_border_opa(core_obj_, LV_OPA_COVER, 0);
 
     auto* title = lv_label_create(core_obj_);
@@ -109,7 +100,7 @@ void TitleBar::build() {
     lv_obj_set_width(title, 110);
     const lv_font_t* title_font = assets_.load_standard_font(11);
     lv_obj_set_style_text_font(title, title_font ? title_font : &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xE6E6E6), 0);
+    lv_obj_set_style_text_color(title, tokens.ink, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 6, 0);
 
     auto* status = lv_obj_create(core_obj_);
@@ -134,7 +125,7 @@ void TitleBar::build() {
         lv_obj_set_width(label, width);
         lv_obj_set_style_text_font(label, font, 0);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_color(label, lv_color_hex(0xE6E6E6), 0);
+        lv_obj_set_style_text_color(label, tokens.ink, 0);
     };
     wifi_label_ = lv_label_create(status);
     style_status(wifi_label_, icon_font, 14);

@@ -1,6 +1,7 @@
 #include "glyph_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "theme.h"
 
 #include <algorithm>
@@ -130,7 +131,7 @@ void GlyphScreen::build() {
     caption_ = lv_label_create(content());
     auto* font = assets().load_standard_font(12);
     lv_obj_set_style_text_font(caption_, font ? font : &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(caption_, sec_color(), 0);
+    lv_obj_set_style_text_color(caption_, tokens().ink_dim, 0);
     lv_obj_align(caption_, LV_ALIGN_BOTTOM_MID, 0, -2);
 
     paint();

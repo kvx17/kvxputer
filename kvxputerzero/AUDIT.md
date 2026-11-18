@@ -46,10 +46,10 @@ Waves use only **rewrite** / **onboard** that are not **os**. Submenu headers (`
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Connect to Wifi | `wifi_menu.cpp` / `wifi_common.cpp` | tool | os | Linux / launcher Wi-Fi already manages STA | always | no |
+| Connect to Wifi | `wifi_menu.cpp` / `wifi_common.cpp` | tool | rewrite | Ported in kvxputerzero Wi-Fi → Connect (nmcli); launcher Wi-Fi still available | always | no |
 | Start WiFi AP | `wifi_menu.cpp` / `wifi_common.cpp` | tool | os | OS SoftAP / host networking — not a kvx tool target | always | no |
-| Turn Off WiFi | `wifi_menu.cpp` | tool | os | OS Wi-Fi control | when up | no |
-| AP info | `ap_info.cpp` | tool | os | launcher IP Panel / OS network info | when STA | no |
+| Turn Off WiFi | `wifi_menu.cpp` | tool | rewrite | Ported as Wi-Fi → Disconnect / radio off | when up | no |
+| AP info | `ap_info.cpp` | tool | rewrite | Ported as Wi-Fi → AP info (`net_info`) | when STA | no |
 | File Share → Create AP | `files/file_share.cpp` | tool | rewrite | SoftAP + AsyncWebServer | always | no |
 | File Share → Use WiFi | `files/file_share.cpp` | tool | rewrite | STA + HTTP file share | always | no |
 | File Share portal settings | `files/file_share.cpp` | setting | rewrite | prefs only | always | no |
@@ -212,7 +212,7 @@ Launcher over `app_catalog` (`discovery_menu.cpp`). Leaves are the same apps as 
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Univ Rem Learn / Use / Favorites / Browse / Delete | `infrared/kremote/*` | tool | os | Stock [IR-Remote](https://github.com/CardputerZero/IR-Remote) | always | no |
+| Univ Rem Learn / Use / Favorites / Browse / Delete | `infrared/kremote/*` | tool | rewrite | NEC Use/Learn/Browse/Read/Favorites in kvxputerzero over LIRC; stock IR-Remote still covers full remotes | always | no |
 | Univ Rem Button Map / About / Orientation / Buttons | `kremote_menu.cpp` | tool/setting | os | IR-Remote UI prefs | always | no |
 | IR HW Cardputer / Unit / Both | `kremote_menu.cpp` | setting | os | IR-Remote hardware select | always | no |
 | IR folder Pick/Reset | `kremote_menu.cpp` | setting | os | IR-Remote library path | always | no |
@@ -292,8 +292,8 @@ Host-side scripts: **asset** under Assets (`PCConnect/`).
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| SD Card | `files_menu.cpp` | tool | os | Stock [Files](https://github.com/CardputerZero/Files) | always | no |
-| LittleFS | `files_menu.cpp` | tool | os | Stock Files / Linux FS | always | no |
+| SD Card | `files_menu.cpp` | tool | rewrite | Ported as Files browser (home + /media + /mnt); stock Files still available | always | no |
+| LittleFS | `files_menu.cpp` | tool | rewrite | Covered by Files browser roots on Linux FS | always | no |
 | my Network / AP mode / Stop / WebUi screen | `webInterface.cpp` | tool | rewrite | Cardputer-style remote WebUI tool (beyond Files) | always | no |
 | File Share (same as WiFi) | `file_share.cpp` | tool | rewrite | HTTP share portal tool | always | no |
 | Send/Recv File | FileSharing | tool | blocked | ESP-NOW / ESP serial peer | `!LITE` | no |
@@ -316,7 +316,7 @@ Sample scripts under `tools/sd_pack/menu/scripts/` are **asset**.
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Clock face | `clock_menu.cpp` | tool | os | launcher status-bar clock | always | no |
+| Clock face | `clock_menu.cpp` | tool | rewrite | Ported in kvxputerzero (`ClockFaceScreen`) | always | no |
 | Timer | `clock_menu.cpp` | tool | rewrite | software countdown tool | always | no |
 
 ---
@@ -325,7 +325,7 @@ Sample scripts under `tools/sd_pack/menu/scripts/` are **asset**.
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Charge screen | `charge_menu.cpp` / `charge_screen.cpp` | tool | os | launcher battery status / FactoryTest power | always | no |
+| Charge screen | `charge_menu.cpp` / `charge_screen.cpp` | tool | rewrite | Ported in kvxputerzero Charge channel (`ClockFaceScreen` charge mode) | always | no |
 
 ---
 
@@ -333,9 +333,9 @@ Sample scripts under `tools/sd_pack/menu/scripts/` are **asset**.
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Calculator | `calculator.cpp` | tool | os | Stock [Calculator](https://github.com/CardputerZero/Calculator) / launcher Math | always | no |
+| Calculator | `calculator.cpp` | tool | rewrite | Ported in kvxputerzero (`CalculatorScreen` / `calc_lib`); stock Calculator optional | always | no |
 | Calculators suite (Subnet … Flow and pipe) | `calc/calc_menu.cpp` | tool | rewrite | Engineering calc tools beyond stock Calculator | always | no |
-| Media Player | `media_player.cpp` | tool | os | Stock [Music](https://github.com/CardputerZero/Music) / Piano / Recorder | `HAS_NS4168_SPKR` | no |
+| Media Player | `media_player.cpp` | tool | rewrite | Ported in kvxputerzero Tools → Media Player (`play_wav`); stock Music/Piano/Recorder remain | `HAS_NS4168_SPKR` | no |
 | PDA Calendar / Add Event | `pda/pda_calendar.cpp` | tool | os | Stock [Calendar](https://github.com/CardputerZero/Calendar) | `!LITE` | no |
 | PDA Notes, Memos, To-Do, Contacts, Alarms, World Clock | `pda/*.cpp` | tool | rewrite | PDA tools not covered by stock Calendar alone | `!LITE` | no |
 | QRCodes (PIX / Custom / saved) | `qrcode_menu.cpp` | tool | rewrite | QR render to display | always | no |
@@ -373,7 +373,7 @@ Sample scripts under `tools/sd_pack/menu/scripts/` are **asset**.
 
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Brightness / Dim Time / Orientation / UI Color / Accent / Theme | `config_menu.cpp` / `settings.cpp` | setting | os | launcher Setting | always | no |
+| Brightness / Dim Time / Orientation / UI Color / Accent / Theme | `config_menu.cpp` / `settings.cpp` | setting | rewrite | Colors, brightness, dim, sound, power in kvxputerzero Config; orientation still launcher | always | no |
 | G0 Hold = Home | `config_menu.cpp` | setting | os | launcher key handling | always | no |
 | Mainscreen Shortcuts | `app_catalog.cpp` | setting | os | launcher navigation | `HAS_KEYBOARD` | no |
 | LED Color / Effect / Brightness / Blink | `led_control.cpp` | setting | accessory | Cardputer RGB LED (Zero path TBD) | `HAS_RGB_LED` | no |

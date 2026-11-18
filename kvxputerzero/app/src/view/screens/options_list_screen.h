@@ -4,6 +4,7 @@
 #include "kvx_screen.h"
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -13,6 +14,8 @@ namespace screen {
 struct MenuEntry {
     std::string label;
     std::function<void()> action;
+    const char* icon = nullptr;
+    uint32_t swatch = 0; // 0 = none
 };
 
 class OptionsListScreen final : public KvxScreen {

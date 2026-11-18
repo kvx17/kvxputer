@@ -1,0 +1,136 @@
+# Clock / Charge / Config / Tools / Modules faces + help (direct where possible)
+wait 200
+home
+wait 150
+shot faces_home
+key help
+wait 250
+shot help_overlay
+key esc
+wait 100
+
+# Page 3 via skip: charge is first tile on page 3
+home
+wait 80
+key 8
+wait 50
+key 8
+wait 50
+key 8
+wait 100
+shot home_page3_charge
+key enter
+wait 250
+shot charge_face
+key esc
+wait 80
+
+# Tools (others) = page3 slot1 = down from charge
+home
+wait 60
+key 8
+key 8
+key 8
+wait 80
+key down
+wait 60
+shot home_tools_selected
+key enter
+wait 250
+shot tools_menu
+key esc
+wait 80
+
+# Modules = page3 slot2 = right from charge
+home
+wait 60
+key 8
+key 8
+key 8
+wait 80
+key right
+wait 60
+shot home_modules_selected
+key enter
+wait 200
+shot modules_menu
+key esc
+wait 80
+
+# Config = page3 slot3 = right+down from charge
+home
+wait 60
+key 8
+key 8
+key 8
+wait 80
+key right
+key down
+wait 60
+shot home_config_selected
+key enter
+wait 250
+shot config_screen
+key esc
+wait 80
+
+# Clock = page2 slot5 = right right down from rfid
+home
+wait 60
+key 8
+key 8
+wait 80
+key right
+key right
+key down
+wait 60
+shot home_clock_selected
+key enter
+wait 250
+shot clock_face
+key esc
+wait 80
+
+# PC Connect menu via nav (page2 slot4)
+home
+wait 60
+key 8
+key 8
+wait 80
+key right
+key right
+wait 60
+shot home_pcconnect_selected
+key enter
+wait 200
+shot pcconnect_menu
+key esc
+wait 80
+
+# Discovery
+home
+wait 60
+key down
+wait 60
+shot home_discovery_selected
+key enter
+wait 200
+shot discovery_index
+key esc
+wait 80
+
+# Theme light samples (note: dark_mode may be pinned)
+home
+wait 80
+theme light
+wait 200
+shot home_light_attempt
+open pcconnect_howto
+wait 200
+shot pcconnect_howto_light_attempt
+open rf_status
+wait 300
+shot rf_status_light_attempt
+theme dark
+wait 80
+quit

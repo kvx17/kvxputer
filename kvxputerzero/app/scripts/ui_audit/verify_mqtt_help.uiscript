@@ -1,0 +1,22 @@
+wait 200
+open mqtt
+wait 120
+shot after_mqtt_menu2
+key enter
+wait 150
+shot after_mqtt_help
+key esc
+wait 60
+open wireguard
+wait 120
+shot after_wireguard_menu
+key down
+wait 40
+key down
+wait 40
+key down
+wait 40
+key enter
+wait 150
+shot after_wireguard_help_attempt
+quit

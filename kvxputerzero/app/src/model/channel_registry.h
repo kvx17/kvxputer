@@ -6,9 +6,12 @@
 namespace model {
 
 enum class ChannelKind {
-    ToolsFill,      // has Wave 1 tools
+    ToolsFill,      // has Wave 1 tools (+ leftovers)
     ConfigFill,     // theme colors
-    ClockFill,      // Timer for now
+    ClockFill,      // live clock face (+ Timer submenu)
+    ChargeFill,     // charge / battery face
+    ChannelFill,    // tool_registry menu for this channel id
+    DiscoveryFill,  // flat index of all tools
     ComingSoon,     // later wave
     UseStock,       // OS already covers
 };
@@ -16,44 +19,46 @@ enum class ChannelKind {
 struct ChannelDesc {
     const char* id;
     const char* label;
-    const char* icon; // Phosphor Fill UTF-8 glyph (see view/ui_const.h)
     ChannelKind kind;
     const char* placeholder; // short message for UseStock / ComingSoon
 };
 
 inline constexpr ChannelDesc kChannels[] = {
-    {"wifi", "WiFi", "\uE4EA", ChannelKind::ComingSoon, "WiFi tools in a later plan"},
-    {"discovery", "Discovery", "\uE3D8", ChannelKind::ComingSoon, "Discovery tools in a later plan"},
-    {"netops", "NetOps", "\uE344", ChannelKind::ComingSoon, "NetOps tools in a later plan"},
-    {"ble", "BLE", "\uE0E8", ChannelKind::ComingSoon, "BLE tools in a later plan"},
-    {"rf", "RF", "\uE0F6", ChannelKind::UseStock, "Use Cap-CC1101 stock apps"},
-    {"nrf24", "NRF24", "\uE038", ChannelKind::ComingSoon, "Needs NRF24 accessory"},
-    {"lora", "LoRa", "\uE3F6", ChannelKind::UseStock, "Use Cap-LoRa-1262 stock apps"},
-    {"fm", "FM", "\uE3DA", ChannelKind::ComingSoon, "Needs SI4713 accessory"},
-    {"infrared", "Infrared", "\uE2D6", ChannelKind::ComingSoon, "IR extras later; use IR-Remote"},
-    {"ethernet", "Ethernet", "\uEDDE", ChannelKind::ComingSoon, "NIC tools in a later plan"},
-    {"usb", "USB", "\uE4D0", ChannelKind::ComingSoon, "Most USB paths are ESP-only"},
-    {"gps", "GPS", "\uE310", ChannelKind::ComingSoon, "Use Cap GPS; wardrive tools later"},
-    {"rfid", "RFID", "\uE48A", ChannelKind::UseStock, "Use stock RFID app"},
-    {"nfc", "NFC", "\uE346", ChannelKind::UseStock, "Use Cap-CC1101-NFC / RFID"},
-    {"files", "Files", "\uE242", ChannelKind::UseStock, "Use stock Files app"},
-    {"scripts", "Scripts", "\uE4B0", ChannelKind::ComingSoon, "Scripts runner later"},
-    {"clock", "Clock", "\uE0FE", ChannelKind::ClockFill, nullptr},
-    {"others", "Tools", "\uE51A", ChannelKind::ToolsFill, nullptr},
-    {"modules", "Modules", "\uE3C2", ChannelKind::ComingSoon, "Grove modules later"},
-    {"config", "Config", "\uE28A", ChannelKind::ConfigFill, nullptr},
+    {"wifi", "WiFi", ChannelKind::ChannelFill, nullptr},
+    {"discovery", "Discovery", ChannelKind::DiscoveryFill, nullptr},
+    {"netops", "NetOps", ChannelKind::ChannelFill, nullptr},
+    {"ble", "BLE", ChannelKind::ChannelFill, nullptr},
+    {"rf", "RF", ChannelKind::ChannelFill, nullptr},
+    {"nrf24", "NRF24", ChannelKind::ChannelFill, nullptr},
+    {"lora", "LoRa", ChannelKind::ChannelFill, nullptr},
+    {"fm", "FM", ChannelKind::ChannelFill, nullptr},
+    {"infrared", "Infrared", ChannelKind::ChannelFill, nullptr},
+    {"ethernet", "Ethernet", ChannelKind::ChannelFill, nullptr},
+    {"usb", "USB", ChannelKind::UseStock,
+     "USB HID, BadUSB, and mass storage are not available on this device"},
+    {"gps", "GPS", ChannelKind::ChannelFill, "Live wardrive needs the GPS cap."},
+    {"rfid", "RFID", ChannelKind::ChannelFill, nullptr},
+    {"nfc", "NFC", ChannelKind::ChannelFill, nullptr},
+    {"files", "Files", ChannelKind::ChannelFill, nullptr},
+    {"scripts", "Scripts", ChannelKind::ChannelFill, nullptr},
+    {"pcconnect", "PC Connect", ChannelKind::ChannelFill, nullptr},
+    {"clock", "Clock", ChannelKind::ClockFill, nullptr},
+    {"charge", "Charge", ChannelKind::ChargeFill, nullptr},
+    {"others", "Tools", ChannelKind::ToolsFill, nullptr},
+    {"modules", "Modules", ChannelKind::ChannelFill, nullptr},
+    {"config", "Config", ChannelKind::ConfigFill, nullptr},
 };
 
 inline constexpr size_t kChannelCount = sizeof(kChannels) / sizeof(kChannels[0]);
 
-// RGB888 defaults matching Cardputer kvxputer (RGB565 0x9818 / 0x07E0).
-inline constexpr uint32_t kDefaultPriColor = 0x9900CC; // approx of 0x9818 purple
-inline constexpr uint32_t kDefaultSecColor = 0x00E000; // approx of 0x07E0 green
-
-// Exact RGB565-derived:
+// Exact RGB565-derived swatches (kvxputer DEFAULT_PRICOLOR / DEFAULT_SECCOLOR / KVX_DEFAULT_BGCOLOR):
 // 0x9818 -> R=0x13<<3=0x98, G=0x00<<2=0x00, B=0x18<<3=0xC0 -> 0x9800C0
 // 0x07E0 -> R=0, G=0x3F<<2=0xFC, B=0 -> 0x00FC00
-inline constexpr uint32_t kPriFrom565 = 0x9800C0;
-inline constexpr uint32_t kSecFrom565 = 0x00FC00;
+// 0x0000 -> black
+inline constexpr uint32_t kPriFrom565 = 0x9800C0; // purple (picker swatch)
+inline constexpr uint32_t kSecFrom565 = 0x00FC00; // green accent default
+inline constexpr uint32_t kBgDefault  = 0x000000; // black background default
+// Main UI color default for kvxputerzero (user-editable; Reset colors restores this).
+inline constexpr uint32_t kPriDefault = 0xFFFFFF;
 
 } // namespace model

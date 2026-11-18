@@ -1,12 +1,21 @@
 #include "screen_manager.h"
 
 #include "barcode_lib.h"
+#include "backlight.h"
+#include "calculator_screen.h"
 #include "channel_grid_screen.h"
 #include "channel_registry.h"
+#include "clock_face_screen.h"
 #include "codec_lib.h"
 #include "combo_lib.h"
+#include "device_status.h"
+#include "doc_screen.h"
 #include "eng_calc_lib.h"
 #include "glyph_screen.h"
+#include "info_screen.h"
+#include "kvx_style.h"
+#include "matrix_screen.h"
+#include "net_info.h"
 #include "options_list_screen.h"
 #include "passgen_screen.h"
 #include "pda_calendar_screen.h"
@@ -16,12 +25,18 @@
 #include "pda_list_screen.h"
 #include "pda_view_screen.h"
 #include "pda_world_clock_screen.h"
+#include "power_ctrl.h"
 #include "qr_lib.h"
 #include "timer_screen.h"
+#include "tool_screens.h"
 #include "totp_lib.h"
 #include "totp_show_screen.h"
+#include "ui_const.h"
 #include "work_screen.h"
 
+#include <cstdio>
+
+#include <cctype>
 #include <sstream>
 #include <vector>
 
@@ -73,6 +88,22 @@ bool open_barcode(viewmodel::BaseViewModel& vm, std::string& error) {
     return true;
 }
 
+bool parse_hex_color(std::string in, uint32_t& out) {
+    in = trim_copy(std::move(in));
+    if (!in.empty() && in[0] == '#') in.erase(0, 1);
+    if (in.size() == 8 && (in[0] == '0') && (in[1] == 'x' || in[1] == 'X')) in = in.substr(2);
+    if (in.size() != 6) return false;
+    for (char c : in) {
+        if (!std::isxdigit(static_cast<unsigned char>(c))) return false;
+    }
+    try {
+        out = static_cast<uint32_t>(std::stoul(in, nullptr, 16)) & 0xFFFFFFu;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 } // namespace
 
 ScreenManager::ScreenManager(viewmodel::BaseViewModel& view_model, AssetManager& assets)
@@ -97,6 +128,10 @@ void ScreenManager::start() {
 }
 
 void ScreenManager::request_page(model::AppPage page) {
+    if (page_switch_scheduled_ && page != requested_page_) {
+        // e.g. theme bounce ConfigMenu → home coalesces to home; still rebuild.
+        force_reload_ = true;
+    }
     requested_page_ = page;
     if (page_switch_scheduled_) return;
     page_switch_scheduled_ = lv_async_call(flush_requested_page_async, this) == LV_RESULT_OK;
@@ -104,7 +139,8 @@ void ScreenManager::request_page(model::AppPage page) {
 
 void ScreenManager::flush_requested_page() {
     page_switch_scheduled_ = false;
-    if (has_loaded_page_ && requested_page_ == loaded_page_) return;
+    if (has_loaded_page_ && requested_page_ == loaded_page_ && !force_reload_) return;
+    force_reload_ = false;
     load_screen(make_screen(requested_page_));
     loaded_page_ = requested_page_;
     has_loaded_page_ = true;
@@ -130,25 +166,42 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::ChannelMenu: {
         std::vector<MenuEntry> entries;
-        entries.push_back({"Codec / Hash", [this]() { view_model_.open_codec_menu(); }});
-        entries.push_back({"Calculators", [this]() { view_model_.open_eng_calc_menu(); }});
-        entries.push_back({"Passgen", [this]() { view_model_.open_passgen(); }});
-        entries.push_back({"TOTP", [this]() { view_model_.open_totp_menu(); }});
-        entries.push_back({"Combo", [this]() { view_model_.open_combo_menu(); }});
-        entries.push_back({"QRCodes", [this]() { view_model_.open_qr_menu(); }});
-        entries.push_back({"Barcode", [this]() { view_model_.open_barcode_menu(); }});
-        entries.push_back({"PDA", [this]() { view_model_.open_pda_hub(); }});
-        entries.push_back({"Timer", [this]() { view_model_.open_timer(); }});
+        entries.push_back({"Calculator", [this]() { view_model_.open_calculator(); }, view::ICON_MENU_CALCS});
+        entries.push_back({"Calculators", [this]() { view_model_.open_eng_calc_menu(); }, view::ICON_MENU_CALCS});
+        entries.push_back({"Codec / Hash", [this]() { view_model_.open_codec_menu(); }, view::ICON_MENU_CODEC});
+        entries.push_back({"Passgen", [this]() { view_model_.open_passgen(); }, view::ICON_MENU_PASSGEN});
+        entries.push_back({"TOTP", [this]() { view_model_.open_totp_menu(); }, view::ICON_MENU_TOTP});
+        entries.push_back({"Combo", [this]() { view_model_.open_combo_menu(); }, view::ICON_MENU_COMBO});
+        entries.push_back({"QRCodes", [this]() { view_model_.open_qr_menu(); }, view::ICON_MENU_QR});
+        entries.push_back({"Barcode", [this]() { view_model_.open_barcode_menu(); }, view::ICON_MENU_BARCODE});
+        entries.push_back({"PDA", [this]() { view_model_.open_pda_hub(); }, view::ICON_MENU_PDA});
+        entries.push_back({"Media Player", [this]() { view_model_.open_tool(model::ToolId::MediaPlayer); }});
+        entries.push_back({"Timer", [this]() { view_model_.open_timer(); }, view::ICON_MENU_TIMER});
+        entries.push_back({"Matrix", [this]() { view_model_.open_matrix(); }, nullptr, 0x39FF14});
+        entries.push_back({"DTMF", [this]() { view_model_.open_tool(model::ToolId::Dtmf); }});
+        entries.push_back({"Morse", [this]() { view_model_.open_tool(model::ToolId::Morse); }});
+        entries.push_back({"Microphone", [this]() { view_model_.open_tool(model::ToolId::Microphone); }});
+        entries.push_back({"MQTT", [this]() { view_model_.open_tool(model::ToolId::Mqtt); }});
+        entries.push_back({"LLM Chat", [this]() { view_model_.open_tool(model::ToolId::LlmChat); }});
+        entries.push_back({"Drone ID", [this]() { view_model_.open_tool(model::ToolId::DroneId); }});
+        entries.push_back({"iButton", [this]() { view_model_.open_tool(model::ToolId::IButtonHint); }});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Tools", std::move(entries));
     }
 
+    case model::AppPage::ToolMenu:
+        return make_channel_tool_menu(view_model_, assets_);
+
+    case model::AppPage::Discovery:
+        return make_discovery_screen(view_model_, assets_);
+
+    case model::AppPage::ToolRun:
+    case model::AppPage::ToolPrompt:
+        return make_tool_run_screen(view_model_, assets_);
+
     case model::AppPage::Placeholder: {
         const auto& ch = view_model_.current_channel();
-        std::vector<MenuEntry> entries;
         const char* msg = ch.placeholder ? ch.placeholder : "Coming soon";
-        entries.push_back({msg, [this]() { view_model_.go_back(); }});
-        entries.push_back({"Back", [this]() { view_model_.go_back(); }});
-        return std::make_unique<OptionsListScreen>(view_model_, assets_, ch.label, std::move(entries));
+        return std::make_unique<screen::DocScreen>(view_model_, assets_, ch.label, std::string(msg));
     }
 
     case model::AppPage::CodecMenu: {
@@ -186,6 +239,22 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::Timer:
         return std::make_unique<screen::TimerScreen>(view_model_, assets_);
+
+    case model::AppPage::ClockFace:
+        return std::make_unique<screen::ClockFaceScreen>(view_model_, assets_, false);
+
+    case model::AppPage::ChargeFace:
+        return std::make_unique<screen::ClockFaceScreen>(view_model_, assets_, true);
+
+    case model::AppPage::ClockSubMenu: {
+        std::vector<MenuEntry> entries;
+        entries.push_back({"Timer", [this]() { view_model_.open_timer(); }, view::ICON_MENU_TIMER});
+        entries.push_back({"Exit", [this]() { view_model_.go_home(); }});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Clock", std::move(entries));
+    }
+
+    case model::AppPage::Matrix:
+        return std::make_unique<screen::MatrixScreen>(view_model_, assets_);
 
     case model::AppPage::Passgen:
         return std::make_unique<screen::PassgenScreen>(view_model_, assets_);
@@ -397,48 +466,155 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::ConfigMenu: {
         std::vector<MenuEntry> entries;
-        entries.push_back({"UI Color", [this]() { view_model_.open_color_picker(model::ColorTarget::Primary); }});
-        entries.push_back(
-            {"Accent Color", [this]() { view_model_.open_color_picker(model::ColorTarget::Accent); }});
-        entries.push_back({"Toggle dark mode", [this]() { view_model_.toggle_dark_mode(); }});
-        entries.push_back({"About", [this]() { view_model_.open_about(); }});
+        entries.push_back({"Main color",
+                           [this]() { view_model_.open_color_picker(model::ColorTarget::Primary); },
+                           view::ICON_MENU_MAIN_CLR,
+                           view_model_.pri_color()});
+        entries.push_back({"Accent color",
+                           [this]() { view_model_.open_color_picker(model::ColorTarget::Accent); },
+                           view::ICON_MENU_ACCENT,
+                           view_model_.sec_color()});
+        entries.push_back({"Background",
+                           [this]() { view_model_.open_color_picker(model::ColorTarget::Background); },
+                           view::ICON_MENU_BG,
+                           view_model_.bg_color()});
+        entries.push_back({"Reset colors", [this]() {
+                               view_model_.reset_colors();
+                               view_model_.go_home();
+                           }, view::ICON_MENU_RESET});
+        entries.push_back({"Brightness", [this]() { view_model_.open_brightness(); }});
+        entries.push_back({"Dim time", [this]() { view_model_.open_dim_time(); }});
+        entries.push_back({"Sound", [this]() { view_model_.open_sound_menu(); }});
+        entries.push_back({"Power", [this]() { view_model_.open_power_menu(); }});
+        entries.push_back({"About", [this]() { view_model_.open_about(); }, view::ICON_MENU_ABOUT});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Config", std::move(entries));
     }
 
     case model::AppPage::ColorPicker: {
-        const bool accent = view_model_.color_target() == model::ColorTarget::Accent;
+        const auto target = view_model_.color_target();
         std::vector<MenuEntry> entries;
         struct Swatch {
             const char* name;
             uint32_t rgb;
         };
-        const Swatch swatches[] = {
-            {"Purple (default)", model::kPriFrom565},
-            {"Green accent", model::kSecFrom565},
-            {"Blue", 0x2080F0},
-            {"Orange", 0xF0A020},
-            {"Cyan", 0x20E0E0},
-            {"White", 0xE0E0E0},
-            {"Red", 0xE03050},
-        };
-        for (const auto& s : swatches) {
-            entries.push_back({s.name, [this, accent, rgb = s.rgb]() {
-                                   if (accent) view_model_.set_sec_color(rgb);
-                                   else view_model_.set_pri_color(rgb);
+        const Swatch* swatches = nullptr;
+        size_t swatch_count = 0;
+        const char* title = "Main color";
+        if (target == model::ColorTarget::Accent) {
+            title = "Accent color";
+            static const Swatch kAccent[] = {
+                {"Green (default)", model::kSecFrom565},
+                {"Purple", model::kPriFrom565},
+                {"Cyan", 0x20E0E0},
+                {"Orange", 0xF0A020},
+                {"White", 0xE0E0E0},
+                {"Red", 0xE03050},
+                {"Blue", 0x2080F0},
+            };
+            swatches = kAccent;
+            swatch_count = sizeof(kAccent) / sizeof(kAccent[0]);
+        } else if (target == model::ColorTarget::Background) {
+            title = "Background";
+            static const Swatch kBg[] = {
+                {"Black (default)", model::kBgDefault},
+                {"Near black", 0x101018},
+                {"Purple tint", 0x1A1020},
+                {"Light gray", 0xF2F2F2},
+            };
+            swatches = kBg;
+            swatch_count = sizeof(kBg) / sizeof(kBg[0]);
+        } else {
+            static const Swatch kMain[] = {
+                {"White (default)", model::kPriDefault},
+                {"Purple", model::kPriFrom565},
+                {"Green", model::kSecFrom565},
+                {"Blue", 0x2080F0},
+                {"Orange", 0xF0A020},
+                {"Cyan", 0x20E0E0},
+                {"Red", 0xE03050},
+            };
+            swatches = kMain;
+            swatch_count = sizeof(kMain) / sizeof(kMain[0]);
+        }
+        for (size_t i = 0; i < swatch_count; ++i) {
+            const auto s = swatches[i];
+            entries.push_back({s.name,
+                               [this, target, rgb = s.rgb]() {
+                                   if (target == model::ColorTarget::Accent) {
+                                       view_model_.set_sec_color(rgb);
+                                   } else if (target == model::ColorTarget::Background) {
+                                       view_model_.set_bg_color(rgb);
+                                   } else {
+                                       view_model_.set_pri_color(rgb);
+                                   }
                                    view_model_.persist_theme();
                                    view_model_.go_back();
-                               }});
+                               },
+                               nullptr,
+                               s.rgb});
         }
-        return std::make_unique<OptionsListScreen>(view_model_, assets_,
-                                                   accent ? "Accent Color" : "UI Color", std::move(entries));
+        entries.push_back({"Custom hex...", [this]() { view_model_.open_color_hex(); },
+                           view::ICON_MENU_CUSTOM});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, title, std::move(entries));
+    }
+
+    case model::AppPage::ColorHex: {
+        const auto target = view_model_.color_target();
+        const char* title = "Main hex";
+        if (target == model::ColorTarget::Accent) title = "Accent hex";
+        else if (target == model::ColorTarget::Background) title = "Background hex";
+        return std::make_unique<screen::WorkScreen>(
+            view_model_, assets_, title, "RRGGBB or #RRGGBB · Enter applies",
+            [this, target](const std::string& in, bool& ok) {
+                uint32_t rgb = 0;
+                if (!parse_hex_color(in, rgb)) {
+                    ok = false;
+                    return std::string("Invalid hex");
+                }
+                if (target == model::ColorTarget::Accent) {
+                    view_model_.set_sec_color(rgb);
+                } else if (target == model::ColorTarget::Background) {
+                    view_model_.set_bg_color(rgb);
+                } else {
+                    view_model_.set_pri_color(rgb);
+                }
+                view_model_.persist_theme();
+                ok = true;
+                view_model_.show_page(model::AppPage::ColorPicker);
+                return std::string("Applied");
+            });
     }
 
     case model::AppPage::About: {
-        std::vector<MenuEntry> entries;
-        entries.push_back({"kvxputerzero 0.1.0", []() {}});
-        entries.push_back({"Cardputer Zero toolkit shell", []() {}});
-        entries.push_back({"Back", [this]() { view_model_.go_back(); }});
-        return std::make_unique<OptionsListScreen>(view_model_, assets_, "About", std::move(entries));
+        screen::InfoScreen::Fields fields;
+        fields.push_back({"app", "kvxputerzero 0.1.0"});
+        fields.push_back({"model", "Cardputer Zero"});
+        view::StatusPillKind kind = view::StatusPillKind::Ok;
+        std::string status = "OK";
+        {
+            const auto st = platform::read_device_status();
+            if (st.battery_present && st.battery_percent >= 0) {
+                char buf[32];
+                std::snprintf(buf, sizeof(buf), "%d%%%s", static_cast<int>(st.battery_percent),
+                              st.battery_charging ? " charging" : "");
+                fields.push_back({"battery", buf});
+            } else {
+                fields.push_back({"battery", "unknown"});
+                kind = view::StatusPillKind::Idle;
+                status = "unknown";
+            }
+        }
+        {
+            std::string err;
+            const auto iface = platform::default_route_iface(err);
+            fields.push_back({"ipv4", iface.ipv4.empty() ? "none" : iface.ipv4});
+            if (iface.ipv4.empty() && kind == view::StatusPillKind::Ok) {
+                kind = view::StatusPillKind::Idle;
+                status = "no ipv4";
+            }
+        }
+        return std::make_unique<screen::InfoScreen>(view_model_, assets_, "About", std::move(fields),
+                                                    std::move(status), kind);
     }
 
     case model::AppPage::PdaHub:
@@ -494,11 +670,115 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Rebind", std::move(entries));
     }
 
-    case model::AppPage::PdaStockCalc: {
+    case model::AppPage::Calculator:
+        return std::make_unique<screen::CalculatorScreen>(view_model_, assets_);
+
+    case model::AppPage::FilesBrowser:
+    case model::AppPage::MediaPlayer:
+        return std::make_unique<screen::ChannelGridScreen>(view_model_, assets_);
+
+    case model::AppPage::Brightness: {
+        int32_t pct = 50;
+        platform::read_brightness_percent(pct);
         std::vector<MenuEntry> entries;
-        entries.push_back({"Use stock Calculator", [this]() { view_model_.go_back(); }});
+        char cur[32];
+        std::snprintf(cur, sizeof(cur), "Now %d%%", static_cast<int>(pct));
+        entries.push_back({cur, []() {}});
+        for (int step : {10, 20, 30, 40, 50, 60, 70, 80, 90, 100}) {
+            entries.push_back({std::to_string(step) + "%", [this, step]() {
+                                   platform::write_brightness_percent(step);
+                                   view_model_.show_page(model::AppPage::Brightness);
+                               }});
+        }
         entries.push_back({"Back", [this]() { view_model_.go_back(); }});
-        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Calculator", std::move(entries));
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Brightness", std::move(entries));
+    }
+
+    case model::AppPage::DimTime: {
+        const int cur = view_model_.model().dim_seconds();
+        auto label = [](int s) -> std::string {
+            if (s == 0) return "Off";
+            return std::to_string(s) + "s";
+        };
+        std::vector<MenuEntry> entries;
+        for (int s : {0, 15, 30, 60}) {
+            const std::string mark = (s == cur) ? " *" : "";
+            entries.push_back({label(s) + mark, [this, s]() {
+                                   view_model_.model().set_dim_seconds(s);
+                                   view_model_.model().save_user_config();
+                                   view_model_.show_page(model::AppPage::DimTime);
+                               }});
+        }
+        entries.push_back({"Back", [this]() { view_model_.go_back(); }});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Dim time", std::move(entries));
+    }
+
+    case model::AppPage::SoundMenu: {
+        const bool on = view_model_.model().sound_enabled();
+        const int vol = view_model_.model().sound_volume();
+        std::vector<MenuEntry> entries;
+        entries.push_back({std::string("Sound: ") + (on ? "ON" : "OFF"), [this]() {
+                               view_model_.model().set_sound_enabled(!view_model_.model().sound_enabled());
+                               view_model_.model().save_user_config();
+                               view_model_.show_page(model::AppPage::SoundMenu);
+                           }});
+        for (int step : {20, 40, 60, 80, 100}) {
+            const std::string mark = (step == vol) ? " *" : "";
+            entries.push_back({"Volume " + std::to_string(step) + "%" + mark, [this, step]() {
+                                   view_model_.model().set_sound_volume(step);
+                                   view_model_.model().save_user_config();
+                                   view_model_.show_page(model::AppPage::SoundMenu);
+                               }});
+        }
+        entries.push_back({"Back", [this]() { view_model_.go_back(); }});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Sound", std::move(entries));
+    }
+
+    case model::AppPage::PowerMenu: {
+        std::vector<MenuEntry> entries;
+        if (view_model_.model().work_output() == "__confirm_reboot__") {
+            entries.push_back({"Yes, reboot", [this]() {
+                                   std::string err;
+                                   platform::safe_reboot(err);
+                                   view_model_.model().set_work_output(err.empty() ? "rebooting..." : err);
+                                   view_model_.show_page(model::AppPage::PowerMenu);
+                               }});
+            entries.push_back({"No", [this]() {
+                                   view_model_.model().set_work_output("");
+                                   view_model_.show_page(model::AppPage::PowerMenu);
+                               }});
+            return std::make_unique<OptionsListScreen>(view_model_, assets_, "Reboot?", std::move(entries));
+        }
+        if (view_model_.model().work_output() == "__confirm_poweroff__") {
+            entries.push_back({"Yes, power off", [this]() {
+                                   std::string err;
+                                   platform::safe_shutdown(err);
+                                   view_model_.model().set_work_output(err.empty() ? "powering off..." : err);
+                                   view_model_.show_page(model::AppPage::PowerMenu);
+                               }});
+            entries.push_back({"No", [this]() {
+                                   view_model_.model().set_work_output("");
+                                   view_model_.show_page(model::AppPage::PowerMenu);
+                               }});
+            return std::make_unique<OptionsListScreen>(view_model_, assets_, "Power off?", std::move(entries));
+        }
+        if (!view_model_.model().work_output().empty() &&
+            view_model_.model().work_output().rfind("__", 0) != 0) {
+            entries.push_back({view_model_.model().work_output(), []() {}});
+        }
+        entries.push_back({"Restart", [this]() {
+                               view_model_.model().set_work_output("__confirm_reboot__");
+                               view_model_.show_page(model::AppPage::PowerMenu);
+                           }});
+        entries.push_back({"Power Off", [this]() {
+                               view_model_.model().set_work_output("__confirm_poweroff__");
+                               view_model_.show_page(model::AppPage::PowerMenu);
+                           }});
+        entries.push_back({"Back", [this]() {
+                               view_model_.model().set_work_output("");
+                               view_model_.go_back();
+                           }});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Power", std::move(entries));
     }
     }
 

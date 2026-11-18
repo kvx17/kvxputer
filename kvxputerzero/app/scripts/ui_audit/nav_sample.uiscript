@@ -1,0 +1,65 @@
+# Sample home-grid navigation into a few channels (prove nav works)
+wait 200
+shot home_page0
+# Enter WiFi channel (selected by default)
+key enter
+wait 200
+shot wifi_menu
+# AP info is a prose/status offender
+key down
+key down
+key enter
+wait 200
+shot wifi_ap_info_via_nav
+key esc
+wait 80
+key esc
+wait 80
+# Move to RF (right, right from WiFi)
+key right
+key right
+wait 80
+shot home_rf_selected
+key enter
+wait 150
+shot rf_menu
+key enter
+wait 250
+shot rf_status_via_nav
+key esc
+wait 80
+key esc
+wait 80
+# Page to PC Connect: pages via key 8
+key 8
+wait 100
+shot home_page1
+key 8
+wait 100
+shot home_page2
+# page2: rfid,nfc,files / scripts,pcconnect,clock — col-major
+# pcconnect is index 16 = page_base 12 + 4 → col2 row0
+# default selection after page may stay at slot of previous? reset by going home
+home
+wait 100
+key 8
+wait 60
+key 8
+wait 80
+# From slot 0 (rfid): right, right → files? Wait:
+# slots: 0=rfid col0r0, 1=nfc col0r1, 2=files col1r0, 3=scripts col1r1, 4=pcconnect col2r0, 5=clock col2r1
+key right
+key right
+wait 80
+shot home_pcconnect_selected
+key enter
+wait 150
+shot pcconnect_menu
+key enter
+wait 200
+shot pcconnect_howto_via_nav
+key esc
+wait 80
+key esc
+wait 80
+quit

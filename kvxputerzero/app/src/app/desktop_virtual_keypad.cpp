@@ -353,11 +353,12 @@ void DesktopVirtualKeypad::handle_key(uint8_t key_index) {
             break;
     }
 
+    // Virtual Fn → orange legends. Host Left-Alt / virtual Sym → punctuation layer.
     uint32_t output = platform::resolve_printed_key(key.base,
                                                     key.sym,
-                                                    fn_active_ || host_fn_,
+                                                    fn_active_,
                                                     mode_ == Mode::Shift || host_shift_,
-                                                    mode_ == Mode::Sym);
+                                                    mode_ == Mode::Sym || host_fn_);
 
     if (output != 0) {
         if (ctrl_active_ && ((output >= 'a' && output <= 'z') || (output >= 'A' && output <= 'Z'))) {
@@ -398,9 +399,9 @@ uint32_t DesktopVirtualKeypad::host_key_event(char base, bool pressed) {
 
     const auto output = platform::resolve_printed_key(base,
                                                        sym_for_base(base),
-                                                       fn_active_ || host_fn_,
+                                                       fn_active_,
                                                        mode_ == Mode::Shift || host_shift_,
-                                                       mode_ == Mode::Sym);
+                                                       mode_ == Mode::Sym || host_fn_);
     if (output == 0) {
         return 0;
     }

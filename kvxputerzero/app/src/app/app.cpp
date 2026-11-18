@@ -18,11 +18,17 @@
 #include "base_viewmodel.h"
 #include "theme.h"
 #include "toast.h"
+#include "tool_registry.h"
 
+#include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #if USE_DESKTOP
 #include "desktop_simulator_frame.h"
@@ -164,7 +170,7 @@ private:
         lv_obj_set_size(box, view::kScreenWidth - 24, 70);
         lv_obj_center(box);
         lv_obj_set_style_radius(box, 8, 0);
-        lv_obj_set_style_bg_color(box, lv_color_hex(0x9800C0), 0);
+        lv_obj_set_style_bg_color(box, lv_color_hex(model::kPriDefault), 0);
         lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
 
         auto* font = assets_.load_standard_font(14);
@@ -230,6 +236,10 @@ private:
     bool handle_key(uint32_t key, bool long_pressed) {
         if (alarms_.consuming_keys()) {
             return alarms_.handle_key(key);
+        }
+        // The matrix rain exits on any key, including help and screenshot.
+        if (view_model_.current_page() == model::AppPage::Matrix) {
+            return false;
         }
         if (key == platform::kKeyPrintScreen) {
             if (!long_pressed) {
@@ -334,6 +344,252 @@ private:
     bool exit_armed_{false};
 };
 
+#if USE_DESKTOP
+// Deterministic key/shot/theme automation driven by KVX_UI_SCRIPT.
+class UiScriptRunner {
+public:
+    UiScriptRunner(viewmodel::BaseViewModel& vm, DesktopSimulatorFrame& frame, bool& running)
+        : vm_(vm), frame_(frame), running_(running) {}
+
+    bool load(const char* path) {
+        std::ifstream in(path);
+        if (!in) {
+            LOG_ERROR("KVX_UI_SCRIPT open failed: {}", path);
+            return false;
+        }
+        std::string line;
+        while (std::getline(in, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+                line.pop_back();
+            }
+            size_t i = 0;
+            while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) ++i;
+            if (i >= line.size() || line[i] == '#') continue;
+            lines_.push_back(line.substr(i));
+        }
+        LOG_INFO("KVX_UI_SCRIPT loaded {} cmds from {}", lines_.size(), path);
+        return true;
+    }
+
+    // Call once per main-loop tick. Advances wait timers and runs ready commands.
+    void tick() {
+        if (done_ || index_ >= lines_.size()) {
+            if (!done_ && !lines_.empty()) {
+                done_ = true;
+                LOG_INFO("KVX_UI_SCRIPT finished");
+                running_ = false;
+            }
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now < wait_until_) return;
+
+        const std::string& raw = lines_[index_++];
+        std::istringstream iss(raw);
+        std::string cmd;
+        iss >> cmd;
+        if (cmd.empty()) return;
+
+        if (cmd == "wait") {
+            int ms = 0;
+            iss >> ms;
+            if (ms < 0) ms = 0;
+            wait_until_ = now + std::chrono::milliseconds(ms);
+            return;
+        }
+        if (cmd == "key") {
+            std::string name;
+            iss >> name;
+            if (!frame_.inject_named_key(name)) {
+                LOG_WARN("ui script key failed: {}", name);
+            }
+            // Let LVGL process the key before the next command.
+            wait_until_ = now + std::chrono::milliseconds(40);
+            return;
+        }
+        if (cmd == "type") {
+            std::string rest;
+            std::getline(iss, rest);
+            size_t i = 0;
+            while (i < rest.size() && (rest[i] == ' ' || rest[i] == '\t')) ++i;
+            frame_.inject_text(rest.substr(i));
+            wait_until_ = now + std::chrono::milliseconds(40);
+            return;
+        }
+        if (cmd == "shot") {
+            std::string name;
+            iss >> name;
+            if (name.empty()) name = "shot";
+            take_shot(name);
+            wait_until_ = now + std::chrono::milliseconds(20);
+            return;
+        }
+        if (cmd == "theme") {
+            std::string mode;
+            iss >> mode;
+            const bool dark = (mode == "dark" || mode == "1" || mode == "on");
+            vm_.set_dark_mode(dark);
+            // Explicit palette: KvxScreens paint from bg/pri/sec, not only dark_mode.
+            if (dark) {
+                vm_.set_bg_color(model::kBgDefault);
+                vm_.set_pri_color(model::kPriDefault);
+            } else {
+                vm_.set_bg_color(0xF0F0F0);
+                vm_.set_pri_color(0x202020);
+            }
+            vm_.persist_theme();
+            // Bounce so ScreenManager rebuilds tiles with the new tokens.
+            vm_.show_page(model::AppPage::ConfigMenu);
+            vm_.go_home();
+            wait_until_ = now + std::chrono::milliseconds(150);
+            return;
+        }
+        if (cmd == "open") {
+            std::string key;
+            iss >> key;
+            open_tool_key(key);
+            wait_until_ = now + std::chrono::milliseconds(80);
+            return;
+        }
+        if (cmd == "page") {
+            std::string name;
+            iss >> name;
+            open_page_name(name);
+            wait_until_ = now + std::chrono::milliseconds(100);
+            return;
+        }
+        if (cmd == "home") {
+            vm_.go_home();
+            wait_until_ = now + std::chrono::milliseconds(60);
+            return;
+        }
+        if (cmd == "quit") {
+            done_ = true;
+            running_ = false;
+            return;
+        }
+        LOG_WARN("ui script unknown cmd: {}", raw);
+    }
+
+    bool done() const { return done_; }
+
+private:
+    void open_page_name(const std::string& name) {
+        if (name.empty()) return;
+        auto lower = name;
+        for (char& c : lower) {
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        }
+        if (lower == "calculator" || lower == "calc") {
+            vm_.open_calculator();
+        } else if (lower == "clock") {
+            vm_.show_page(model::AppPage::ClockFace);
+        } else if (lower == "clock_menu" || lower == "clock_sub") {
+            vm_.show_page(model::AppPage::ClockSubMenu);
+        } else if (lower == "charge") {
+            vm_.show_page(model::AppPage::ChargeFace);
+        } else if (lower == "config") {
+            vm_.open_config_menu();
+        } else if (lower == "about") {
+            vm_.open_about();
+        } else if (lower == "brightness") {
+            vm_.open_brightness();
+        } else if (lower == "dim" || lower == "dim_time") {
+            vm_.open_dim_time();
+        } else if (lower == "sound") {
+            vm_.open_sound_menu();
+        } else if (lower == "power") {
+            vm_.open_power_menu();
+        } else if (lower == "pda" || lower == "pda_hub") {
+            vm_.open_pda_hub();
+        } else if (lower == "pda_notes") {
+            vm_.open_pda_list(model::PdaKind::Notes);
+        } else if (lower == "pda_memos") {
+            vm_.open_pda_list(model::PdaKind::Memos);
+        } else if (lower == "pda_todo") {
+            vm_.open_pda_list(model::PdaKind::Todo);
+        } else if (lower == "pda_contacts") {
+            vm_.open_pda_list(model::PdaKind::Contacts);
+        } else if (lower == "pda_alarms") {
+            vm_.open_pda_list(model::PdaKind::Alarms);
+        } else if (lower == "pda_calendar") {
+            vm_.open_pda_calendar();
+        } else if (lower == "pda_world" || lower == "pda_world_clock") {
+            vm_.open_pda_world_clock();
+        } else if (lower == "timer") {
+            vm_.open_timer();
+        } else if (lower == "passgen") {
+            vm_.open_passgen();
+        } else if (lower == "totp" || lower == "totp_menu") {
+            vm_.open_totp_menu();
+        } else if (lower == "tools" || lower == "others") {
+            // ToolsFill channel menu (Calculator, PDA, Media, …).
+            for (size_t i = 0; i < model::kChannelCount; ++i) {
+                if (std::strcmp(model::kChannels[i].id, "others") == 0) {
+                    vm_.set_channel_index(static_cast<int>(i));
+                    vm_.show_page(model::AppPage::ChannelMenu);
+                    break;
+                }
+            }
+        } else {
+            LOG_WARN("ui script page: unknown '{}'", name);
+            return;
+        }
+        LOG_INFO("ui script page: {}", name);
+    }
+
+    void take_shot(const std::string& name) {
+        const auto shot = platform::screenshot::capture_active_screen();
+        if (!shot.success) {
+            LOG_WARN("ui script shot failed: {}", shot.error);
+            return;
+        }
+        const char* out_root = std::getenv("KVX_AUDIT_DIR");
+        const std::filesystem::path dir =
+            out_root && out_root[0] ? std::filesystem::path(out_root)
+                                   : std::filesystem::path("screenshot/audit");
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        std::string file = name;
+        if (file.size() < 4 || file.substr(file.size() - 4) != ".png") file += ".png";
+        const auto dest = dir / file;
+        std::filesystem::copy_file(shot.path, dest,
+                                   std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec) {
+            LOG_WARN("ui script shot copy {} -> {}: {}", shot.path, dest.string(), ec.message());
+        } else {
+            LOG_INFO("ui script shot: {}", dest.string());
+        }
+    }
+
+    void open_tool_key(const std::string& key_stage) {
+        if (key_stage.empty()) return;
+        std::string key = key_stage;
+        std::string stage;
+        const auto colon = key_stage.find(':');
+        if (colon != std::string::npos) {
+            key = key_stage.substr(0, colon);
+            stage = key_stage.substr(colon + 1);
+        }
+        const auto* desc = model::find_tool_by_key(key.c_str());
+        if (!desc) {
+            LOG_WARN("ui script open: unknown tool '{}'", key);
+            return;
+        }
+        vm_.open_tool(desc->id, stage);
+        LOG_INFO("ui script open: {} ({})", key, stage.empty() ? "-" : stage.c_str());
+    }
+
+    viewmodel::BaseViewModel& vm_;
+    DesktopSimulatorFrame& frame_;
+    bool& running_;
+    std::vector<std::string> lines_;
+    size_t index_{0};
+    bool done_{false};
+    std::chrono::steady_clock::time_point wait_until_{};
+};
+#endif
+
 #if !USE_DESKTOP
 lv_display_t* init_device_display() {
 #if APP_USE_DRM
@@ -389,15 +645,16 @@ int Application::run() {
         }
     }
 
-    ApplicationConfig config;
-    std::string config_error;
-    if (load_application_config(loaded_config_path, config, config_error)) {
-        view_model.set_dark_mode(config.dark_mode);
-        LOG_INFO("loaded config: {} (dark_mode={})",
-                 loaded_config_path,
-                 config.dark_mode ? "yes" : "no");
-    } else {
-        LOG_WARN("failed to load config {}: {}; using defaults", loaded_config_path, config_error);
+    // Theme colors are already loaded by BaseModel. Do not call set_dark_mode()
+    // here: ApplicationConfig defaults dark_mode to false, and set_dark_mode(false)
+    // rewrites a black background to light gray, then saves over the user's colors.
+    LOG_INFO("theme: pri={:#08x} sec={:#08x} bg={:#08x} dark_mode={}",
+             view_model.pri_color(),
+             view_model.sec_color(),
+             view_model.bg_color(),
+             view_model.is_dark_mode() ? "yes" : "no");
+    if (!std::filesystem::is_regular_file(loaded_config_path)) {
+        LOG_WARN("no config at {}; using defaults", loaded_config_path);
     }
 
 #if USE_DESKTOP
@@ -420,8 +677,17 @@ int Application::run() {
     simulator_frame.bind_dark_mode(view_model.dark_mode_subject());
 #endif
 
-    // Cardputer intro GIF; any key skips (same idea as firmware boot_screen_anim).
+    // Matrix rain + KVXPUTER wordmark. Any key skips.
+#if USE_DESKTOP
+    set_boot_event_pump([](void* user_data) {
+                            return static_cast<DesktopSimulatorFrame*>(user_data)->process_events();
+                        },
+                        &simulator_frame);
+#endif
     play_boot_splash(assets);
+#if USE_DESKTOP
+    set_boot_event_pump(nullptr, nullptr);
+#endif
 
     ScreenManager screen_manager(view_model, assets);
     screen_manager.start();
@@ -450,6 +716,34 @@ int Application::run() {
     LOG_INFO("LVGL app started at {}x{}", lv_display_get_horizontal_resolution(display),
              lv_display_get_vertical_resolution(display));
 
+#if USE_DESKTOP
+    // Direct tool open for deep-stage automation (navigation preferred for audits).
+    if (const char* open_tool = std::getenv("KVX_OPEN_TOOL")) {
+        std::string key = open_tool;
+        std::string stage;
+        const auto colon = key.find(':');
+        if (colon != std::string::npos) {
+            stage = key.substr(colon + 1);
+            key = key.substr(0, colon);
+        }
+        if (const auto* desc = model::find_tool_by_key(key.c_str())) {
+            view_model.open_tool(desc->id, stage);
+            LOG_INFO("KVX_OPEN_TOOL: {} ({})", key, stage.empty() ? "-" : stage.c_str());
+        } else {
+            LOG_WARN("KVX_OPEN_TOOL: unknown tool '{}'", key);
+        }
+    }
+
+    std::unique_ptr<UiScriptRunner> ui_script;
+    if (const char* script_path = std::getenv("KVX_UI_SCRIPT")) {
+        ui_script = std::make_unique<UiScriptRunner>(view_model, simulator_frame, running);
+        if (!ui_script->load(script_path)) {
+            ui_script.reset();
+            running = false;
+        }
+    }
+#endif
+
     const char* auto_shot = std::getenv("KVX_SCREENSHOT_PATH");
     int auto_shot_frames = auto_shot ? 12 : -1;
 
@@ -459,6 +753,9 @@ int Application::run() {
 #endif
     ) {
         lv_timer_handler();
+#if USE_DESKTOP
+        if (ui_script) ui_script->tick();
+#endif
         if (auto_shot_frames > 0) {
             --auto_shot_frames;
             if (auto_shot_frames == 0) {

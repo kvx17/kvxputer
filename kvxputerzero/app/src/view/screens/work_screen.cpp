@@ -1,6 +1,7 @@
 #include "work_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "theme.h"
 
 namespace screen {
@@ -19,49 +20,40 @@ WorkScreen::WorkScreen(viewmodel::BaseViewModel& view_model,
 
 void WorkScreen::build() {
     make_header(content(), title_.c_str());
+    const auto tok = tokens();
 
-    auto* font = assets().load_standard_font(12);
+    const lv_font_t* font = assets().load_standard_font(12);
+    if (!font) font = &lv_font_montserrat_12;
+
     auto* hint = lv_label_create(content());
     lv_label_set_text(hint, hint_.c_str());
-    lv_obj_set_style_text_color(hint, sec_color(), 0);
-    lv_obj_set_style_text_font(hint, font ? font : &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(hint, tok.ink_dim, 0);
+    lv_obj_set_style_text_font(hint, font, 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
     lv_obj_set_width(hint, view::kScreenWidth - 8);
     lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 4, 20);
 
-    input_ta_ = lv_textarea_create(content());
-    lv_obj_set_size(input_ta_, view::kScreenWidth - 8, 28);
-    lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 36);
-    lv_textarea_set_one_line(input_ta_, true);
-    lv_textarea_set_placeholder_text(input_ta_, "Type input, Enter to run");
+    input_ta_ = view::make_line_input(content(), tok, font, view::kScreenWidth - 8);
+    lv_textarea_set_placeholder_text(input_ta_, "input");
     lv_textarea_set_text(input_ta_, view_model().work_input().c_str());
-    lv_obj_set_style_bg_color(input_ta_, lv_color_hex(0x1A1A22), 0);
-    lv_obj_set_style_text_color(input_ta_, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_border_color(input_ta_, pri_color(), 0);
-    lv_obj_set_style_border_width(input_ta_, 1, 0);
+    lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 36);
 
-    output_label_ = lv_label_create(content());
+    const int input_h = lv_obj_get_height(input_ta_);
+    const int out_y = 36 + input_h + 4;
+    auto* output_box = lv_obj_create(content());
+    lv_obj_remove_style_all(output_box);
+    lv_obj_set_size(output_box, view::kScreenWidth - 8, view::kContentHeight - out_y);
+    lv_obj_align(output_box, LV_ALIGN_TOP_LEFT, 4, out_y);
+    lv_obj_add_flag(output_box, LV_OBJ_FLAG_SCROLLABLE);
+
+    output_label_ = lv_label_create(output_box);
     lv_label_set_text(output_label_, view_model().work_output().empty() ? "(result)"
                                                                         : view_model().work_output().c_str());
-    lv_obj_set_style_text_color(output_label_, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(output_label_, font ? font : &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(output_label_, tok.ink, 0);
+    lv_obj_set_style_text_font(output_label_, font, 0);
     lv_label_set_long_mode(output_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(output_label_, view::kScreenWidth - 8);
-    lv_obj_set_height(output_label_, view::kContentHeight - 68);
-    lv_obj_align(output_label_, LV_ALIGN_TOP_LEFT, 4, 68);
-
-    lv_group_t* g = lv_group_create();
-    lv_group_add_obj(g, input_ta_);
-    if (lv_indev_t* indev = lv_indev_get_next(nullptr); indev) {
-        // Prefer keyboard indev if present.
-        for (lv_indev_t* d = lv_indev_get_next(nullptr); d; d = lv_indev_get_next(d)) {
-            if (lv_indev_get_type(d) == LV_INDEV_TYPE_KEYPAD) {
-                indev = d;
-                break;
-            }
-        }
-        lv_indev_set_group(indev, g);
-    }
-    lv_group_focus_obj(input_ta_);
+    lv_obj_set_width(output_label_, view::kScreenWidth - 12);
+    // Typing is handled in handle_key (no LVGL keypad group — avoids stale focus after leave).
 }
 
 void WorkScreen::run_now() {
@@ -76,12 +68,33 @@ void WorkScreen::run_now() {
 }
 
 const char* WorkScreen::typing_hint() const {
-    return "Fn+key types    Enter runs    Esc back";
+    return "letters bare   Sym+B=. N=/   Enter runs";
 }
 
 bool WorkScreen::handle_key(uint32_t key) {
     if (key == LV_KEY_ENTER) {
         run_now();
+        return true;
+    }
+    if (!input_ta_) return KvxScreen::handle_key(key);
+    if (key == LV_KEY_BACKSPACE || key == 8) {
+        lv_textarea_delete_char(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_DEL || key == 127) {
+        lv_textarea_delete_char_forward(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_LEFT) {
+        lv_textarea_cursor_left(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_RIGHT) {
+        lv_textarea_cursor_right(input_ta_);
+        return true;
+    }
+    if (key >= 32 && key <= 126) {
+        lv_textarea_add_char(input_ta_, key);
         return true;
     }
     return KvxScreen::handle_key(key);

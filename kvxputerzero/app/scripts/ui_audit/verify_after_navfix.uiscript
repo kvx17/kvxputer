@@ -1,0 +1,66 @@
+# Precise nav: ethernet link, charge calendar, clock charge-style calendar
+wait 200
+theme dark
+wait 100
+home
+wait 120
+
+# Page1: LoRa IR USB / FM Eth GPS — ethernet = right, down from page base
+key 8
+wait 80
+key right
+wait 50
+key down
+wait 60
+shot after_home_eth_focus
+key enter
+wait 200
+shot after_ethernet_menu_final
+key enter
+wait 250
+shot after_eth_link_final
+key esc
+wait 80
+key esc
+wait 100
+
+# Charge = page3 slot0: from home, skip x3
+home
+wait 100
+key 8
+wait 60
+key 8
+wait 60
+key 8
+wait 100
+shot after_home_charge_focus
+key enter
+wait 300
+shot after_charge_face_final
+key esc
+wait 100
+
+# Clock digital then toggle to charge-style calendar (key left / z)
+home
+wait 100
+key 8
+wait 60
+key 8
+wait 80
+# page2: RFID NFC Files / Scripts PCConnect Clock — clock = right right down
+key right
+wait 40
+key right
+wait 40
+key down
+wait 60
+shot after_home_clock_focus
+key enter
+wait 250
+shot after_clock_digital
+key left
+wait 200
+shot after_clock_calendar
+key esc
+wait 80
+quit

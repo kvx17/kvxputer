@@ -25,7 +25,7 @@ constexpr std::array<HelpRow, 5> kGridRows = {{
     {"F X Z C", "Up down left right"},
     {"5 / 7 / 6", "Up, down, open"},
     {"4 / 8", "Previous / next page"},
-    {"FN + KEY", "Type that letter"},
+    {"B V N = . , /", "Punctuation bare"},
     {"HOLD ESC", "Exit app"},
 }};
 
@@ -33,13 +33,13 @@ constexpr std::array<HelpRow, 5> kMenuRows = {{
     {"F / X", "Up / down"},
     {"6", "Select"},
     {"4 / 8", "Back / home"},
-    {"FN + KEY", "Type that letter"},
+    {"SYM + KEY", "Type that letter"},
     {"ESC", "Back"},
 }};
 
 constexpr std::array<HelpRow, 5> kTypeRows = {{
-    {"FN + KEY", "Type the letter"},
-    {"4-9 0", "Type digits"},
+    {"B V N R", ". , / - bare"},
+    {"SYM + KEY", "Type the letter"},
     {"ENTER", "Run"},
     {"ESC", "Back"},
     {"F X Z C", "Move cursor"},
@@ -167,7 +167,11 @@ bool HelpPopup::visible() const {
 
 void HelpPopup::update_rows(model::AppPage page) {
     const bool home = page == model::AppPage::ChannelGrid;
-    const bool typing = page == model::AppPage::CodecWork || page == model::AppPage::EngCalcWork;
+    const bool typing = page == model::AppPage::CodecWork || page == model::AppPage::EngCalcWork ||
+                        page == model::AppPage::ComboWork || page == model::AppPage::TotpAdd ||
+                        page == model::AppPage::ColorHex || page == model::AppPage::PdaEdit ||
+                        page == model::AppPage::ToolPrompt || page == model::AppPage::QrCustom ||
+                        page == model::AppPage::BarcodeWork;
     lv_label_set_text(page_badge_, home ? "HOME" : (typing ? "TYPE" : "MENU"));
     const auto row_count = home ? kGridRows.size() : (typing ? kTypeRows.size() : kMenuRows.size());
     for (std::size_t i = 0; i < rows_.size(); ++i) {

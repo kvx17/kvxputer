@@ -1,0 +1,196 @@
+# Remaining channels, help overlay, theme samples, PDA/everyday
+wait 200
+shot home_dark
+
+# Fn+H help overlay
+key fn+h
+wait 200
+shot help_overlay
+key esc
+wait 100
+
+# USB UseStock placeholder
+home
+wait 80
+key 8
+wait 80
+# page1: lora,fm,infrared / ethernet,usb,gps
+# usb = index 10 = page_base 6 + 4 → col2 row0
+key right
+key right
+wait 60
+shot home_usb_selected
+key enter
+wait 200
+shot usb_usestock
+key esc
+wait 80
+
+# Ethernet menu
+home
+wait 60
+key 8
+wait 60
+key right
+wait 60
+shot home_ethernet_selected
+key enter
+wait 150
+shot ethernet_menu
+key esc
+wait 80
+
+# Clock / Charge / Config / Tools via open-equivalent nav
+home
+wait 60
+key 8
+wait 40
+key 8
+wait 40
+# clock = index 17 = page2 slot 5 = col2 row1
+key right
+key right
+key down
+wait 60
+shot home_clock_selected
+key enter
+wait 200
+shot clock_face
+key esc
+wait 80
+
+home
+wait 60
+key 8
+wait 40
+key 8
+wait 40
+key 8
+wait 60
+# page3: charge(18), others(19), modules(20), config(21)
+shot home_page3
+key enter
+wait 200
+shot charge_face
+key esc
+wait 80
+
+home
+wait 60
+key 8
+wait 40
+key 8
+wait 40
+key 8
+wait 60
+key right
+wait 60
+shot home_tools_selected
+key enter
+wait 200
+shot tools_menu
+key esc
+wait 80
+
+home
+wait 60
+key 8
+wait 40
+key 8
+wait 40
+key 8
+wait 60
+key right
+key right
+wait 60
+shot home_modules_selected
+key enter
+wait 150
+shot modules_menu
+key esc
+wait 80
+
+home
+wait 60
+key 8
+wait 40
+key 8
+wait 40
+key 8
+wait 60
+key right
+key right
+key right
+wait 60
+# only 4 items — config might be slot 3 = col1 row1
+# charge=0 col0r0, others=1 col0r1, modules=2 col1r0, config=3 col1r1
+# From charge: right once = modules, right twice wraps?
+# Better: from charge down=others, right=modules, from modules down=config
+home
+wait 60
+key 8
+key 8
+key 8
+wait 80
+key right
+key down
+wait 60
+shot home_config_selected
+key enter
+wait 200
+shot config_screen
+key esc
+wait 80
+
+# Files / Scripts / Discovery / Infrared / GPS / RFID menus
+open files_browser
+wait 200
+shot files_browser
+key esc
+wait 80
+
+open scripts
+wait 200
+shot scripts_runner
+key esc
+wait 80
+
+# discovery is a channel fill via home — open scan from discovery not needed
+home
+wait 60
+key down
+wait 60
+shot home_discovery_selected
+key enter
+wait 200
+shot discovery_index
+key esc
+wait 80
+
+open gps_live
+wait 300
+shot gps_live
+key esc
+wait 80
+
+open ir_use
+wait 200
+shot ir_use
+key esc
+wait 80
+
+open rfid_read
+wait 300
+shot rfid_read
+key esc
+wait 80
+
+# Light theme home sample
+home
+wait 80
+theme light
+wait 150
+shot home_light
+theme dark
+wait 80
+quit

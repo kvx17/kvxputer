@@ -1,6 +1,7 @@
 #include "pda_edit_screen.h"
 
 #include "asset_manager.h"
+#include "kvx_style.h"
 #include "pda_lib.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -60,19 +61,29 @@ PdaEditScreen::PdaEditScreen(viewmodel::BaseViewModel& view_model, app::AssetMan
 
 void PdaEditScreen::build() {
     make_header(content(), title_.c_str());
+    const auto tok = tokens();
+    const lv_font_t* font = assets().load_standard_font(14);
+    if (!font) font = &lv_font_montserrat_14;
+
+    if (!multiline_) {
+        input_ta_ = view::make_line_input(content(), tok, font, view::kScreenWidth - 8);
+        lv_textarea_set_text(input_ta_, view_model().work_input().c_str());
+        lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 24);
+        return;
+    }
 
     input_ta_ = lv_textarea_create(content());
     lv_obj_set_size(input_ta_, view::kScreenWidth - 8, view::kContentHeight - 22);
     lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 20);
     lv_textarea_set_text(input_ta_, view_model().work_input().c_str());
-    if (!multiline_) {
-        lv_textarea_set_one_line(input_ta_, true);
-    }
-    lv_obj_set_style_bg_color(input_ta_, lv_color_hex(0x1A1A22), 0);
+    lv_obj_set_style_pad_all(input_ta_, 4, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(input_ta_, tok.surface, 0);
     lv_obj_set_style_bg_opa(input_ta_, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_color(input_ta_, sec_color(), 0);
-    auto* font = assets().load_standard_font(14);
-    lv_obj_set_style_text_font(input_ta_, font ? font : &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_color(input_ta_, tok.ink, 0);
+    lv_obj_set_style_border_color(input_ta_, tok.main, 0);
+    lv_obj_set_style_border_width(input_ta_, 1, 0);
+    lv_obj_set_style_outline_width(input_ta_, 0, LV_PART_MAIN);
+    lv_obj_set_style_text_font(input_ta_, font, 0);
     lv_obj_add_state(input_ta_, LV_STATE_FOCUSED);
 }
 
