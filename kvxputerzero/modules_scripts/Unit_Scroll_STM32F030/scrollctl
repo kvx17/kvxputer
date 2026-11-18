@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""scrollctl - check and configure the M5Stack Unit Scroll (scrolld)."""
+import configparser
+import json
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.environ.get("SCROLLD_LIB", "/usr/local/lib/scrolld"))
+import scrolld as sd  # noqa: E402
+
+USAGE = """usage: scrollctl [command]
+
+  (no command)               interactive menu
+  status                     show connection + settings (exit 1 if not connected)
+  monitor                    show live key events (Ctrl+C to stop)
+  mode <m>                   custom (cw/ccw keys, default) | keys (arrows) | wheel (mouse wheel)
+  cw <keys>                  clockwise action in custom mode, e.g. "right shift+pagedown"
+  ccw <keys>                 counter-clockwise action, e.g. "left shift+pageup"
+  cli-cw <keys>              clockwise action while the CLI is open (default shift+pagedown)
+  cli-ccw <keys>             counter-clockwise action while the CLI is open (default shift+pageup)
+  screen-detect <yes|no>     use the cli-* keys when the launcher's CLI is open (default yes)
+  launcher <name>            launcher process name to look for (default APPLaunch)
+  orientation <o>            normal | inverted | horizontal | horizontal-inverted
+  press <keys>               short-press action, e.g. enter, space, middle, none
+  hold <keys>                hold action, e.g. esc, backspace, none
+  hold-time <ms>             how long to hold (default 600)
+  output <o>                 auto | inject (into built-in keyboard) | uinput (separate device)
+  target <path>              keyboard device used by inject output
+  led <r,g,b>                LED colour while connected, e.g. 0,0,40 (0,0,0 = off)
+  bus <auto|N>               I2C bus (auto = scan all)
+  grove-setup <yes|no>       switch the Grove port to I2C + 5V on at start (default yes)
+  keys                       list common key names
+
+Key actions: keys joined with + are pressed together (shift+pageup);
+several actions separated by spaces are sent one after another.
+"""
+COMMON_KEYS = ("enter esc space tab backspace delete home end pageup pagedown "
+               "up down left right shift ctrl alt comma dot middle left_click "
+               "right_click volumeup volumedown mute none")
+SETTINGS = {"orientation": "orientation", "mode": "mode", "press": "press",
+            "hold": "hold", "hold-time": "hold_ms", "led": "led", "bus": "bus",
+            "grove-setup": "grove_setup", "cw": "cw", "ccw": "ccw",
+            "output": "output", "target": "target",
+            "cli-cw": "cli_cw", "cli-ccw": "cli_ccw",
+            "screen-detect": "screen_detect", "launcher": "launcher"}
+
+
+def die(msg, code=2):
+    print(f"error: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def service_active():
+    try:
+        return subprocess.run(["systemctl", "is-active", "--quiet", "scrolld"],
+                              stderr=subprocess.DEVNULL).returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def read_state():
+    try:
+        with open(sd.STATE) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def raw_config():
+    cp = configparser.ConfigParser()
+    cp.read_dict({"scroll": sd.DEFAULTS})
+    cp.read(sd.CONF)
+    return cp
+
+
+def validate(key, value):
+    v = value.strip().lower()
+    choices = {"orientation": sd.ORIENTATIONS, "mode": sd.MODES,
+               "output": sd.OUTPUTS, "grove_setup": ("yes", "no"),
+               "screen_detect": ("yes", "no")}
+    if key in choices:
+        if v not in choices[key]:
+            raise ValueError(f"{key} must be one of: {', '.join(choices[key])}")
+        return v
+    if key == "launcher":
+        if not value.strip():
+            raise ValueError("launcher must be part of the launcher's process name")
+        return value.strip()
+    if key in ("press", "hold", "cw", "ccw", "cli_cw", "cli_ccw"):
+        return sd.canonical_action(value)
+    if key == "hold_ms":
+        if not v.isdigit() or int(v) < 100:
+            raise ValueError("hold time must be a number of ms >= 100")
+        return v
+    if key == "led":
+        parts = v.split(",")
+        if len(parts) != 3 or not all(p.strip().isdigit() and int(p) <= 255 for p in parts):
+            raise ValueError("led must be r,g,b with values 0-255")
+        return ",".join(p.strip() for p in parts)
+    if key == "bus":
+        if v != "auto" and not v.isdigit():
+            raise ValueError("bus must be 'auto' or a number")
+        return v
+    if key == "target":
+        if not value.strip().startswith("/dev/input/"):
+            raise ValueError("target must be a /dev/input/... path")
+        return value.strip()
+    raise ValueError(f"unknown setting {key}")
+
+
+def save(key, value):
+    value = validate(key, value)
+    cp = raw_config()
+    cp["scroll"][key] = value
+    try:
+        with open(sd.CONF, "w") as f:
+            f.write("# Unit Scroll settings - edit with `scrollctl`\n")
+            cp.write(f)
+    except PermissionError:
+        die("permission denied - run with sudo")
+    if service_active():
+        subprocess.run(["systemctl", "reload", "scrolld"], check=False)
+    print(f"{key} = {value}")
+
+
+def short(action):
+    """KEY_LEFTSHIFT+KEY_PAGEDOWN KEY_RIGHT -> shift+pagedown, right"""
+    names = {"KEY_LEFTSHIFT": "shift", "KEY_LEFTCTRL": "ctrl", "KEY_LEFTALT": "alt",
+             "KEY_LEFTMETA": "meta"}
+    if action.strip().lower() == "none":
+        return "none"
+    try:
+        action = sd.canonical_action(action)
+    except ValueError:
+        return action
+    return ", ".join("+".join(names.get(k, k.split("_", 1)[1].lower()) for k in combo.split("+"))
+                     for combo in action.split())
+
+
+def status(quiet=False):
+    active = service_active()
+    st = read_state() if active else None
+    if st is not None:
+        connected, bus, fw = st.get("connected"), st.get("bus"), st.get("firmware")
+    else:
+        num, bus_obj = sd.find_scroll(raw_config()["scroll"].get("bus", "auto"))
+        connected, bus, fw = bus_obj is not None, num, None
+        if bus_obj:
+            fw = sd.read_fw(bus_obj)
+            bus_obj.close()
+    if quiet:
+        return bool(connected)
+    c = raw_config()["scroll"]
+    cfg = sd.load_config()
+    out_kind = (st or {}).get("output") or sd.resolve_output(cfg)
+    target = (st or {}).get("target") or (cfg["target"] if out_kind == "inject" else "")
+    mode = (st or {}).get("mode") or c["mode"]
+    conn = f"yes (i2c-{bus}, firmware {fw if fw is not None else '?'})" if connected else "no"
+    print(f"Service      : {'running' if active else 'stopped'}")
+    print(f"Unit Scroll  : {conn}")
+    print(f"Output       : {out_kind}{' -> ' + target if target else ''}")
+    print(f"Mode         : {mode}")
+    if mode == "custom":
+        print(f"  clockwise  : {short(c['cw'])}")
+        print(f"  counter-cw : {short(c['ccw'])}")
+        if cfg["screen_detect"]:
+            print(f"  in the CLI : {short(c['cli_cw'])} / {short(c['cli_ccw'])}")
+            try:
+                sh = sd.cli_shell(cfg["launcher"])
+                scr = f"CLI ({sh[1]}, pid {sh[0]})" if sh else "menu/app"
+            except OSError:
+                scr = "unknown"
+            print(f"Screen now   : {scr}")
+    else:
+        print(f"Orientation  : {c['orientation']}")
+    print(f"Short press  : {short(c['press'])}")
+    print(f"Hold         : {short(c['hold'])} (after {c['hold_ms']} ms)")
+    print(f"LED          : {c['led']}")
+    print(f"I2C bus      : {c['bus']}")
+    g = sd.grove_read()
+    if g["mode"] is not None:
+        print(f"Grove port   : {g['mode'].upper()}, 5V {'on' if g['5v'] else 'off'}"
+              f" (auto-setup {c['grove_setup']})")
+    missing = (st or {}).get("missing") or []
+    if missing:
+        print(f"! Not supported by the target device (ignored): {', '.join(missing)}")
+    return bool(connected)
+
+
+def monitor():
+    from evdev import InputDevice, list_devices, ecodes as e
+    st = read_state() or {}
+    path = st.get("target")
+    if not path:
+        for p in list_devices():
+            if InputDevice(p).name == sd.DEVICE_NAME:
+                path = p
+                break
+    if not path or not st.get("connected"):
+        die("Unit Scroll not active - check `scrollctl status`", 1)
+    try:
+        dev = InputDevice(path)
+    except PermissionError:
+        die("permission denied - run with sudo")
+    note = " (built-in keys show here too)" if st.get("output") == "inject" else ""
+    print(f"Listening on {path}{note} - turn/press the wheel, Ctrl+C to stop")
+    try:
+        for ev in dev.read_loop():
+            if ev.type not in (e.EV_KEY, e.EV_REL):
+                continue
+            name = e.bytype[ev.type].get(ev.code, ev.code)
+            name = name[0] if isinstance(name, (list, tuple)) else name
+            if "HI_RES" in str(name):
+                continue
+            if ev.type == e.EV_KEY:
+                print(f"  {name:<16} {('up', 'down', 'repeat')[min(ev.value, 2)]}")
+            else:
+                print(f"  {name:<16} {ev.value:+d}")
+    except KeyboardInterrupt:
+        print()
+
+
+def choose(title, options):
+    print(f"\n{title}")
+    for i, o in enumerate(options, 1):
+        print(f"  {i}) {o}")
+    a = input("> ").strip()
+    if a.isdigit() and 1 <= int(a) <= len(options):
+        return options[int(a) - 1]
+    return None
+
+
+def try_save(key, value):
+    try:
+        save(key, value)
+    except ValueError as ex:
+        print(f"  ! {ex}")
+
+
+def ask_keys(key):
+    print(f"  examples: {COMMON_KEYS}")
+    print("  combine with + (shift+pageup), several actions with spaces")
+    k = input("  keys: ")
+    if k.strip():
+        try_save(key, k)
+
+
+def menu():
+    while True:
+        print("\n=== Unit Scroll ===")
+        status()
+        print("""
+  1) Mode (custom/keys/wheel)  6) Hold time
+  2) Clockwise keys            7) Orientation (keys/wheel)
+  3) Counter-clockwise keys    8) LED colour
+  4) Short-press action        9) Live test
+  5) Hold action              10) CLI clockwise keys
+                              11) CLI counter-clockwise keys
+                               q) Quit""")
+        try:
+            a = input("> ").strip().lower()
+            if a in ("q", "quit", "exit"):
+                return
+            if a == "1":
+                m = choose("Mode:", list(sd.MODES))
+                if m:
+                    try_save("mode", m)
+            elif a == "2":
+                ask_keys("cw")
+            elif a == "3":
+                ask_keys("ccw")
+            elif a == "4":
+                ask_keys("press")
+            elif a == "5":
+                ask_keys("hold")
+            elif a == "6":
+                try_save("hold_ms", input("  hold time in ms: "))
+            elif a == "7":
+                o = choose("Orientation:", list(sd.ORIENTATIONS))
+                if o:
+                    try_save("orientation", o)
+            elif a == "8":
+                try_save("led", input("  r,g,b (0-255, 0,0,0 = off): "))
+            elif a == "9":
+                monitor()
+            elif a == "10":
+                ask_keys("cli_cw")
+            elif a == "11":
+                ask_keys("cli_ccw")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+
+
+def main():
+    args = sys.argv[1:]
+    if not args:
+        return menu()
+    cmd, rest = args[0], args[1:]
+    if cmd in ("-h", "--help", "help"):
+        print(USAGE)
+    elif cmd == "status":
+        sys.exit(0 if status() else 1)
+    elif cmd == "monitor":
+        monitor()
+    elif cmd == "keys":
+        print(COMMON_KEYS.replace(" ", "\n"))
+    elif cmd in SETTINGS:
+        if not rest:
+            die(f"usage: scrollctl {cmd} <value>")
+        try:
+            save(SETTINGS[cmd], " ".join(rest))
+        except ValueError as ex:
+            die(str(ex))
+    else:
+        print(USAGE)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

@@ -4,6 +4,8 @@
 
 **kvxputer** is a firmware for the M5Stack **Cardputer** and **Cardputer ADV** that turns the device into a pocket toolkit for wireless research, network analysis, and hardware experimentation. It ships a Wii-style channel menu, a broad set of radio and network tools (WiFi, BLE, Sub-GHz RF, NRF24, Infrared, RFID/NFC, GPS, FM, LoRa), USB/BLE HID and BadUSB support, and a Grove-based module system for optional hardware add-ons. Beyond the tools, it is built to be customized on-device: remappable shortcuts, SD themes (menu art, colors, boot animation), RGB LED effects, brightness and UI options, and a configurable startup app. Secondary PlatformIO environments also build for **M5StickS3** (button-only) and **M5Stack Tab5** (keyboard + touch; same app catalog, hosted C6 WiFi/BLE).
 
+Also in this repo: **[kvxputerzero](kvxputerzero/)** — a Cardputer **Zero** (CM0 / Linux) AppStore shell that reuses the same channel-home idea. See the [kvxputerzero section](#kvxputerzero-cardputer-zero) below after the Cardputer getting-started guide, or jump to [kvxputerzero/app/README.md](kvxputerzero/app/README.md).
+
 The project began by borrowing ideas from [Bruce](https://github.com/BruceDevices/Firmware) and [Evil-Cardputer](https://github.com/7h30th3r0n3/Evil-M5project), but its architecture, UI, module layout, and feature set have since diverged into their own thing.
 
 **Use responsibly:** only on networks and devices you own or have explicit permission to test.
@@ -25,6 +27,7 @@ The project began by borrowing ideas from [Bruce](https://github.com/BruceDevice
 - **Universal remote** — learn/replay Flipper-style `.ir` profiles with [kremote](docs/KREMOTE.md)
 - **Grove ecosystem** — Scroll, Joystick, PaHub, RFID, RF, IR, GPS, and more on PORT.A
 - **Lite / StickS3 / Tab5 builds** — smaller flash, button-only, or Tab5 keyboard+touch when needed
+- **[kvxputerzero](kvxputerzero/)** — Cardputer Zero Linux app (desktop emulator + arm64 `.deb`); not ESP firmware
 
 ![kvxputer channel menu](docs/menu.gif)
 
@@ -161,6 +164,41 @@ Copy the **contents** of `[tools/sd_pack/](tools/sd_pack/README.md)` to the micr
 You don't need the repo or an internet connection on that PC. Full guide: [PC Connect](PCConnect/README.md).
 
 Details: [SD pack](tools/sd_pack/README.md), [Reference / storage](docs/REFERENCE.md).
+
+---
+
+
+
+## kvxputerzero (Cardputer Zero)
+
+**kvxputerzero** is a separate AppStore-style app for [M5Stack Cardputer Zero](https://docs.m5stack.com/en/core/CardputerZero) (Raspberry Pi CM0, Linux, 320×170). It is **not** the ESP32 Cardputer firmware above: no PlatformIO flash, no `kvxputer-*.bin`. The shell keeps the Wii-style channel grid and theme; tools ship as in-process screens inside one package.
+
+| | Cardputer / Adv (this firmware) | Cardputer Zero (`kvxputerzero`) |
+| --- | --- | --- |
+| Hardware | ESP32-S3 | CM0 aarch64 Linux |
+| Deliverable | PlatformIO / merged `.bin` | arm64 `.deb` + APPLaunch |
+| UI | TFT + matrix keyboard | LVGL @ 320×170 + evdev |
+| Docs | This README | [kvxputerzero/README.md](kvxputerzero/README.md), [user guide](kvxputerzero/app/README.md) |
+
+**Desktop emulator** (try the UI on a PC):
+
+```bash
+cd kvxputerzero/app
+cmake --preset linux-x86-64
+cmake --build --preset linux-x86-64-dbg
+./build/linux-x86-64/Debug/kvxputerzero
+```
+
+**Install on a Cardputer Zero** (cross-build on a host — do not compile large apps on-device):
+
+```bash
+cd kvxputerzero/app
+REMOTE_USER=pi REMOTE_HOST=192.168.1.42 ./deploy.sh
+# on the device:
+sudo apt install ./kvxputerzero_*_arm64.deb
+```
+
+Then open **kvxputerzero** from APPLaunch. Full controls, build deps, and Store notes: [kvxputerzero/app/README.md](kvxputerzero/app/README.md). Portability audit / waves: [AUDIT.md](kvxputerzero/AUDIT.md), [WAVES.md](kvxputerzero/WAVES.md).
 
 ---
 
@@ -894,6 +932,7 @@ Pin matrix: `[tools/porting/boards/m5stack-tab5/connections.md](tools/porting/bo
 | `tools/sd_pack/`                                  | Copy-to-SD assets                         |
 | `tools/companions/`                               | Extra-ESP companion sketches              |
 | `PCConnect/`                                      | PC-side Python host for **PC Connect**    |
+| `kvxputerzero/`                                   | Cardputer Zero app + audit / waves        |
 | `resources/`                                      | Gitignored local reference only           |
 
 
@@ -908,6 +947,7 @@ Pin matrix: `[tools/porting/boards/m5stack-tab5/connections.md](tools/porting/bo
 - [Reference / storage](docs/REFERENCE.md)
 - [SD pack](tools/sd_pack/README.md)
 - [PC Connect](PCConnect/README.md)
+- [kvxputerzero (Cardputer Zero)](kvxputerzero/README.md) · [user guide](kvxputerzero/app/README.md)
 - [Companion firmware](tools/companions/README.md)
 - [WiFi / raw frames](docs/WIFI_P0_AND_RAW_FRAMES.md)
 - [kvxkeyboard HID](docs/HID_REMOTE.md)

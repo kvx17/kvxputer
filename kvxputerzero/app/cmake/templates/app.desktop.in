@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=@APP_DISPLAY_NAME@
+Comment=@APP_PACKAGE_DESCRIPTION@
+Exec=/usr/bin/@PROJECT_NAME@
+Icon=share/images/kvxputerzero.png
+Terminal=false
+Categories=Utility;
+StartupNotify=false

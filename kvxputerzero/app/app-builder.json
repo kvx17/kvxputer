@@ -1,0 +1,30 @@
+{
+  "app_name": "kvxputerzero",
+  "package_name": "kvxputerzero",
+  "version": "0.1.0",
+  "description": "kvxputer toolkit shell for Cardputer Zero — Wii-style channels and portable tools",
+
+  "store": {
+    "summary": "Wii-style kvxputer toolkit shell for Cardputer Zero",
+    "description": "kvxputerzero brings the Cardputer kvxputer channel menu to Cardputer Zero as one AppStore app. Purple/green themed 3x2 grid with Tools (Codec, Engineering Calculators, Passgen, TOTP, Combo, QR, Barcode, PDA organizer, Timer) and placeholders for WiFi, BLE, NetOps, and more. Does not replace stock Files, Calculator, IR-Remote, or Cap apps.",
+    "categories": ["utility", "toolkit"],
+    "screenshots": [
+      "screenshot/app-simulator-dark-darwin.png",
+      "screenshot/app-simulator-light-darwin.png"
+    ],
+    "icon": "assets/images/kvxputerzero.png",
+    "license": "MIT",
+    "source_repo": "https://github.com/kvx/kvxputer",
+    "author": { "github": "kvx", "display_name": "kvx" },
+    "share_code": "kvxputerzero",
+    "permissions": {
+      "camera": false,
+      "microphone": false,
+      "imu": false,
+      "network": false,
+      "additional_hardware": false,
+      "background_service": false,
+      "external_display": false
+    }
+  }
+}

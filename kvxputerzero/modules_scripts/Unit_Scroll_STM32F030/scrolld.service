@@ -1,0 +1,17 @@
+[Unit]
+Description=M5Stack Unit Scroll input daemon
+After=systemd-modules-load.service
+
+[Service]
+Type=simple
+ExecStartPre=-/sbin/modprobe uinput
+ExecStartPre=-/sbin/modprobe i2c-dev
+ExecStart=/usr/bin/python3 /usr/local/lib/scrolld/scrolld.py
+ExecReload=/bin/kill -HUP $MAINPID
+RuntimeDirectory=scrolld
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
