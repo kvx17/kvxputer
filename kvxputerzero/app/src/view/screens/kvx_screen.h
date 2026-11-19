@@ -27,6 +27,8 @@ public:
 
     void init();
     lv_obj_t* root() const;
+    // True when this screen takes bare letters, including F/X/Z/C.
+    bool accepts_text() const;
 
 protected:
     virtual void build() = 0;

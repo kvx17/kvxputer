@@ -28,9 +28,13 @@ public:
     using RowsFn = std::function<void(std::vector<WardriveRow>)>;
     using StatusFn = std::function<void(const std::string&)>;
     using WorkerFn = std::function<void(std::atomic<bool>& cancel, const RowsFn& set_rows, const StatusFn& set_status)>;
+    // Optional letter-key handler. Return true if consumed. Called for printable keys.
+    using KeyFn = std::function<bool(uint32_t key)>;
+    // Called after the worker joins on leave/home (session summary, etc.).
+    using DoneFn = std::function<void()>;
 
     WardriveScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
-                   std::string name_column, WorkerFn worker);
+                   std::string name_column, WorkerFn worker, KeyFn on_key = {}, DoneFn on_done = {});
     ~WardriveScreen() override;
 
     void flush_pending();
@@ -64,6 +68,9 @@ private:
     std::string title_;
     std::string name_column_;
     WorkerFn worker_;
+    KeyFn on_key_;
+    DoneFn on_done_;
+    bool done_fired_{false};
 
     lv_obj_t* status_label_{nullptr};
     lv_obj_t* header_{nullptr};

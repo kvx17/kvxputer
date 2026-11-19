@@ -45,6 +45,9 @@ Turn and press the wheel. Each action should print a line such as `REL_WHEEL -1`
 ## Detection
 
 - The Cardputer Zero's Grove port starts in UART (serial) mode with its 5V power off, so the Scroll can't be seen until both are changed. The service switches the port to I2C and turns the 5V on every time it starts. In I2C mode the Scroll is on bus 1 (`/dev/i2c-1`). To turn this off, run `sudo scrollctl grove-setup no`.
+
+**Unit GPS v1.1** also uses the Grove port (UART + `grove_5v_out`). Stop and mask scrolld while using GPS:
+`sudo systemctl disable --now scrolld && sudo systemctl mask scrolld`. scrolld turns Grove to I2C (not UART); it does not turn 5V off.
 - At boot the service checks every I2C bus for the Scroll, so you don't need to set a bus number.
 - The virtual device only exists while the Scroll is connected. If the Scroll isn't plugged in, the service waits and checks again every 2 seconds.
 - You can plug it in or unplug it while the Cardputer is on. The LED turns dim blue when the Scroll is detected.

@@ -22,7 +22,8 @@ InfoScreen::InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& 
       initial_fields_(std::move(fields)),
       initial_status_(std::move(status)),
       initial_kind_(kind),
-      has_worker_(false) {
+      has_worker_(false),
+      live_(false) {
     init();
 }
 
@@ -33,7 +34,20 @@ InfoScreen::InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& 
       worker_(std::move(worker)),
       initial_status_("probing..."),
       initial_kind_(view::StatusPillKind::Busy),
-      has_worker_(true) {
+      has_worker_(true),
+      live_(false) {
+    init();
+}
+
+InfoScreen::InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
+                       LiveWorkerFn live_worker)
+    : KvxScreen(view_model, assets),
+      title_(std::move(title)),
+      live_worker_(std::move(live_worker)),
+      initial_status_("live..."),
+      initial_kind_(view::StatusPillKind::Busy),
+      has_worker_(true),
+      live_(true) {
     init();
 }
 
@@ -51,7 +65,6 @@ void InfoScreen::build() {
     font_ = assets().load_standard_font(12);
     if (!font_) font_ = &lv_font_montserrat_12;
 
-    // Status lives only in the pill — avoid duplicating the same word on the left.
     pill_ = view::make_status_pill(content(), initial_status_.c_str(), initial_kind_, font_, tok);
     lv_obj_align(pill_, LV_ALIGN_TOP_LEFT, 4, 20);
     status_line_ = nullptr;
@@ -90,13 +103,34 @@ void InfoScreen::apply_status(const std::string& status, view::StatusPillKind ki
 }
 
 void InfoScreen::start_worker() {
-    if (!worker_) return;
+    if (!worker_ && !live_worker_) return;
     stop_worker();
     cancel_ = false;
     worker_done_ = false;
     pending_ready_ = false;
-    apply_status("probing...", view::StatusPillKind::Busy);
+    apply_status(live_ ? "live..." : "probing...", view::StatusPillKind::Busy);
     worker_thread_ = std::thread([this]() {
+        if (live_ && live_worker_) {
+            PublishFn publish = [this](Fields fields, std::string status, view::StatusPillKind kind) {
+                std::lock_guard<std::mutex> lock(mu_);
+                pending_fields_ = std::move(fields);
+                pending_status_ = std::move(status);
+                pending_kind_ = kind;
+                pending_ready_ = true;
+            };
+            try {
+                live_worker_(cancel_, publish);
+            } catch (...) {
+                publish({}, "error", view::StatusPillKind::Error);
+            }
+            {
+                std::lock_guard<std::mutex> lock(mu_);
+                if (pending_status_.empty()) pending_status_ = cancel_ ? "cancelled" : "done";
+                worker_done_ = true;
+                pending_ready_ = true;
+            }
+            return;
+        }
         Fields fields;
         std::string status = "done";
         view::StatusPillKind kind = view::StatusPillKind::Ok;
@@ -143,16 +177,13 @@ void InfoScreen::flush_pending() {
         apply_status(status, kind);
         rebuild_fields(fields);
     }
-    if (done && poll_timer_ && !worker_thread_.joinable()) {
-        // keep timer; R may re-run
-    }
     if (done && worker_thread_.joinable()) {
         worker_thread_.join();
     }
 }
 
 bool InfoScreen::handle_key(uint32_t key) {
-    if ((key == 'r' || key == 'R') && has_worker_) {
+    if ((key == 'r' || key == 'R') && has_worker_ && !live_) {
         start_worker();
         return true;
     }
@@ -174,8 +205,8 @@ std::array<view::widgets::ActionSlot, 5> InfoScreen::nav_actions() {
          [this]() {
              if (panel_) lv_obj_scroll_by(panel_, 0, 14, LV_ANIM_OFF);
          }},
-        {has_worker_ ? view::ICON_MENU_RESET : "",
-         has_worker_ ? std::function<void()>([this]() { start_worker(); }) : std::function<void()>()},
+        {!live_ && has_worker_ ? view::ICON_MENU_RESET : "",
+         !live_ && has_worker_ ? std::function<void()>([this]() { start_worker(); }) : std::function<void()>()},
         {view::ICON_CARET_DOWN,
          [this]() {
              if (panel_) lv_obj_scroll_by(panel_, 0, -14, LV_ANIM_OFF);

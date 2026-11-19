@@ -8,6 +8,7 @@
 
 #include "application_config.h"
 #include "asset_manager.h"
+#include "backlight.h"
 #include "boot_splash.h"
 #include "help_popup.h"
 #include "logger.h"
@@ -20,6 +21,7 @@
 #include "toast.h"
 #include "tool_registry.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -263,6 +265,10 @@ private:
             return true;
         }
 
+        if (!long_pressed && handle_fn_action(key)) {
+            return true;
+        }
+
         if (key == platform::kKeyHelp) {
             if (!long_pressed) {
                 toast_->hide();
@@ -305,6 +311,43 @@ private:
                                                 " to exit",
                                                 view::widgets::ToastTone::Warning);
             return true; // suppress short Esc quit on home; hold required
+        }
+        return false;
+    }
+
+    bool handle_fn_action(uint32_t key) {
+        if (key == platform::kKeyBrightnessDown || key == platform::kKeyBrightnessUp) {
+            int32_t pct = 50;
+            if (!platform::read_brightness_percent(pct)) {
+                pct = 50;
+            }
+            const int step = key == platform::kKeyBrightnessUp ? 10 : -10;
+            pct = std::clamp(pct + step, int32_t{5}, int32_t{100});
+            platform::write_brightness_percent(pct);
+            toast_->show("Brightness " + std::to_string(pct) + "%",
+                         view::widgets::ToastTone::Default,
+                         1200);
+            return true;
+        }
+        if (key == platform::kKeyVolumeDown || key == platform::kKeyVolumeUp) {
+            auto& model = view_model_.model();
+            const int step = key == platform::kKeyVolumeUp ? 10 : -10;
+            const int vol = std::clamp(model.sound_volume() + step, 0, 100);
+            model.set_sound_volume(vol);
+            model.set_sound_enabled(vol > 0);
+            model.save_user_config();
+            toast_->show("Volume " + std::to_string(vol) + "%",
+                         view::widgets::ToastTone::Default,
+                         1200);
+            return true;
+        }
+        if (key == platform::kKeyMute) {
+            auto& model = view_model_.model();
+            const bool on = !model.sound_enabled();
+            model.set_sound_enabled(on);
+            model.save_user_config();
+            toast_->show(on ? "Sound on" : "Muted", view::widgets::ToastTone::Default, 1200);
+            return true;
         }
         return false;
     }

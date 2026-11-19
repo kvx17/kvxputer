@@ -18,22 +18,25 @@ struct InfoField {
 };
 
 // Static status / probe card. Worker fills fields asynchronously; R re-runs.
+// Live workers may call PublishFn repeatedly while the thread is still running.
 class InfoScreen final : public KvxScreen {
 public:
     using Fields = std::vector<InfoField>;
-    using WorkerFn = std::function<void(std::atomic<bool>& cancel,
-                                        Fields& out_fields,
-                                        std::string& out_status,
+    using PublishFn = std::function<void(Fields fields, std::string status, view::StatusPillKind kind)>;
+    using WorkerFn = std::function<void(std::atomic<bool>& cancel, Fields& out_fields, std::string& out_status,
                                         view::StatusPillKind& out_kind)>;
+    using LiveWorkerFn = std::function<void(std::atomic<bool>& cancel, const PublishFn& publish)>;
 
     // Synchronous constructor for already-known fields (confirmations, static info).
-    InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
-               Fields fields, std::string status = "OK",
-               view::StatusPillKind kind = view::StatusPillKind::Ok);
+    InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title, Fields fields,
+               std::string status = "OK", view::StatusPillKind kind = view::StatusPillKind::Ok);
 
-    // Async probe constructor.
+    // Async probe constructor (one-shot).
+    InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title, WorkerFn worker);
+
+    // Live worker: publish updates while running; Esc cancels and joins.
     InfoScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
-               WorkerFn worker);
+               LiveWorkerFn live_worker);
 
     ~InfoScreen() override;
 
@@ -52,6 +55,7 @@ private:
 
     std::string title_;
     WorkerFn worker_;
+    LiveWorkerFn live_worker_;
     Fields initial_fields_;
     std::string initial_status_;
     view::StatusPillKind initial_kind_{view::StatusPillKind::Idle};
@@ -72,6 +76,7 @@ private:
     bool pending_ready_{false};
     bool worker_done_{false};
     bool has_worker_{false};
+    bool live_{false};
 };
 
 } // namespace screen

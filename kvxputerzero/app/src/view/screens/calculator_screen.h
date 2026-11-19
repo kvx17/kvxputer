@@ -1,6 +1,7 @@
 #pragma once
 
 #include "action_bar.h"
+#include "calc_key_bar.h"
 #include "calc_lib.h"
 #include "kvx_screen.h"
 
@@ -24,11 +25,14 @@ private:
     void refresh_mode();
     void evaluate_now();
     void toggle_mode();
+    void insert_char(char ch);
+    bool type_key(uint32_t key);
 
     tools::calc::State state_;
+    CalcKeyBar keys_;
     lv_obj_t* input_ta_{nullptr};
     lv_obj_t* history_label_{nullptr};
-    lv_obj_t* mode_label_{nullptr};
+    lv_obj_t* example_label_{nullptr};
 };
 
 } // namespace screen

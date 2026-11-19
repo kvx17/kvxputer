@@ -81,7 +81,9 @@ private:
     bool encoder_pressed_{false};
     bool dark_mode_{false};
     bool initialized_{false};
-    bool swallow_text_{false};
+    // SDL TEXTINPUT echo to suppress after KEYDOWN already emitted the glyph.
+    // -1 = none; otherwise the ASCII code that the next TEXTINPUT may repeat.
+    int swallow_text_char_{-1};
 };
 
 } // namespace app

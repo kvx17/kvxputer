@@ -5,6 +5,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <linux/gpio.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -106,6 +107,37 @@ bool GpioLine::request_input(std::string& error) {
     return true;
 }
 
+bool GpioLine::request_edge_events(std::string& error) {
+    error.clear();
+    release();
+    if (kDesktop) {
+        error = "GPIO unavailable";
+        return false;
+    }
+    const int chip = ::open(chip_path_.c_str(), O_RDONLY | O_CLOEXEC);
+    if (chip < 0) {
+        error = "open " + chip_path_ + " failed";
+        return false;
+    }
+    gpio_v2_line_request req{};
+    std::snprintf(req.consumer, sizeof(req.consumer), "kvxputerzero");
+    req.num_lines = 1;
+    req.offsets[0] = offset_;
+    req.config.flags = GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_EDGE_RISING |
+                       GPIO_V2_LINE_FLAG_EDGE_FALLING;
+    if (::ioctl(chip, GPIO_V2_GET_LINE_IOCTL, &req) < 0) {
+        error = std::string("GPIO edge request failed: ") + std::strerror(errno);
+        ::close(chip);
+        return false;
+    }
+    ::close(chip);
+    req_fd_ = req.fd;
+    // Non-blocking reads so capture loops can poll.
+    const int flags = ::fcntl(req_fd_, F_GETFL, 0);
+    if (flags >= 0) ::fcntl(req_fd_, F_SETFL, flags | O_NONBLOCK);
+    return true;
+}
+
 bool GpioLine::set_value(bool high, std::string& error) {
     error.clear();
     if (req_fd_ < 0) {
@@ -135,6 +167,29 @@ bool GpioLine::get_value(bool& high, std::string& error) const {
         return false;
     }
     high = (vals.bits & 1ULL) != 0;
+    return true;
+}
+
+bool GpioLine::read_edge_events(std::vector<GpioEdgeEvent>& out, std::string& error) {
+    error.clear();
+    if (req_fd_ < 0) {
+        error = "GPIO not requested";
+        return false;
+    }
+    for (;;) {
+        gpio_v2_line_event ev{};
+        const ssize_t n = ::read(req_fd_, &ev, sizeof(ev));
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) return true;
+            error = std::string("GPIO event read failed: ") + std::strerror(errno);
+            return false;
+        }
+        if (n != static_cast<ssize_t>(sizeof(ev))) break;
+        GpioEdgeEvent e;
+        e.timestamp_ns = ev.timestamp_ns;
+        e.rising = (ev.id == GPIO_V2_LINE_EVENT_RISING_EDGE);
+        out.push_back(e);
+    }
     return true;
 }
 

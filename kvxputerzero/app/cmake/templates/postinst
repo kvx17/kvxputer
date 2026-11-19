@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+HELPER=/usr/lib/kvxputerzero/sysfs-led
+if [ -f "$HELPER" ]; then
+  chown root:root "$HELPER" || true
+  chmod 4755 "$HELPER" || true
+fi
+if [ -f /etc/sudoers.d/kvxputerzero-leds ]; then
+  chmod 440 /etc/sudoers.d/kvxputerzero-leds || true
+fi
+# Reload unit if present (User/groups may have changed).
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+fi
+exit 0

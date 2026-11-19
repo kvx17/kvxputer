@@ -58,9 +58,25 @@ void read_battery(DeviceStatus& status) {
         return;
     }
 
+    // Prefer common names first so a busy/partial directory scan cannot hide the gauge.
+    for (const char* name : {"bq27220", "bq27220-0", "max170xx_battery", "Battery", "battery"}) {
+        const auto path = root / name;
+        if (!std::filesystem::exists(path, ec)) continue;
+        std::string type;
+        if (read_text_file(path / "type", type) && type != "Battery") continue;
+        const int32_t pct = read_int_file(path / "capacity");
+        if (pct < 0) continue;
+        status.battery_percent = pct;
+        status.battery_present = true;
+        std::string battery_state;
+        status.battery_charging = read_text_file(path / "status", battery_state) &&
+                                  battery_state == "Charging";
+        return;
+    }
+
     for (const auto& entry : std::filesystem::directory_iterator(root, ec)) {
         if (ec) {
-            return;
+            break;
         }
         std::string type;
         if (!read_text_file(entry.path() / "type", type) || type != "Battery") {

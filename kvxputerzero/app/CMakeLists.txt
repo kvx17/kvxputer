@@ -413,6 +413,7 @@ target_include_directories(${PROJECT_NAME}_platform
     PUBLIC
         ${LVGL_INCLUDE_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
 )
 
 target_compile_definitions(${PROJECT_NAME}_platform
@@ -649,5 +650,26 @@ target_link_libraries(${PROJECT_NAME}
         ${PROJECT_NAME}_viewmodel
 )
 
+# On-device Cap ST25 test harness (same platform code as the UI).
+add_executable(${PROJECT_NAME}-nfctest
+    src/nfctest_main.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}-nfctest
+    PRIVATE
+        ${PROJECT_NAME}_platform
+        ${PROJECT_NAME}_core
+        ${PROJECT_NAME}_model
+        ${PROJECT_NAME}_view
+        ${PROJECT_NAME}_viewmodel
+)
+
 # Package deb
+
+# Setuid Cap/Grove LED helper (Unit GPS / Cap EXT5V). Avoids sudoers fragility.
+if(NOT USE_DESKTOP)
+    add_executable(kvxputerzero_sysfs_led scripts/sysfs-led.c)
+    set_target_properties(kvxputerzero_sysfs_led PROPERTIES OUTPUT_NAME sysfs-led)
+endif()
+
 include(cmake/cm0-package.cmake)

@@ -149,6 +149,7 @@ void BaseViewModel::go_back() {
     case model::AppPage::QrPix:
     case model::AppPage::QrView:
     case model::AppPage::QrRemove:
+    case model::AppPage::QrUsefulLinks:
         show_page(model::AppPage::QrMenu);
         break;
     case model::AppPage::BarcodeWork:
@@ -301,8 +302,20 @@ void BaseViewModel::open_tool(model::ToolId id, std::string param) {
         open_calculator();
         return;
     }
+    // Tool screens all use ToolRun/ToolPrompt. ScreenManager skips a rebuild when the
+    // AppPage enum is unchanged, so nested tool→tool opens (NFC Classic… → Dict, etc.)
+    // must bounce between ToolRun and ToolPrompt to force a new screen.
+    const auto prev = model_.current_page();
     model_.set_active_tool_id(id);
     model_.set_tool_param(std::move(param));
+    if (prev == model::AppPage::ToolRun) {
+        show_page(model::AppPage::ToolPrompt);
+        return;
+    }
+    if (prev == model::AppPage::ToolPrompt) {
+        show_page(model::AppPage::ToolRun);
+        return;
+    }
     show_page(model::AppPage::ToolRun);
 }
 
@@ -468,6 +481,10 @@ void BaseViewModel::open_qr_remove() {
 
 void BaseViewModel::open_qr_view() {
     show_page(model::AppPage::QrView);
+}
+
+void BaseViewModel::open_qr_useful_links() {
+    show_page(model::AppPage::QrUsefulLinks);
 }
 
 void BaseViewModel::open_barcode_menu() {

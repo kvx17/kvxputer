@@ -72,6 +72,54 @@ uint32_t map_control_key(SDL_Keycode key) {
     }
 }
 
+// Unshifted host punctuation/space. SDL keycodes for these match ASCII, so a
+// normal keyboard can type CIDR / paths without Sym+letter (device still uses Sym).
+// Shifted symbols (!@# etc.) stay on SDL_TEXTINPUT.
+bool map_host_punctuation(SDL_Keycode key, uint32_t& out) {
+    switch (key) {
+        case SDLK_SPACE:
+        case SDLK_EXCLAIM:
+        case SDLK_QUOTEDBL:
+        case SDLK_HASH:
+        case SDLK_DOLLAR:
+        case SDLK_PERCENT:
+        case SDLK_AMPERSAND:
+        case SDLK_QUOTE:
+        case SDLK_LEFTPAREN:
+        case SDLK_RIGHTPAREN:
+        case SDLK_ASTERISK:
+        case SDLK_PLUS:
+        case SDLK_COMMA:
+        case SDLK_MINUS:
+        case SDLK_PERIOD:
+        case SDLK_SLASH:
+        case SDLK_COLON:
+        case SDLK_SEMICOLON:
+        case SDLK_LESS:
+        case SDLK_EQUALS:
+        case SDLK_GREATER:
+        case SDLK_QUESTION:
+        case SDLK_AT:
+        case SDLK_LEFTBRACKET:
+        case SDLK_BACKSLASH:
+        case SDLK_RIGHTBRACKET:
+        case SDLK_CARET:
+        case SDLK_UNDERSCORE:
+        case SDLK_BACKQUOTE:
+        case SDLK_KP_PERIOD:
+        case SDLK_KP_DIVIDE:
+        case SDLK_KP_MULTIPLY:
+            // KP +/- are nav (Left/Right) via map_control_key — do not treat as text.
+            out = static_cast<uint32_t>(key);
+            if (key == SDLK_KP_PERIOD) out = '.';
+            else if (key == SDLK_KP_DIVIDE) out = '/';
+            else if (key == SDLK_KP_MULTIPLY) out = '*';
+            return out >= 32 && out <= 126;
+        default:
+            return false;
+    }
+}
+
 uint32_t utf8_character_size(const char* text) {
     const auto lead = static_cast<uint8_t>(*text);
     if ((lead & 0x80U) == 0) return 1;
@@ -439,7 +487,22 @@ void DesktopSimulatorFrame::handle_event(const SDL_Event& event, bool& running) 
                 if (base != 0) {
                     keypad_->host_key_event(base, down);
                     if (down) {
-                        swallow_text_ = true;
+                        // Suppress the duplicate SDL_TEXTINPUT for this letter/digit.
+                        // Character-specific so a stale flag cannot eat '.' '/' ',' later.
+                        const bool shifted = (mod & KMOD_SHIFT) != 0;
+                        swallow_text_char_ =
+                            (shifted && base >= 'a' && base <= 'z') ? (base - 'a' + 'A') : base;
+                    }
+                    return;
+                }
+                // Host '.' '/' ',' ' ' etc. — do not require Sym+letter (device still does).
+                uint32_t punct = 0;
+                const bool no_chord = (mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) == 0;
+                const bool unshifted = (mod & KMOD_SHIFT) == 0;
+                if (no_chord && unshifted && map_host_punctuation(sym, punct)) {
+                    keypad_->emit_key_state(punct, down);
+                    if (down) {
+                        swallow_text_char_ = static_cast<int>(punct);
                     }
                     return;
                 }
@@ -451,12 +514,15 @@ void DesktopSimulatorFrame::handle_event(const SDL_Event& event, bool& running) 
             return;
         }
         case SDL_TEXTINPUT: {
-            if (swallow_text_) {
-                swallow_text_ = false;
+            const char* cursor = event.text.text;
+            if (swallow_text_char_ >= 0 && cursor &&
+                static_cast<unsigned char>(cursor[0]) ==
+                    static_cast<unsigned char>(swallow_text_char_)) {
+                swallow_text_char_ = -1;
                 return;
             }
-            const char* cursor = event.text.text;
-            while (*cursor != '\0') {
+            swallow_text_char_ = -1;
+            while (cursor && *cursor != '\0') {
                 const auto length = utf8_character_size(cursor);
                 uint32_t key = 0;
                 std::copy_n(reinterpret_cast<const uint8_t*>(cursor),

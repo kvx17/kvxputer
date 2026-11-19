@@ -2110,6 +2110,31 @@ const char* input_hint(Op op) {
     return "";
 }
 
+const char* input_example(Op op) {
+    switch (op) {
+    case Op::Subnet: return "e.g.  192.168.1.10/24   or   mask 10.0.0.5 255.255.255.0";
+    case Op::BaseConvert: return "e.g.  FF 16 10   or   all 255 10";
+    case Op::ByteUnits: return "e.g.  1536  or  1.5 MiB";
+    case Op::Resistor: return "e.g.  brown black red gold   or   rev 1k";
+    case Op::LedResistor: return "e.g.  5 2.0 20";
+    case Op::VoltageDivider: return "e.g.  10k 4.7k 5   or   design 5 3.3 10k";
+    case Op::Baud: return "e.g.  115200";
+    case Op::Dbm: return "e.g.  10 dbm 3";
+    case Op::Epoch: return "e.g.  1700000000   or   date 2024-01-01";
+    case Op::Measure: return "e.g.  temp 25 C   or   awg 24";
+    case Op::Bitmask: return "e.g.  bits 8 0,3,7   or   hex 0x89";
+    case Op::Crc: return "e.g.  crc32 deadbeef   or   text hello";
+    case Op::Units: return "e.g.  10 ft m";
+    case Op::OhmsLaw: return "e.g.  v=12 r=100   or   dc 12 - 100 -";
+    case Op::VoltageDrop: return "e.g.  cu 15 10 120 12";
+    case Op::Motor: return "e.g.  1 - 1800 85";
+    case Op::Gas: return "e.g.  boyle 1 2 2 -";
+    case Op::Flow: return "e.g.  q 20 1.5";
+    case Op::Count: break;
+    }
+    return "Enter values, then Enter";
+}
+
 std::string run(Op op, const std::string& input, bool& ok) {
     ok = true;
     const std::string in = trim(input);

@@ -43,7 +43,7 @@ void PromptScreen::confirm() {
 }
 
 const char* PromptScreen::typing_hint() const {
-    return "letters bare   Sym+B=. N=/   Enter OK";
+    return "Type · Enter confirm · Esc back";
 }
 
 bool PromptScreen::handle_key(uint32_t key) {

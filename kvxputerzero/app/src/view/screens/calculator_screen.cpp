@@ -23,32 +23,31 @@ void CalculatorScreen::build() {
     const lv_font_t* font10 = assets().load_standard_font(10);
     if (!font10) font10 = &lv_font_montserrat_12;
 
-    // Sit left of the Esc chip so DEG/RAD does not collide with header chrome.
-    mode_label_ = lv_label_create(content());
-    lv_obj_align(mode_label_, LV_ALIGN_TOP_RIGHT, -40, 2);
-    lv_obj_set_style_text_font(mode_label_, font10, 0);
-    lv_obj_set_style_text_color(mode_label_, tok.accent, 0);
+    example_label_ = lv_label_create(content());
+    lv_label_set_text(example_label_, "e.g.  sin(30)+sqrt(2)   ans*pi");
+    lv_obj_set_pos(example_label_, 4, 20);
+    lv_obj_set_width(example_label_, view::kScreenWidth - 8);
+    lv_label_set_long_mode(example_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_font(example_label_, font10, 0);
+    lv_obj_set_style_text_color(example_label_, tok.ink_dim, 0);
 
-    history_label_ = lv_label_create(content());
-    lv_obj_set_pos(history_label_, 4, 20);
-    lv_obj_set_size(history_label_, view::kScreenWidth - 8, 56);
-    lv_label_set_long_mode(history_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(history_label_, font10, 0);
-    lv_obj_set_style_text_color(history_label_, tok.ink_dim, 0);
-
-    auto* hint = lv_label_create(content());
-    lv_label_set_text(hint, "sin cos tan asin ln log log2 sqrt fact pi e ans");
-    lv_obj_set_pos(hint, 4, 78);
-    lv_obj_set_width(hint, view::kScreenWidth - 8);
-    lv_label_set_long_mode(hint, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(hint, font10, 0);
-    lv_obj_set_style_text_color(hint, tok.ink_dim, 0);
+    keys_.build(
+        content(), tok, font10, 34, view::kScreenWidth - 8, "./-+*(),",
+        [this](char ch) { insert_char(ch); }, state_.deg_mode ? "DEG" : "RAD",
+        [this]() { toggle_mode(); });
 
     input_ta_ = view::make_line_input(content(), tok, font, view::kScreenWidth - 8);
     lv_textarea_set_placeholder_text(input_ta_, "expression");
     lv_textarea_set_max_length(input_ta_, 96);
     lv_textarea_set_text(input_ta_, view_model().work_input().c_str());
-    lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, view::kContentHeight - 34);
+    lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 54);
+
+    history_label_ = lv_label_create(content());
+    lv_obj_set_pos(history_label_, 4, 76);
+    lv_obj_set_size(history_label_, view::kScreenWidth - 8, view::kContentHeight - 78);
+    lv_label_set_long_mode(history_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(history_label_, font10, 0);
+    lv_obj_set_style_text_color(history_label_, tok.ink_dim, 0);
 
     refresh_mode();
     refresh_history();
@@ -57,7 +56,10 @@ void CalculatorScreen::build() {
 void CalculatorScreen::refresh_history() {
     if (!history_label_) return;
     if (state_.history.empty()) {
-        lv_label_set_text(history_label_, "Enter evaluates - 5 toggles DEG/RAD");
+        lv_label_set_text(history_label_,
+                          "Type digits and letters.\n"
+                          "↑ then ← → Enter inserts . / - + …\n"
+                          "DEG/RAD chip sets angle mode.");
         return;
     }
     std::string text;
@@ -70,14 +72,43 @@ void CalculatorScreen::refresh_history() {
 }
 
 void CalculatorScreen::refresh_mode() {
-    if (!mode_label_) return;
-    lv_label_set_text(mode_label_, state_.deg_mode ? "DEG" : "RAD");
+    keys_.set_mode_label(state_.deg_mode ? "DEG" : "RAD");
 }
 
 void CalculatorScreen::toggle_mode() {
     state_.deg_mode = !state_.deg_mode;
     tools::calc::save_prefs(state_);
     refresh_mode();
+}
+
+void CalculatorScreen::insert_char(char ch) {
+    if (!input_ta_) return;
+    lv_textarea_add_char(input_ta_, static_cast<uint32_t>(static_cast<unsigned char>(ch)));
+}
+
+bool CalculatorScreen::type_key(uint32_t key) {
+    if (!input_ta_) return false;
+    if (key == LV_KEY_BACKSPACE || key == 8) {
+        lv_textarea_delete_char(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_DEL || key == 127) {
+        lv_textarea_delete_char_forward(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_LEFT) {
+        lv_textarea_cursor_left(input_ta_);
+        return true;
+    }
+    if (key == LV_KEY_RIGHT) {
+        lv_textarea_cursor_right(input_ta_);
+        return true;
+    }
+    if (key >= 32 && key <= 126) {
+        lv_textarea_add_char(input_ta_, key);
+        return true;
+    }
+    return false;
 }
 
 void CalculatorScreen::evaluate_now() {
@@ -101,51 +132,34 @@ void CalculatorScreen::evaluate_now() {
 }
 
 const char* CalculatorScreen::typing_hint() const {
-    return "Sym+B=. N=/   Enter =   empty+D DEG/RAD";
+    return "Enter run · ↑ ops · Esc back";
 }
 
 std::array<view::widgets::ActionSlot, 5> CalculatorScreen::nav_actions() {
-    // Empty slots keep digit keys free for typing (same pattern as WorkScreen).
     return {};
 }
 
 bool CalculatorScreen::handle_key(uint32_t key) {
     if (key == LV_KEY_ESC) {
+        if (keys_.focused()) {
+            keys_.set_focused(false);
+            return true;
+        }
         view_model().go_back();
         return true;
     }
+
+    // Ops strip navigation / insert (no letter-key shortcuts).
+    if (keys_.handle_key(key)) {
+        return true;
+    }
+
     if (key == LV_KEY_ENTER) {
         evaluate_now();
         return true;
     }
-    // Key 5 on the action bar also toggles; digit '5' in an expression is normal typing.
-    // Use Fn+H-style: when the field is empty, 'd'/'D' toggles. While typing, digits/letters enter.
-    if ((key == 'd' || key == 'D') && input_ta_ &&
-        (!lv_textarea_get_text(input_ta_) || lv_textarea_get_text(input_ta_)[0] == '\0')) {
-        toggle_mode();
-        return true;
-    }
-    if (!input_ta_) return KvxScreen::handle_key(key);
-    if (key == LV_KEY_BACKSPACE || key == 8) {
-        lv_textarea_delete_char(input_ta_);
-        return true;
-    }
-    if (key == LV_KEY_DEL || key == 127) {
-        lv_textarea_delete_char_forward(input_ta_);
-        return true;
-    }
-    if (key == LV_KEY_LEFT) {
-        lv_textarea_cursor_left(input_ta_);
-        return true;
-    }
-    if (key == LV_KEY_RIGHT) {
-        lv_textarea_cursor_right(input_ta_);
-        return true;
-    }
-    if (key >= 32 && key <= 126) {
-        lv_textarea_add_char(input_ta_, key);
-        return true;
-    }
+
+    if (type_key(key)) return true;
     return KvxScreen::handle_key(key);
 }
 

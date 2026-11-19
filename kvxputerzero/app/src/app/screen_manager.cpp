@@ -11,9 +11,11 @@
 #include "device_status.h"
 #include "doc_screen.h"
 #include "eng_calc_lib.h"
+#include "eng_calc_screen.h"
 #include "glyph_screen.h"
 #include "info_screen.h"
 #include "kvx_style.h"
+#include "linux_input.h"
 #include "matrix_screen.h"
 #include "net_info.h"
 #include "options_list_screen.h"
@@ -26,6 +28,7 @@
 #include "pda_view_screen.h"
 #include "pda_world_clock_screen.h"
 #include "power_ctrl.h"
+#include "preset_links.h"
 #include "qr_lib.h"
 #include "timer_screen.h"
 #include "tool_screens.h"
@@ -154,6 +157,7 @@ void ScreenManager::load_screen(std::unique_ptr<screen::KvxScreen> next_screen) 
     if (!next_screen || !next_screen->root()) return;
     lv_screen_load(next_screen->root());
     current_screen_ = std::move(next_screen);
+    platform::set_text_entry(current_screen_->accepts_text());
 }
 
 std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage page) {
@@ -232,9 +236,7 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::EngCalcWork: {
         auto op = static_cast<tools::engcalc::Op>(view_model_.eng_calc_op());
-        return std::make_unique<screen::WorkScreen>(
-            view_model_, assets_, tools::engcalc::op_label(op), tools::engcalc::input_hint(op),
-            [op](const std::string& in, bool& ok) { return tools::engcalc::run(op, in, ok); });
+        return std::make_unique<screen::EngCalcScreen>(view_model_, assets_, op);
     }
 
     case model::AppPage::Timer:
@@ -364,11 +366,34 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
                                    open_qr(view_model_, content, error);
                                }});
         }
+        entries.push_back({tools::links::kRepoLabel, [this]() {
+                               std::string error;
+                               open_qr(view_model_, tools::links::kRepoUrl, error);
+                           }});
+        entries.push_back({tools::links::kGithubLabel, [this]() {
+                               std::string error;
+                               open_qr(view_model_, tools::links::kGithubUrl, error);
+                           }});
+        entries.push_back({"Useful Links...", [this]() { view_model_.open_qr_useful_links(); }});
         entries.push_back({"PIX", [this]() { view_model_.open_qr_pix(); }});
         entries.push_back({"Custom", [this]() { view_model_.open_qr_custom(); }});
         entries.push_back({"Save&Display", [this]() { view_model_.open_qr_save(); }});
         entries.push_back({"Remove", [this]() { view_model_.open_qr_remove(); }});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "QRCodes", std::move(entries));
+    }
+
+    case model::AppPage::QrUsefulLinks: {
+        std::vector<MenuEntry> entries;
+        for (size_t i = 0; i < tools::links::kUsefulCount; ++i) {
+            const char* url = tools::links::kUseful[i];
+            entries.push_back({tools::links::short_label(url), [this, u = std::string(url)]() {
+                                   std::string error;
+                                   open_qr(view_model_, u, error);
+                               }});
+        }
+        entries.push_back({"Back", [this]() { view_model_.go_back(); }});
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Useful Links",
+                                                   std::move(entries));
     }
 
     case model::AppPage::QrCustom:

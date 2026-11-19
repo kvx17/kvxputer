@@ -292,18 +292,20 @@ lv_obj_t* make_kv_row(lv_obj_t* parent,
     auto* row = lv_obj_create(parent);
     lv_obj_remove_style_all(row);
     lv_obj_set_width(row, LV_PCT(100));
-    lv_obj_set_height(row, 14);
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_column(row, 6, 0);
+    lv_obj_set_style_pad_top(row, 1, 0);
+    lv_obj_set_style_pad_bottom(row, 1, 0);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
     auto* key = lv_label_create(row);
     lv_label_set_text(key, label ? label : "");
     lv_obj_set_style_text_font(key, font ? font : &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(key, tokens.ink_dim, 0);
-    lv_obj_set_width(key, 72);
-    lv_label_set_long_mode(key, LV_LABEL_LONG_CLIP);
+    lv_obj_set_width(key, 64);
+    lv_label_set_long_mode(key, LV_LABEL_LONG_WRAP);
 
     auto* val = lv_label_create(row);
     lv_label_set_text(val, value ? value : "");
@@ -311,8 +313,8 @@ lv_obj_t* make_kv_row(lv_obj_t* parent,
     lv_obj_set_style_text_font(val, font ? font : &lv_font_montserrat_12, 0);
     lv_obj_set_style_text_color(val, tokens.ink, 0);
     lv_obj_set_flex_grow(val, 1);
-    // Ellipsis keeps long paths from looking cut mid-glyph under the footer.
-    lv_label_set_long_mode(val, LV_LABEL_LONG_DOT);
+    // Wrap so long GPS/power errors stay readable on the 320px panel (scrolls).
+    lv_label_set_long_mode(val, LV_LABEL_LONG_WRAP);
     return row;
 }
 

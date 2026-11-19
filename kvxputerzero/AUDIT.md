@@ -254,15 +254,17 @@ Host-side scripts: **asset** under Assets (`PCConnect/`).
 
 ## GPS
 
+Zero GPS channel ports the ADV menu (`gps_screens.cpp` + `GpsSession`). Cap-LoRa GPS UART is `/dev/serial0` (or gpsd); LoRa radio stays on the LoRa channel.
+
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Scan WiFi / BLE / Both | `wardriving.cpp` | tool | accessory | GPS via Cap; WiFi/BLE scan side could be tools without Cap GPS | always | no |
-| View Captures | `wd/wd_viewer.cpp` | tool | rewrite | FS CSV viewer (wardrive loot tool) | always | no |
-| WD Config prefs | `wardriving.cpp` | setting | rewrite | prefs for wardrive tool | always | no |
-| Wardriving Master | `wardriving_master_menu.cpp` | tool | blocked | ESP-NOW RX | `EVIL_EXTENSIONS` | no |
-| Site Survey Help / Start | `site_survey.cpp` | tool | accessory | GPS UART + WiFi | `!LITE` | no |
-| GPS Tracker | `gps_tracker.cpp` | tool | os | Cap-LoRa-1262-GPS covers GPS | `!LITE` | no |
-| GPS Source / Baud / Pins / Configure LoRa Cap | `gps_menu.cpp` / `LoRaRF.cpp` | setting | os | Cap GPS bring-up | always / `HAS_LORA_CAP` | no |
+| Scan WiFi / BLE / Both | `wardriving.cpp` | tool | rewrite | nmcli / BlueZ + streaming GPS; WiGLE CSV | always | no |
+| View Captures | `wd/wd_viewer.cpp` | tool | rewrite | FS CSV viewer (WiGLE + legacy) | always | no |
+| WD Config prefs | `wd/wd_config.cpp` | setting | rewrite | JSON prefs under `~/.config/kvxputerzero/gps/` | always | no |
+| Wardriving Master | `wardriving_master_menu.cpp` | tool | blocked | ESP-NOW RX — Zero shows info stub only | `EVIL_EXTENSIONS` | no |
+| Site Survey Help / Start | `site_survey.cpp` | tool | rewrite | wifi_scan + GPS; `load_pct` is n/a | `!LITE` | no |
+| GPS Tracker | `gps_tracker.cpp` | tool | rewrite | GPX track via gpsd / NMEA tty | `!LITE` | no |
+| GPS Source / Baud / Status / Captures folder | `gps_menu.cpp` / `gps_hw.cpp` | setting | rewrite | gpsd vs `/dev/serial0` troubleshoot (no SX1262 from GPS Config) | always | no |
 
 ---
 
@@ -278,13 +280,18 @@ Host-side scripts: **asset** under Assets (`PCConnect/`).
 
 ## NFC
 
+Ported into `kvxputerzero` NFC channel (`nfc_screens.cpp` + `pn532_bus` / `st25r3916` / `nfc_session`). Stock Cap-CC1101-NFC remains optional; this package is the ADV menu parity path.
+
 | Label | Source | Role | Verdict | Deciding dependency | Gate | Lite SKU |
 | --- | --- | --- | --- | --- | --- | --- |
-| Read / Scan / Load / Erase / Classic / Tags / NDEF / Lab / Parsers / EMV / SRIX | `nfc_*.cpp` / `emv_reader.cpp` / `srix_tool.cpp` | tool | os | Stock [Cap-CC1101-NFC](https://github.com/CardputerZero/Cap-CC1101-NFC) / [RFID](https://github.com/CardputerZero/RFID) | RFID HW / `!LITE` | no |
-| Dump editor / Save as file / Help-like docs | various | tool | os | Stock NFC/RFID apps | always | no |
-| Amiibolink / PN532 BLE / Chameleon BLE paths | `amiibo.cpp` / `pn532ble.cpp` / `chameleon.cpp` | tool | rewrite | BlueZ GATT to external companion (unique if not in stock RFID) | `!LITE` | no |
-| PN532 UART / Killer Reader/Emulator/Sniffer | `PN532KillerTools.cpp` | tool | accessory | PN532Killer UART (not stock Cap) | `!LITE` | no |
-| NFC Module / Wiring | `settings.cpp` / `rfid_shared.cpp` | setting | os | Stock Cap/RFID | always | no |
+| Read / Scan / Load / Erase / Classic / Tags / NDEF / Lab / Parsers | `nfc_*.cpp` / Tag-O-Matic | tool | rewrite | Cap ST25R3916 SPI + optional PN532 I2C in `app/` | Cap / I2C | no |
+| Dump editor / Save as file / Flipper `.nfc` | `nfc_dump_gen` / drivers | tool | rewrite | `~/.config/kvxputerzero/nfc/` | always | no |
+| EMV | `emv_reader.cpp` | tool | rewrite | PN532 I2C APDU (ST25 refused, matches ADV) | PN532 | no |
+| SRIX | `srix_tool.cpp` | tool | rewrite | PN532 I2C only; Zero row explains when ST25 selected | PN532 I2C | no |
+| Amiibolink / PN532 BLE / Chameleon | companions → BLE status tools | tool | rewrite | BlueZ connect/read only (no write/emulate) | `!LITE` | no |
+| PN532 UART / Killer | Modules `Pn532KillerUart` | tool | accessory | UART probe only; full Killer protocol not ported | UART | no |
+| NFC Module / Wiring / Add MIF Key | Config leaves | setting | rewrite | Auto / ST25 SPI / PN532 I2C; Cap wiring help | always | no |
+| Detect Reader / MFKey / ISO15693 block R/W / UL-C / Picopass / e-ink | ADV stubs | tool | rewrite | Honest on-screen stubs matching ADV | always | no |
 
 ---
 

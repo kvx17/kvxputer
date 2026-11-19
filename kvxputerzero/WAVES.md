@@ -4,11 +4,11 @@ Derived from **rewrite** / **onboard** rows in [AUDIT.md](AUDIT.md) that are **n
 
 The AppStore **shell** lives in [`app/`](app/) (`kvxputerzero`). Wave work fills channel screens inside that package — do not invent new Store package names per tool.
 
-Stock Cardputer Zero already ships Launcher, Files, Store, FactoryTest, Camera, Compass, IR-Remote, IR-Chat, Music, Piano, Calendar, Calculator, plus Cap-LoRa-1262-GPS, Cap-CC1101-SubG-Chat, Cap-CC1101-NFC, and RFID. Do **not** port those domains. Also skip OS Wi-Fi connect/AP/disconnect and launcher Setting/SSH/battery/clock.
+Stock Cardputer Zero already ships Launcher, Files, Store, FactoryTest, Camera, Compass, IR-Remote, IR-Chat, Music, Piano, Calendar, Calculator, plus Cap-LoRa-1262-GPS, Cap-CC1101-SubG-Chat, Cap-CC1101-NFC, and RFID. Prefer not to clone those domains **except** the kvxputerzero **NFC** channel (ADV NFC on Cap ST25 / optional PN532) and the **GPS** channel (ADV wardrive / survey / tracker / config on gpsd or `/dev/serial0`). Also skip OS Wi-Fi connect/AP/disconnect and launcher Setting/SSH/battery/clock.
 
 **Focus:** network / RF-adjacent tools, scanners, specialized IR, offline crypto, BLE detectors, engineering calculators — not a second Files or Calculator.
 
-**Shipped in `app/`:** Scientific Calculator (+ PDA Calc tile), Codec/Hash, Engineering Calculators, Passgen, TOTP, Combo, QRCodes, Barcode, Timer, **PDA**, Media Player; Clock face + Charge channel; Files browser; Infrared Use/Learn/Browse/Read/Favorites (NEC/LIRC) plus TV-B-Gone, TagTinker ESL (LED/ping/refresh/page-flip), IR Carrier check; Config colors/brightness/dim/sound/power/About; Wi-Fi Connect/Disconnect/AP info; Tools leftovers (DTMF dialer/listen, Morse, Microphone, MQTT, LLM HTTP, Drone ID BLE); Scripts allowlist runner + **PC Connect** channel (how-to / needs / browse / export host scripts for Cardputer+kvxputer); GPS View Captures + Live Wardrive (logs 0,0 until a fix); Wi-Fi/NetOps/Ethernet shared tools (Net Toolkit, Scan Hosts, TCP/Telnet/SOCKS4, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot); offline Loot Console / Check Handshakes / NTLM Clean; read-only SMB Status / SIP OPTIONS / LDAP Read; BLE passive suite + Ninebot/Amiibolink/PN532/Chameleon status (connect/read only); **Cap channels** — RF (CC1101 status/spectrum/listen/record/library/test TX), NRF24 (status/spectrum/listen/send), LoRa SX1262 (status/chat/antenna/freq/user + Meshtastic serial Nodes/Chat when USB CDC PhoneAPI or configured TEXTMSG answers, else one status row), RFID/NFC (PN532 read/scan/load/save), FM Si4713 (status/broadcast/stop/spectrum); Modules Cap Probe, PaHub scan, iButton, PN532Killer UART, UART LLM; Discovery index. Cap GPS UART and `meshtasticd` TCP stay out of this package. Attack / ESP-radio / USB-gadget / jammer / MouseJack leaves stay out (see AUDIT / Leave out below).
+**Shipped in `app/`:** Scientific Calculator (+ PDA Calc tile), Codec/Hash, Engineering Calculators, Passgen, TOTP, Combo, QRCodes, Barcode, Timer, **PDA**, Media Player; Clock face + Charge channel; Files browser; Infrared Use/Learn/Browse/Read/Favorites (NEC/LIRC) plus TV-B-Gone, TagTinker ESL (LED/ping/refresh/page-flip), IR Carrier check; Config colors/brightness/dim/sound/power/About; Wi-Fi Connect/Disconnect/AP info; Tools leftovers (DTMF dialer/listen, Morse, Microphone, MQTT, LLM HTTP, Drone ID BLE); Scripts allowlist runner + **PC Connect** channel (how-to / needs / browse / export host scripts for Cardputer+kvxputer); **GPS** (ADV menu: Wardriving Wi-Fi/BLE/Both + WiGLE CSV + View Captures + WD Config + Master stub; Site Survey; GPS Tracker GPX; Config source/path/baud/Status); Wi-Fi/NetOps/Ethernet shared tools (Net Toolkit, Scan Hosts, TCP/Telnet/SOCKS4, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot); offline Loot Console / Check Handshakes / NTLM Clean; read-only SMB Status / SIP OPTIONS / LDAP Read; BLE passive suite + Ninebot/Amiibolink/PN532/Chameleon status (connect/read only); **Cap channels** — RF (CC1101 status/spectrum/listen/record/library/test TX), NRF24 (status/spectrum/listen/send), LoRa SX1262 (status/chat/antenna/freq/user + Meshtastic serial Nodes/Chat when USB CDC PhoneAPI or configured TEXTMSG answers, else one status row), RFID (UID read/scan/load/save), **NFC** (ADV menu: Read/Scan/Load/Erase, Classic, Tags, NDEF, Lab, Parsers, Companions, Config on Cap ST25 + optional PN532 I2C; Flipper `.nfc` / Bruce `.rfid`; honest stubs where ADV or the Cap cannot), FM Si4713 (status/broadcast/stop/spectrum); Modules Cap Probe, PaHub scan, iButton, PN532Killer UART, UART LLM; Discovery index. `meshtasticd` TCP stays out of this package. Attack / ESP-radio / USB-gadget / jammer / MouseJack leaves stay out (see AUDIT / Leave out below).
 
 ## Shared constraints (every wave)
 
@@ -48,7 +48,7 @@ Stock IR-Remote / Music cover remotes and playback. These are **extra** tools:
 | UART Shell / Bus Scan / I2C Finder | Grove/EXT UART & I2C | Lab tools |
 | Ethernet Scan Hosts / DHCP Starvation / MAC Flooding | Onboard Ethernet SR9900A | NIC tools; not Files |
 
-Do not port: Media Player, Charge, Univ Rem / Custom IR / IR Read, Cap RF/LoRa/NFC/RFID domains.
+Do not port: Media Player, Charge, Univ Rem / Custom IR / IR Read, Cap RF/LoRa/RFID domains (NFC is ported in-package).
 
 ---
 
@@ -74,9 +74,9 @@ Ordinary sockets / SoftAP **tool UIs** / BlueZ **scan**. Not “Connect to WiFi�
 
 ## Port status
 
-Waves 1–3, everyday apps, gap tools, and Cap/Grove accessory channels are implemented inside `app/` via `tool_registry` + `tool_screens` + `cap_screens`. Caps are driven over Linux `spidev` / I2C / UART when present; desktop builds report Cap not present without hanging. Stock Cap Store apps may still be installed but are not required.
+Waves 1–3, everyday apps, gap tools, and Cap/Grove accessory channels are implemented inside `app/` via `tool_registry` + `tool_screens` + `cap_screens` + `nfc_screens`. Caps are driven over Linux `spidev` / I2C / UART when present; desktop builds report Cap not present without hanging. Stock Cap Store apps may still be installed but are not required.
 
-Still intentionally out: Evil Portal / poison / starvation / wordlist password recovery / reverse-shell class leaves; IR Jammer multi-mode and TagTinker raw-hex; Amiibo/PN532/Chameleon write/emulate; RF/NRF jammer and bruteforce; NRF MouseJack HID; Ninebot tune writes; Ethernet MAC Flooding / DHCP Starvation; Karma Spear; FM TA hijack; companion `.bin`. Stock Calendar / Music / Piano / Recorder / launcher Setting shell are not duplicated beyond what PDA and Config already cover.
+Still intentionally out: Evil Portal / poison / starvation / wordlist password recovery / reverse-shell class leaves; IR Jammer multi-mode and TagTinker raw-hex; Amiibo/PN532/Chameleon BLE write/emulate; full RFAL Classic Crypto1 / ISO15693 block R/W / Cap listen-IRQ MFKey; RF/NRF jammer and bruteforce; NRF MouseJack HID; Ninebot tune writes; Ethernet MAC Flooding / DHCP Starvation; Karma Spear; FM TA hijack; companion `.bin`. Stock Calendar / Music / Piano / Recorder / launcher Setting shell are not duplicated beyond what PDA and Config already cover.
 
 ---
 
@@ -84,7 +84,7 @@ Still intentionally out: Evil Portal / poison / starvation / wordlist password r
 
 ### os (stock — do not port)
 
-Launcher, Files, Store, FactoryTest, Camera, Compass, IR-Remote, IR-Chat, Music, Piano, Recorder, Calendar, Calculator, Cap-LoRa-1262-GPS, Cap-CC1101-SubG-Chat, Cap-CC1101-NFC, RFID; OS Wi-Fi connect/AP/info; launcher SSH / Setting / battery / clock; kvxputer RF/LoRa/GPS Tracker/RFID/NFC/Univ Rem/Media Player/Charge/Config Setting overlaps marked **os** in AUDIT.
+Launcher, Files, Store, FactoryTest, Camera, Compass, IR-Remote, IR-Chat, Music, Piano, Recorder, Calendar, Calculator, Cap-LoRa-1262-GPS (stock GPS Tracker app; kvxputerzero GPS channel is the in-package ADV port), Cap-CC1101-SubG-Chat, Cap-CC1101-NFC (optional; kvxputerzero NFC channel is the in-package port), RFID; OS Wi-Fi connect/AP/info; launcher SSH / Setting / battery / clock; kvxputer RF/LoRa/RFID/Univ Rem/Media Player/Charge/Config Setting overlaps marked **os** in AUDIT (NFC and GPS are rewrite in AUDIT).
 
 ### Blocked (ESP radio / USB gadget)
 
@@ -99,7 +99,7 @@ Launcher, Files, Store, FactoryTest, Camera, Compass, IR-Remote, IR-Chat, Music,
 
 ### Accessory (not first waves; stock Caps often cover)
 
-NRF24 tools, Si4713 FM, Grove Scroll/Joystick/PaHub, OneWire iButton, PN532Killer UART, wardrive **with** GPS Cap (GPS Tracker is **os**). Prefer stock Cap/RFID apps over reimplementing Sub-GHz/NFC/LoRa/GPS.
+NRF24 tools, Si4713 FM, Grove Scroll/Joystick/PaHub, OneWire iButton, PN532Killer UART. Prefer stock Cap/RFID apps over reimplementing Sub-GHz/LoRa radio domains (NFC and GPS channels are already in-package ports).
 
 ### Drop
 

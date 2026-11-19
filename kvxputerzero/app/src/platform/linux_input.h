@@ -33,16 +33,16 @@ constexpr uint32_t kKeyBrightnessDown = kSpecialKeyBase | 0x46U;
 constexpr uint32_t kKeyBrightnessUp = kSpecialKeyBase | 0x47U;
 constexpr uint32_t kKeyInsert = kSpecialKeyBase | 0x48U;
 
-// Cardputer Zero printed layers (matches tca8418 firmware):
-//   bare letter  → the letter (F/Z/X/C stay arrows for nav)
-//   Sym+letter   → punctuation printed on the key (B→. V→, N→/ …)
-//                 Sym is often rewritten in hardware to KEY_DOT / F13… — those
-//                 arrive as punctuation codes and skip this soft map.
-//   Fn+letter    → orange Fn legend; Fn+F/Z/X/C types the letter
-// Digits stay digits so 4–8 remain the menu row; Fn+digit → F1–F10; Sym+digit → !@#…
+// Cardputer Zero layers (printed keycap guide, not Cardputer ADV):
+//   bare letter/digit = the keycap; shift = uppercase
+//   Sym+key = blue punctuation (Q~, B., V,, N/)
+//   Fn+key = orange legend; Fn+F/X/Z/C = up/down/left/right
+// Hold applies while held. One tap applies to the next key. A second tap locks.
+// Menus also accept bare F/X/Z/C as arrows. Text screens type those letters.
 char sym_char(char base);
 uint32_t fn_legend(char base);
 uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool symbol_mode);
+void set_text_entry(bool enabled);
 
 using KeyReleaseListener = void (*)(uint32_t key, const char* key_name, void* user_data);
 using GlobalKeyListener = bool (*)(uint32_t key,

@@ -2,25 +2,24 @@
 
 Cardputer Zero **AppStore shell** plus the Cardputer kvxputer portability audit.
 
-| Path | Role |
-| --- | --- |
-| [`app/`](app/) | Single package **`kvxputerzero`**: Wii-style 3×2 channel grid; Tools + WiFi/NetOps/BLE/Ethernet/GPS/Scripts/**PC Connect**/Modules/Discovery filled; Config theme; stock/placeholder tiles for Cap/OS domains |
-| [`AUDIT.md`](AUDIT.md) | Per-leaf verdicts for the ESP Cardputer firmware tree |
-| [`WAVES.md`](WAVES.md) | Wave catalog + shipped status for channel tools |
+| Path                   | Role                                                                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`app/`](app/)         | Single package `kvxputerzero`: Wii-style 3×2 channel grid; Tools + WiFi/NetOps/BLE/Ethernet/GPS/Scripts/**PC Connect**/Modules/Discovery filled; Config theme; stock/placeholder tiles for Cap/OS domains |
+| [`AUDIT.md`](AUDIT.md) | Per-leaf verdicts for the ESP Cardputer firmware tree                                                                                                                                                     |
+| [`WAVES.md`](WAVES.md) | Wave catalog + shipped status for channel tools                                                                                                                                                           |
 
-Later plans only add channel screens under `app/src/` — Store identity stays **`kvxputerzero`**.
+Later plans only add channel screens under `app/src/` — Store identity stays `kvxputerzero`.
 
 ## App user guide
 
 **How to use the UI, run the desktop emulator, and install on Cardputer Zero:**  
-→ **[`app/README.md`](app/README.md)**
+→ [`app/README.md`](app/README.md)
 
 Store metadata: [`app/app-builder.json`](app/app-builder.json).
 
 ## Compile
 
 All builds run from `kvxputerzero/app` (CMake presets live there). Needs CMake ≥ 3.31 and Ninja.
-
 
 ### Desktop emulator (x86_64 Linux)
 
@@ -74,6 +73,39 @@ ssh USER@HOST
 sudo apt install ./kvxputerzero_*_arm64.deb
 ```
 
+**Force reinstall:**
+
+```bash
+sudo apt install --reinstall ./kvxputerzero_0.1.0_revX_arm64.deb
+```
+
+**Remove the installed app:**
+
+```bash
+sudo apt remove kvxputerzero
+```
+
+**Also wipe config (optional):**
+
+```bash
+sudo apt purge kvxputerzero
+rm -rf ~/.config/kvxputerzero
+```
+
+**Delete old** `.deb` **files you copied over:**
+
+```bash
+rm -f ~/kvxputerzero_0.1.0_rev*_arm64.deb
+```
+
+**Then install the new one:**
+
+```bash
+sudo apt install ./kvxputerzero_0.1.0_revX_arm64.deb
+```
+
+`apt install ./…rev3…deb` already replaces whatever `kvxputerzero` is installed; you don’t need to uninstall first unless you want a clean purge.
+
 Or one-liner from the build host after `scp`:
 
 ```bash
@@ -112,7 +144,7 @@ There is **no ESP32** on Cardputer Zero. Hardware authority: [CardputerZero docs
 
 ### Built-in OS / stock apps (do not reimplement)
 
-Stock Cap apps (LoRa/CC1101/NFC/RFID) and Store/Camera/Compass remain external. kvxputerzero now includes its own Calculator, Files browser, Clock/Charge faces, Media Player, IR (NEC/LIRC), and Wi-Fi Connect/Disconnect/AP info inside this package; RF/LoRa/RFID/NFC tiles still show **Use stock**.
+Stock Cap apps (LoRa/CC1101/NFC/RFID) and Store/Camera/Compass remain external and optional. kvxputerzero includes Calculator, Files, Clock/Charge, Media Player, IR, Wi-Fi tools, Cap RF/NRF/LoRa/FM, and a full **NFC** channel (ADV menu on Cap ST25 / optional PN532). RFID stays a thin UID channel.
 
 ### Verdict legend
 

@@ -86,6 +86,7 @@ public:
     void open_qr_pix();
     void open_qr_remove();
     void open_qr_view();
+    void open_qr_useful_links();
     void open_barcode_menu();
     void open_barcode_work(int type);
     void open_barcode_view();

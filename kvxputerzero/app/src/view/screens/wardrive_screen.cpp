@@ -24,11 +24,13 @@ void set_label(lv_obj_t* label, const char* text, lv_color_t color) {
 } // namespace
 
 WardriveScreen::WardriveScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
-                               std::string name_column, WorkerFn worker)
+                               std::string name_column, WorkerFn worker, KeyFn on_key, DoneFn on_done)
     : KvxScreen(view_model, assets),
       title_(std::move(title)),
       name_column_(std::move(name_column)),
-      worker_(std::move(worker)) {
+      worker_(std::move(worker)),
+      on_key_(std::move(on_key)),
+      on_done_(std::move(on_done)) {
     init();
 }
 
@@ -347,11 +349,21 @@ void WardriveScreen::stop_worker() {
 
 void WardriveScreen::leave() {
     stop_worker();
+    if (on_done_ && !done_fired_) {
+        done_fired_ = true;
+        on_done_();
+        return;
+    }
     view_model().go_back();
 }
 
 void WardriveScreen::go_home() {
     stop_worker();
+    if (on_done_ && !done_fired_) {
+        done_fired_ = true;
+        on_done_();
+        return;
+    }
     view_model().go_home();
 }
 
@@ -377,6 +389,7 @@ bool WardriveScreen::handle_key(uint32_t key) {
         else expand_selected();
         return true;
     }
+    if (on_key_ && on_key_(key)) return true;
     return KvxScreen::handle_key(key);
 }
 

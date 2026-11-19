@@ -45,6 +45,9 @@ const char* op_label(Op op);
 // Brief input grammar (may contain '\n').
 const char* input_hint(Op op);
 
+// One short example line for the eng-calc screen header (fits 320px).
+const char* input_example(Op op);
+
 // Evaluates one calculator line. On success ok=true and the multi-line result
 // is returned; on failure ok=false and a one-line error message is returned.
 std::string run(Op op, const std::string& input, bool& ok);

@@ -72,6 +72,10 @@ lv_obj_t* KvxScreen::root() const {
     return root_;
 }
 
+bool KvxScreen::accepts_text() const {
+    return typing_hint() != nullptr;
+}
+
 viewmodel::BaseViewModel& KvxScreen::view_model() {
     return view_model_;
 }

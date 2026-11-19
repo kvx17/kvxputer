@@ -1,5 +1,6 @@
 #include "cap_screens.h"
 
+#include "nfc_screens.h"
 #include "cap_detect.h"
 #include "cap_power.h"
 #include "cc1101.h"
@@ -12,6 +13,12 @@
 #include "st25r3916.h"
 #include "prompt_screen.h"
 #include "result_list_screen.h"
+#include "rf_listen_screen.h"
+#include "rf_record_screen.h"
+#include "rf_replay_screen.h"
+#include "rf_send_test_screen.h"
+#include "rf_settings.h"
+#include "rf_spectrum_screen.h"
 #include "run_screen.h"
 #include "si4713.h"
 #include "spi_device.h"
@@ -213,13 +220,16 @@ Screen make_cap_probe(VM& vm, AssetManager& assets) {
 // --- RF ----------------------------------------------------------------------------------
 
 Screen make_rf_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
+    (void)st;
     if (id == ToolId::RfStatus) {
         return make_info_card(vm, assets, "Cap Status", [](Cancel&, screen::InfoScreen::Fields& fields,
                                                        std::string& status, view::StatusPillKind& kind) {
             const auto c = platform::detect_cc1101();
+            auto settings = platform::load_rf_settings();
             if (!c.present) {
                 fields.push_back({"chip", "CC1101"});
                 fields.push_back({"status", c.error.empty() ? "not present" : c.error});
+                fields.push_back({"region", settings.region == platform::RfRegion::Us ? "US" : "EU"});
                 status = "missing";
                 kind = view::StatusPillKind::Missing;
                 return;
@@ -227,111 +237,32 @@ Screen make_rf_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
             fields.push_back({"chip", "CC1101"});
             fields.push_back({"path", c.path});
             if (!c.detail.empty()) fields.push_back({"detail", c.detail});
+            fields.push_back({"freq", platform::rf_format_mhz(settings.freq_hz) + " MHz"});
+            fields.push_back({"region", settings.region == platform::RfRegion::Us ? "US" : "EU"});
+            fields.push_back({"step", std::to_string(settings.step_hz) + " Hz"});
             status = "OK";
             kind = view::StatusPillKind::Ok;
         });
     }
+    // Interactive RF tools always open; they show DEMO / missing state themselves.
+    // Status-only gate remains above.
     if (id == ToolId::RfSpectrum) {
-        return make_run(vm, assets, "RF Spectrum", [](Cancel& cancel, const Log& log, const Status& status) {
-            platform::Cc1101Session s;
-            std::string err;
-            if (!s.open({}, err)) {
-                log(err);
-                return;
-            }
-            status("scanning 433–435 MHz");
-            std::vector<std::string> lines;
-            if (!s.spectrum_scan(433000000, 435000000, 100000, lines, err, cancel_ptr(cancel))) {
-                log(err);
-                return;
-            }
-            for (const auto& l : lines) log(l);
-            s.close();
-        });
+        return std::make_unique<screen::RfSpectrumScreen>(vm, assets);
     }
     if (id == ToolId::RfListen) {
-        return make_run(vm, assets, "RF Listen", [](Cancel& cancel, const Log& log, const Status& status) {
-            platform::Cc1101Session s;
-            std::string err;
-            if (!s.open({}, err)) {
-                log(err);
-                return;
-            }
-            const uint32_t hz = static_cast<uint32_t>(std::strtoul(read_config_value("rf_freq_hz.txt", "433920000").c_str(), nullptr, 10));
-            s.set_frequency_hz(hz, err);
-            status("RSSI listen");
-            std::vector<int> samples;
-            if (!s.listen_rssi(60, 50, samples, err, cancel_ptr(cancel))) {
-                log(err);
-                return;
-            }
-            for (int v : samples) log(std::to_string(v) + " dBm");
-            s.close();
-        });
+        return std::make_unique<screen::RfListenScreen>(vm, assets);
     }
     if (id == ToolId::RfRecord) {
-        return make_run(vm, assets, "RF Record", [](Cancel& cancel, const Log& log, const Status& status) {
-            platform::Cc1101Session s;
-            std::string err;
-            if (!s.open({}, err)) {
-                log(err);
-                return;
-            }
-            const uint32_t hz = static_cast<uint32_t>(std::strtoul(read_config_value("rf_freq_hz.txt", "433920000").c_str(), nullptr, 10));
-            s.set_frequency_hz(hz, err);
-            status("recording");
-            std::vector<int> samples;
-            if (!s.listen_rssi(80, 20, samples, err, cancel_ptr(cancel))) {
-                log(err);
-                return;
-            }
-            const std::string dir = ensure_subdir("rf");
-            const std::string path = dir + "/rec_" + std::to_string(std::time(nullptr)) + ".sub";
-            if (!platform::write_sub_raw(path, hz, samples, err)) {
-                log(err);
-                return;
-            }
-            log("Saved " + path);
-            s.close();
-        });
+        return std::make_unique<screen::RfRecordScreen>(vm, assets);
     }
-    if (id == ToolId::RfLibrary || id == ToolId::RfReplay) {
-        const std::string dir = ensure_subdir("rf");
-        if (st.name == "tx" && !st.arg.empty()) {
-            return make_run(vm, assets, "RF TX", [name = st.arg](Cancel&, const Log& log, const Status&) {
-                platform::Cc1101Session s;
-                std::string err;
-                if (!s.open({}, err)) {
-                    log(err);
-                    return;
-                }
-                const uint8_t payload[] = {'K', 'V', 'X', 1, 2, 3};
-                if (!s.send_test_packet(payload, sizeof(payload), err)) log(err);
-                else log("Test TX for " + name + " (FIFO packet)");
-                s.close();
-            });
-        }
-        std::vector<std::string> names;
-        std::string err;
-        platform::list_sub_files(dir, names, err);
-        std::vector<MenuEntry> e;
-        for (const auto& n : names) e.push_back(stage_entry(vm, id, n, "tx", n));
-        if (e.empty()) e.push_back({"(no .sub in rf/)", [&vm]() { vm.go_back(); }});
-        return make_options(vm, assets, id == ToolId::RfLibrary ? "Protocol Library" : "Replay", std::move(e));
+    if (id == ToolId::RfLibrary) {
+        return std::make_unique<screen::RfReplayScreen>(vm, assets, true);
+    }
+    if (id == ToolId::RfReplay) {
+        return std::make_unique<screen::RfReplayScreen>(vm, assets, false);
     }
     if (id == ToolId::RfSendTest) {
-        return make_run(vm, assets, "RF Send Test", [](Cancel&, const Log& log, const Status&) {
-            platform::Cc1101Session s;
-            std::string err;
-            if (!s.open({}, err)) {
-                log(err);
-                return;
-            }
-            const uint8_t payload[] = {'T', 'E', 'S', 'T'};
-            if (!s.send_test_packet(payload, sizeof(payload), err)) log(err);
-            else log("Test packet queued");
-            s.close();
-        });
+        return std::make_unique<screen::RfSendTestScreen>(vm, assets);
     }
     return nullptr;
 }
@@ -721,24 +652,17 @@ Screen make_fm_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
 // --- RFID / NFC --------------------------------------------------------------------------
 
 Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
-    const bool rfid = (id == ToolId::RfidStatus || id == ToolId::RfidRead || id == ToolId::RfidScan ||
-                       id == ToolId::RfidLoad || id == ToolId::RfidSave);
-    const std::string dir = ensure_subdir(rfid ? "rfid" : "nfc");
+    (void)st;
+    // RFID channel only — NFC is handled by make_nfc_tool_screen().
+    if (id != ToolId::RfidStatus && id != ToolId::RfidRead && id != ToolId::RfidScan &&
+        id != ToolId::RfidLoad && id != ToolId::RfidSave) {
+        return nullptr;
+    }
+    const std::string dir = ensure_subdir("rfid");
 
-    auto status_id = rfid ? ToolId::RfidStatus : ToolId::NfcStatus;
-    auto read_id = rfid ? ToolId::RfidRead : ToolId::NfcRead;
-    auto scan_id = rfid ? ToolId::RfidScan : ToolId::NfcScan;
-    auto load_id = rfid ? ToolId::RfidLoad : ToolId::NfcLoad;
-    auto save_id = rfid ? ToolId::RfidSave : ToolId::NfcSave;
-    (void)status_id;
-    (void)read_id;
-    (void)scan_id;
-    (void)save_id;
-
-    if (id == ToolId::RfidStatus || id == ToolId::NfcStatus) {
-        const char* title = rfid ? "RFID Status" : "NFC Status";
-        return make_info_card(vm, assets, title, [](Cancel&, screen::InfoScreen::Fields& fields,
-                                                    std::string& status, view::StatusPillKind& kind) {
+    if (id == ToolId::RfidStatus) {
+        return make_info_card(vm, assets, "RFID Status", [](Cancel&, screen::InfoScreen::Fields& fields,
+                                                            std::string& status, view::StatusPillKind& kind) {
             const auto st25 = platform::detect_st25r3916();
             if (st25.present) {
                 fields.push_back({"chip", "ST25R3916"});
@@ -778,15 +702,15 @@ Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
             kind = view::StatusPillKind::Ok;
         });
     }
-    if (id == ToolId::RfidRead || id == ToolId::NfcRead || id == ToolId::RfidScan || id == ToolId::NfcScan) {
+    if (id == ToolId::RfidRead || id == ToolId::RfidScan) {
         return make_run(vm, assets, "Read tag", [dir](Cancel& cancel, const Log& log, const Status& status) {
             std::string err;
             {
-                platform::St25Session st;
-                if (st.open({}, err)) {
+                platform::St25Session st25;
+                if (st25.open({}, err)) {
                     status("ST25 present tag...");
                     std::string uid;
-                    if (st.read_uid(uid, err, cancel_ptr(cancel))) {
+                    if (st25.read_uid(uid, err, cancel_ptr(cancel))) {
                         log(uid);
                         const std::string path = dir + "/st25_" + std::to_string(std::time(nullptr)) + ".txt";
                         std::ofstream out(path);
@@ -794,11 +718,11 @@ Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
                             out << uid << '\n';
                             log("Saved " + path);
                         }
-                        st.close();
+                        st25.close();
                         return;
                     }
                     log(err.empty() ? "ST25 read failed" : err);
-                    st.close();
+                    st25.close();
                     return;
                 }
             }
@@ -819,7 +743,7 @@ Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
             s.close();
         });
     }
-    if (id == ToolId::RfidLoad || id == ToolId::NfcLoad) {
+    if (id == ToolId::RfidLoad) {
         std::vector<MenuEntry> e;
         std::error_code ec;
         for (const auto& de : fs::directory_iterator(dir, ec)) {
@@ -835,7 +759,7 @@ Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
         if (e.empty()) e.push_back({"(no dumps)", [&vm]() { vm.go_back(); }});
         return make_options(vm, assets, "Load", std::move(e));
     }
-    if (id == ToolId::RfidSave || id == ToolId::NfcSave) {
+    if (id == ToolId::RfidSave) {
         return make_info(vm, assets, "Save", "Read/Scan auto-saves UID dumps under " + dir);
     }
     return nullptr;
@@ -953,6 +877,7 @@ Screen make_modules_extra(VM& vm, AssetManager& assets, ToolId id, const Stage& 
 std::unique_ptr<screen::KvxScreen> make_cap_tool_screen(viewmodel::BaseViewModel& vm, AssetManager& assets,
                                                         model::ToolId id, const std::string& param) {
     const Stage st = parse_stage(param);
+    if (Screen s = make_nfc_tool_screen(vm, assets, id, param)) return s;
     if (Screen s = make_rf_tool(vm, assets, id, st)) return s;
     if (Screen s = make_nrf_tool(vm, assets, id, st)) return s;
     if (Screen s = make_lora_tool(vm, assets, id, st)) return s;

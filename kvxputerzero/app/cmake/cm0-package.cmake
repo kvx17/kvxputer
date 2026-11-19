@@ -7,7 +7,7 @@
 include(GNUInstallDirs)
 
 set(APP_DISPLAY_NAME "kvxputerzero")
-set(APP_DEBIAN_REVISION "rev1" CACHE STRING "Debian package revision/vendor suffix")
+set(APP_DEBIAN_REVISION "rev9" CACHE STRING "Debian package revision/vendor suffix")
 set(APP_DEBIAN_ARCHITECTURE "arm64" CACHE STRING "Debian package architecture")
 # Deliberately a placeholder: the store rejects packages whose Maintainer is
 # still a template/M5Stack identity, so set your own name and email here.
@@ -30,7 +30,7 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}-nfctest
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
@@ -69,6 +69,22 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/systemd/system"
     )
 endif()
+
+if(TARGET kvxputerzero_sysfs_led)
+    install(TARGETS kvxputerzero_sysfs_led
+        RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}/kvxputerzero"
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_EXECUTE SETUID
+    )
+else()
+    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/sysfs-led"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/kvxputerzero"
+    )
+endif()
+install(FILES "${CMAKE_CURRENT_LIST_DIR}/templates/kvxputerzero-leds.sudoers"
+    DESTINATION "/etc/sudoers.d"
+    RENAME "kvxputerzero-leds"
+    PERMISSIONS OWNER_READ GROUP_READ
+)
 
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     DESTINATION "${CMAKE_INSTALL_DOCDIR}"
@@ -111,6 +127,12 @@ configure_file(
     "${APP_GENERATED_DIR}/conffiles"
     @ONLY
 )
-set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles")
+configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/templates/postinst"
+    "${APP_GENERATED_DIR}/postinst"
+    COPYONLY
+)
+file(CHMOD "${APP_GENERATED_DIR}/postinst" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles;${APP_GENERATED_DIR}/postinst")
 
 include(CPack)

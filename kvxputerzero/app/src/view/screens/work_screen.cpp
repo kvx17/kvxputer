@@ -68,7 +68,7 @@ void WorkScreen::run_now() {
 }
 
 const char* WorkScreen::typing_hint() const {
-    return "letters bare   Sym+B=. N=/   Enter runs";
+    return "Type · Enter confirm · Esc back";
 }
 
 bool WorkScreen::handle_key(uint32_t key) {

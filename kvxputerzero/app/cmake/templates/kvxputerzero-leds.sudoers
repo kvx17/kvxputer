@@ -1,0 +1,4 @@
+# Allow dialout/gpio users to power Cap/Grove rails used by GPS (NOPASSWD).
+# Trailing " *" is required — otherwise sudo only matches zero-arg invocations.
+%dialout ALL=(root) NOPASSWD: /usr/lib/kvxputerzero/sysfs-led *
+%gpio ALL=(root) NOPASSWD: /usr/lib/kvxputerzero/sysfs-led *

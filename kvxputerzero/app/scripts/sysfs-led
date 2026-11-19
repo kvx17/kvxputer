@@ -1,0 +1,19 @@
+#!/bin/sh
+# Write a Cardputer Zero LED-class brightness (grove_*/ext_*). Invoked via sudo -n from kvxputerzero.
+set -eu
+name="${1:-}"
+value="${2:-}"
+case "$name" in
+  grove_fun|grove_5v_out|ext_5v_out|ext_usb_gpio_fun) ;;
+  *) echo "sysfs-led: refused LED '$name'" >&2; exit 2 ;;
+esac
+case "$value" in
+  0|1) ;;
+  *) echo "sysfs-led: value must be 0 or 1" >&2; exit 2 ;;
+esac
+path="/sys/class/leds/${name}/brightness"
+if [ "$value" = "1" ] && [ -r "/sys/class/leds/${name}/max_brightness" ]; then
+  value=$(cat "/sys/class/leds/${name}/max_brightness")
+fi
+# printf avoids a trailing newline some drivers treat oddly
+printf '%s' "$value" > "$path"

@@ -19,6 +19,7 @@
 #include "tool_screens.h"
 
 #include "cap_screens.h"
+#include "gps_screens.h"
 #include "audio.h"
 #include "ble_scan.h"
 #include "dns_query.h"
@@ -36,7 +37,6 @@
 #include "prompt_screen.h"
 #include "result_list_screen.h"
 #include "run_screen.h"
-#include "wardrive_screen.h"
 #include "shell_util.h"
 #include "sip_options.h"
 #include "tagtinker_lib.h"
@@ -3097,40 +3097,6 @@ Screen make_scripts(VM& vm, AssetManager& assets, const Stage& st) {
     return make_options(vm, assets, "Local scripts", std::move(e));
 }
 
-Screen make_gps_captures(VM& vm, AssetManager& assets, const Stage& st) {
-    const ToolId id = ToolId::GpsCaptures;
-    const std::string dir = captures_dir();
-    if (st.name == "view") {
-        std::string err;
-        if (!safe_file_name(st.arg)) return make_info(vm, assets, "Capture", "Bad file name");
-        const std::string path = platform::resolve_under_root(dir, st.arg, err);
-        if (path.empty()) return make_info(vm, assets, "Capture", "Path rejected: " + err);
-        std::ifstream in(path);
-        if (!in) return make_info(vm, assets, "Capture", "Cannot open file");
-        std::vector<std::string> lines;
-        std::string l;
-        while (std::getline(in, l) && lines.size() < 500) {
-            if (!l.empty() && l.back() == '\r') l.pop_back();
-            lines.push_back(l);
-        }
-        return make_results(vm, assets, st.arg, std::move(lines));
-    }
-    std::vector<std::string> names;
-    std::error_code ec;
-    for (const auto& de : fs::directory_iterator(dir, ec)) {
-        std::error_code ec2;
-        if (!de.is_regular_file(ec2) || de.path().extension() != ".csv") continue;
-        names.push_back(de.path().filename().string());
-    }
-    std::sort(names.begin(), names.end());
-    std::vector<MenuEntry> e;
-    for (const auto& n : names) {
-        if (safe_file_name(n)) e.push_back(stage_entry(vm, id, n, "view", n));
-    }
-    if (e.empty()) e.push_back({"No .csv in " + dir, [&vm]() { vm.go_back(); }});
-    return make_options(vm, assets, "GPS Captures", std::move(e));
-}
-
 Worker uart_worker(std::string arg) {
     return [arg](Cancel& cancel, const Log& log, const Status& status) {
         const auto toks = split_ws(arg);
@@ -4235,221 +4201,6 @@ screen::InfoScreen::WorkerFn ble_status_info_worker(const char* name_sub, const 
     };
 }
 
-Screen make_gps_live(VM& vm, AssetManager& assets, const Stage& st) {
-    const ToolId id = ToolId::GpsLive;
-    if (st.name == "run") {
-        const std::string mode = st.arg; // wifi | ble | both
-        const std::string name_col = mode == "ble" ? "Device" : "SSID";
-        return std::make_unique<screen::WardriveScreen>(
-            vm, assets, "Wardrive", name_col,
-            [mode](Cancel& cancel, const screen::WardriveScreen::RowsFn& set_rows,
-                   const screen::WardriveScreen::StatusFn& status) {
-                // A missing fix must not end the session. The table keeps every network seen
-                // this session. GPS is retried once a minute until the first fix, then left alone.
-                auto csv_cell = [](std::string s) {
-                    for (char& c : s) {
-                        if (c == '\n' || c == '\r') c = ' ';
-                    }
-                    if (s.find_first_of(",\"") == std::string::npos) return s;
-                    std::string quoted = "\"";
-                    for (char c : s) {
-                        if (c == '"') quoted += "\"\"";
-                        else quoted.push_back(c);
-                    }
-                    quoted.push_back('"');
-                    return quoted;
-                };
-                auto shown = [](const std::string& s) { return s.empty() ? std::string("—") : s; };
-                auto sec_mark = [](const platform::WifiAp& ap) {
-                    if (ap.open) return std::string("OPN");
-                    const std::string& raw = ap.security_raw.empty() ? ap.security : ap.security_raw;
-                    if (raw.find("WPA3") != std::string::npos) return std::string("WPA3");
-                    if (raw.find("WPA2") != std::string::npos) return std::string("WPA2");
-                    if (raw.find("WPA") != std::string::npos) return std::string("WPA");
-                    if (raw.find("WEP") != std::string::npos) return std::string("WEP");
-                    if (raw.size() <= 4) return raw;
-                    return raw.substr(0, 4);
-                };
-
-                struct Seen {
-                    int hits{0};
-                    int rssi{-127};
-                    int best{-127};
-                    std::string first;
-                    std::string last;
-                    double lat{0};
-                    double lon{0};
-                    bool located{false};
-                    screen::WardriveRow row;
-                };
-                std::map<std::string, Seen> seen;
-
-                const std::string nmea = trim(read_text_file(tools::config_file("gps_nmea_tty.txt")));
-                status("looking for GPS...");
-                platform::GpsFix fix = platform::wait_for_fix(2000, cancel_ptr(cancel), nmea);
-                if (cancel) return;
-                bool have_fix = fix.valid;
-                if (!have_fix) fix = {};
-
-                const std::string out_path =
-                    (fs::path(captures_dir()) / ("wardrive_" + timestamp_name() + ".csv")).string();
-                std::ofstream out(out_path, std::ios::binary | std::ios::trunc);
-                if (!out) {
-                    status("Cannot write capture");
-                    return;
-                }
-                out << "time,lat,lon,kind,ssid,bssid,channel,rssi,security\n";
-                out.flush();
-
-                auto stamp = [&]() { return fix.time_utc.empty() ? std::string("—") : fix.time_utc; };
-                auto place = [&](Seen& s) {
-                    s.last = stamp();
-                    if (s.hits == 1) s.first = s.last;
-                    if (have_fix) {
-                        s.lat = fix.lat;
-                        s.lon = fix.lon;
-                        s.located = true;
-                    }
-                };
-                auto gps_details = [&](std::vector<std::pair<std::string, std::string>>& d, const Seen& s) {
-                    d.push_back({"Seen", std::to_string(s.hits)});
-                    d.push_back({"Best", sfmt("%d dBm", s.best)});
-                    d.push_back({"First", s.first});
-                    d.push_back({"Last", s.last});
-                    d.push_back({"Latitude", s.located ? sfmt("%.5f", s.lat) : "0"});
-                    d.push_back({"Longitude", s.located ? sfmt("%.5f", s.lon) : "0"});
-                    d.push_back({"GPS", s.located ? (have_fix ? "fix" : "last known") : "none"});
-                };
-                auto publish = [&]() {
-                    std::vector<const Seen*> order;
-                    order.reserve(seen.size());
-                    for (const auto& kv : seen) order.push_back(&kv.second);
-                    std::sort(order.begin(), order.end(), [](const Seen* a, const Seen* b) {
-                        if (a->rssi != b->rssi) return a->rssi > b->rssi;
-                        return a->row.name < b->row.name;
-                    });
-                    std::vector<screen::WardriveRow> rows;
-                    rows.reserve(order.size());
-                    for (const Seen* s : order) {
-                        rows.push_back(s->row);
-                        if (rows.size() >= 120) break;
-                    }
-                    set_rows(std::move(rows));
-                };
-                auto write_obs = [&](const char* kind, const std::string& ssid, const std::string& bssid, int channel,
-                                     int rssi, const std::string& security) {
-                    out << csv_cell(fix.time_utc) << ',' << fix.lat << ',' << fix.lon << ',' << kind << ','
-                        << csv_cell(ssid) << ',' << csv_cell(bssid) << ',' << channel << ',' << rssi << ','
-                        << csv_cell(security) << '\n';
-                };
-                auto note_wifi = [&](const platform::WifiAp& ap) {
-                    const std::string id = ap.bssid.empty() ? ap.ssid : ap.bssid;
-                    if (id.empty()) return;
-                    const std::string key = "w:" + id;
-                    Seen& s = seen[key];
-                    ++s.hits;
-                    s.rssi = ap.rssi;
-                    if (s.hits == 1 || ap.rssi > s.best) s.best = ap.rssi;
-                    place(s);
-                    const std::string security = ap.security_raw.empty() ? ap.security : ap.security_raw;
-                    screen::WardriveRow row;
-                    row.key = key;
-                    row.name = ap.ssid.empty() ? "(hidden)" : ap.ssid;
-                    row.channel = ap.channel < 0 ? "-" : std::to_string(ap.channel);
-                    row.rssi = std::to_string(ap.rssi);
-                    row.mark = sec_mark(ap);
-                    row.details = {
-                        {"SSID", row.name},
-                        {"BSSID", shown(ap.bssid)},
-                        {"Channel", row.channel},
-                        {"RSSI", sfmt("%d dBm", ap.rssi)},
-                        {"Security", shown(security)},
-                        {"Open", ap.open ? "yes" : "no"},
-                    };
-                    gps_details(row.details, s);
-                    s.row = std::move(row);
-                    write_obs("wifi", ap.ssid, ap.bssid, ap.channel, ap.rssi, security);
-                };
-
-                std::string wifi_err;
-                std::string ble_err;
-                auto next_gps = std::chrono::steady_clock::now() + std::chrono::seconds(60);
-                while (!cancel) {
-                    if (mode == "wifi" || mode == "both") {
-                        std::string err;
-                        const auto aps = platform::wifi_scan(err, cancel_ptr(cancel));
-                        if (!err.empty() && aps.empty()) wifi_err = err;
-                        for (const auto& ap : aps) note_wifi(ap);
-                    }
-                    if (cancel) break;
-                    if (mode == "ble" || mode == "both") {
-                        std::vector<platform::BleDevice> devices;
-                        std::string err;
-                        if (!platform::ble_scan_once(devices, err, 3, cancel_ptr(cancel)) && devices.empty()) {
-                            if (!err.empty()) ble_err = err;
-                        } else {
-                            for (const auto& d : devices) {
-                                if (d.address.empty()) continue;
-                                const std::string key = "b:" + d.address;
-                                Seen& s = seen[key];
-                                ++s.hits;
-                                s.rssi = d.rssi;
-                                if (s.hits == 1 || d.rssi > s.best) s.best = d.rssi;
-                                place(s);
-                                screen::WardriveRow row;
-                                row.key = key;
-                                row.name = d.name.empty() ? d.address : d.name;
-                                row.channel = "-";
-                                row.rssi = std::to_string(d.rssi);
-                                row.mark = "BLE";
-                                row.details = {
-                                    {"Name", shown(d.name)},
-                                    {"Address", d.address},
-                                    {"Type", shown(d.addr_type)},
-                                    {"RSSI", sfmt("%d dBm", d.rssi)},
-                                    {"Services", shown(d.services)},
-                                    {"Mfg", shown(d.mfg_hex)},
-                                    {"TX power", shown(d.tx_power)},
-                                    {"Appearance", shown(d.appearance)},
-                                };
-                                gps_details(row.details, s);
-                                s.row = std::move(row);
-                                write_obs("ble", d.name, d.address, -1, d.rssi, "ble");
-                            }
-                        }
-                    }
-                    publish();
-                    out.flush();
-                    if (seen.empty() && !wifi_err.empty()) status("wifi: " + wifi_err);
-                    else if (seen.empty() && !ble_err.empty()) status("ble: " + ble_err);
-                    else if (have_fix) {
-                        status(sfmt("GPS %.4f %.4f  %zu nets", fix.lat, fix.lon, seen.size()));
-                    } else {
-                        status(sfmt("no GPS  %zu nets  retry 60s", seen.size()));
-                    }
-                    if (!sleep_cancel(cancel, 1000)) break;
-                    if (have_fix || std::chrono::steady_clock::now() < next_gps) continue;
-                    status("looking for GPS...");
-                    const auto again = platform::wait_for_fix(2000, cancel_ptr(cancel), nmea);
-                    if (cancel) break;
-                    if (again.valid) {
-                        fix = again;
-                        have_fix = true;
-                    } else {
-                        status("No GPS fix — next try in 60s");
-                        next_gps = std::chrono::steady_clock::now() + std::chrono::seconds(60);
-                    }
-                }
-                status(sfmt("Saved %zu\n%s", seen.size(), out_path.c_str()));
-            });
-    }
-    std::vector<MenuEntry> e;
-    e.push_back(stage_entry(vm, id, "Wi-Fi", "run", "wifi"));
-    e.push_back(stage_entry(vm, id, "BLE", "run", "ble"));
-    e.push_back(stage_entry(vm, id, "Both", "run", "both"));
-    return make_options(vm, assets, "Live Wardrive", std::move(e));
-}
-
 Screen make_modules_accessory_status(VM& vm, AssetManager& assets, const char* title, uint8_t addr) {
     std::string err;
     const auto hits = platform::scan_all_i2c(err);
@@ -4532,8 +4283,10 @@ std::unique_ptr<screen::KvxScreen> make_channel_tool_menu(viewmodel::BaseViewMod
         e.push_back({"Link status", [&vm]() { nav(vm, ToolId::None, "ethlink"); }});
         for (const auto* d : tools) add_tool(d);
     } else if (cid == "gps") {
-        for (const auto* d : tools) add_tool(d);
-        e.push_back({"Folder", [&vm]() { nav(vm, ToolId::None, "gpsfolder"); }});
+        add_by_id(ToolId::GpsWardrivingMenu);
+        add_by_id(ToolId::GpsSiteSurvey);
+        add_by_id(ToolId::GpsTracker);
+        add_by_id(ToolId::GpsConfigMenu);
     } else if (cid == "modules") {
         add_by_id(ToolId::CapProbe);
         add_by_id(ToolId::BusScan);
@@ -4554,6 +4307,22 @@ std::unique_ptr<screen::KvxScreen> make_channel_tool_menu(viewmodel::BaseViewMod
         add_by_id(ToolId::PcConnectNeeds);
         add_by_id(ToolId::PcConnectScripts);
         add_by_id(ToolId::PcConnectExport);
+    } else if (cid == "nfc") {
+        // Quick actions first, then ADV-style nested menus.
+        add_by_id(ToolId::NfcStatus);
+        add_by_id(ToolId::NfcRead);
+        add_by_id(ToolId::NfcEmulateNdef);
+        add_by_id(ToolId::NfcWriteNdef);
+        add_by_id(ToolId::NfcScan);
+        add_by_id(ToolId::NfcLoad);
+        add_by_id(ToolId::NfcErase);
+        add_by_id(ToolId::NfcClassicMenu);
+        add_by_id(ToolId::NfcTagsMenu);
+        add_by_id(ToolId::NfcNdefMenu);
+        add_by_id(ToolId::NfcLabMenu);
+        add_by_id(ToolId::NfcParsersMenu);
+        add_by_id(ToolId::NfcCompanionsMenu);
+        add_by_id(ToolId::NfcConfigMenu);
     } else {
         for (const auto* d : tools) add_tool(d);
     }
@@ -4659,8 +4428,25 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::PcConnectNeeds: return make_pcconnect_needs(vm, assets);
     case ToolId::PcConnectScripts: return make_pcconnect_scripts(vm, assets, st);
     case ToolId::PcConnectExport: return make_pcconnect_export(vm, assets);
-    case ToolId::GpsCaptures: return make_gps_captures(vm, assets, st);
-    case ToolId::GpsLive: return make_gps_live(vm, assets, st);
+    case ToolId::GpsCaptures:
+    case ToolId::GpsLive:
+    case ToolId::GpsWardrivingMenu:
+    case ToolId::GpsScanWifi:
+    case ToolId::GpsScanBle:
+    case ToolId::GpsScanBoth:
+    case ToolId::GpsWdConfig:
+    case ToolId::GpsWdMaster:
+    case ToolId::GpsSiteSurvey:
+    case ToolId::GpsTracker:
+    case ToolId::GpsConfigMenu:
+    case ToolId::GpsStatus:
+    case ToolId::GpsSource:
+    case ToolId::GpsHardware:
+    case ToolId::GpsNmeaPath:
+    case ToolId::GpsBaud:
+    case ToolId::GpsFolder:
+        if (Screen s = make_gps_tool_screen(vm, assets, id, param)) return s;
+        break;
     case ToolId::UartShell: return make_uart_shell(vm, assets, st);
     case ToolId::BusScan: return make_bus_scan(vm, assets);
     case ToolId::UnitScrollStatus: return make_unit_scroll(vm, assets);

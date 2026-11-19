@@ -42,6 +42,7 @@ enum class AppPage {
     QrPix,
     QrView,
     QrRemove,
+    QrUsefulLinks,
     BarcodeMenu,
     BarcodeWork,
     BarcodeView,

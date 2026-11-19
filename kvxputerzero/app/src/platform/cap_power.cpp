@@ -26,6 +26,8 @@ constexpr bool kDesktop = false;
 
 constexpr char kExt5vLed[] = "ext_5v_out";
 constexpr char kUsbGpioFunLed[] = "ext_usb_gpio_fun";
+constexpr char kGroveFunLed[] = "grove_fun";      // 0=UART, 1=I2C
+constexpr char kGrove5vLed[] = "grove_5v_out";
 constexpr unsigned kGpioPowerEn = 26; // Cap POWER_EN / LoRa RST
 constexpr unsigned kGpioBusy = 22;
 constexpr unsigned kGpioIrq = 23;
@@ -40,6 +42,10 @@ constexpr uint8_t kPi4ioeHiZ = 0x07;
 struct CapHeld {
     bool ext5v_owned{false};
     int prev_ext5v{0};
+    bool grove5v_owned{false};
+    int prev_grove5v{0};
+    bool grove_fun_owned{false};
+    int prev_grove_fun{0};
     bool gpio26_held{false};
     bool rf_sw_held{false};
     bool busy_held{false};
@@ -68,21 +74,126 @@ int read_led_brightness(const char* name) {
     return v;
 }
 
-bool write_led_brightness(const char* name, int value, std::string& error) {
+bool led_value_matches(const char* name, int want_on) {
+    const int cur = read_led_brightness(name);
+    return want_on ? (cur > 0) : (cur <= 0);
+}
+
+bool write_led_direct(const char* name, int value, std::string& error) {
     const std::string path = led_brightness_path(name);
     const int fd = ::open(path.c_str(), O_WRONLY | O_CLOEXEC);
     if (fd < 0) {
-        error = "open " + path + " failed (need gpio group write?)";
+        error = "open " + path + " failed";
         return false;
     }
-    const char c = value > 0 ? '1' : '0';
-    const ssize_t n = ::write(fd, &c, 1);
+    // Prefer max_brightness when turning on — matches vendor tee behavior (reads back 255).
+    std::string payload = value > 0 ? "1" : "0";
+    if (value > 0) {
+        std::ifstream mx(std::string("/sys/class/leds/") + name + "/max_brightness");
+        int max_v = 0;
+        if (mx >> max_v && max_v > 0) payload = std::to_string(max_v);
+    }
+    const ssize_t n = ::write(fd, payload.data(), payload.size());
     ::close(fd);
-    if (n != 1) {
+    if (n != static_cast<ssize_t>(payload.size())) {
         error = "write " + path + " failed";
         return false;
     }
     return true;
+}
+
+bool run_sysfs_led_helper(const char* name, int value, bool use_sudo, std::string& error) {
+    const char* helper = "/usr/lib/kvxputerzero/sysfs-led";
+    if (::access(helper, X_OK) != 0) {
+        error = "sysfs-led helper missing";
+        return false;
+    }
+    const std::string val = value > 0 ? "1" : "0";
+    const pid_t pid = ::fork();
+    if (pid < 0) {
+        error = "fork sysfs-led failed";
+        return false;
+    }
+    if (pid == 0) {
+        if (use_sudo) {
+            ::execl("/usr/bin/sudo", "sudo", "-n", helper, name, val.c_str(), static_cast<char*>(nullptr));
+            ::execlp("sudo", "sudo", "-n", helper, name, val.c_str(), static_cast<char*>(nullptr));
+        } else {
+            // Setuid binary elevates itself — works for APPLaunch and systemd users.
+            ::execl(helper, helper, name, val.c_str(), static_cast<char*>(nullptr));
+        }
+        _exit(127);
+    }
+    int status = 0;
+    if (::waitpid(pid, &status, 0) < 0) {
+        error = "waitpid sysfs-led failed";
+        return false;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        const int code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        error = std::string(use_sudo ? "sudo " : "") + "sysfs-led " + name + " exit=" + std::to_string(code);
+        return false;
+    }
+    return true;
+}
+
+bool write_led_via_sudo(const char* name, int value, std::string& error) {
+    // Prefer setuid helper (no sudoers). Fall back to sudo -n for older packages.
+    if (run_sysfs_led_helper(name, value, false, error)) return true;
+    std::string sudo_err;
+    if (run_sysfs_led_helper(name, value, true, sudo_err)) {
+        error.clear();
+        return true;
+    }
+    if (!error.empty()) error += "; ";
+    error += sudo_err;
+    return false;
+}
+
+bool write_led_brightness(const char* name, int value, std::string& error) {
+    // Cap/Grove power LEDs often accept a non-root open/write that does not stick.
+    // Always prefer sudo for those, then verify the sysfs value.
+    const bool power_led = std::strcmp(name, "grove_fun") == 0 || std::strcmp(name, "grove_5v_out") == 0 ||
+                           std::strcmp(name, "ext_5v_out") == 0 || std::strcmp(name, "ext_usb_gpio_fun") == 0;
+
+    auto try_verify = [&](const char* how) -> bool {
+        // Give the M5IOE LED class a tick to settle.
+        std::this_thread::sleep_for(std::chrono::milliseconds(80));
+        if (led_value_matches(name, value > 0)) {
+            error.clear();
+            return true;
+        }
+        error = std::string(name) + " still " + (value > 0 ? "off" : "on") + " after " + how;
+        return false;
+    };
+
+    if (power_led) {
+        std::string sudo_err;
+        if (write_led_via_sudo(name, value, sudo_err)) {
+            if (try_verify("sudo")) return true;
+        } else {
+            error = sudo_err;
+        }
+        std::string direct_err;
+        if (write_led_direct(name, value, direct_err)) {
+            if (try_verify("direct")) return true;
+            if (!error.empty()) error += "; ";
+            error += direct_err.empty() ? "direct wrote but value did not stick" : direct_err;
+        } else {
+            if (!error.empty()) error += "; ";
+            error += direct_err;
+        }
+        return false;
+    }
+
+    if (write_led_direct(name, value, error)) return true;
+    std::string sudo_err;
+    if (write_led_via_sudo(name, value, sudo_err)) {
+        error.clear();
+        return true;
+    }
+    if (!sudo_err.empty()) error = error + "; " + sudo_err;
+    return false;
 }
 
 bool cancelled(std::atomic<bool>* cancel) {
@@ -227,6 +338,9 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
         (void)run_pinctrl({"set", "14", "a5"}, pin_err);
         (void)run_pinctrl({"set", "15", "a5"}, pin_err);
     }
+    // CapKindHint::Gps: no GPIO14/15 remux — stock Cap-LoRa-1262-GPS leaves UART to
+    // boot (enable_uart / serial0→ttyS0). Cc1101 remux of 14/15 can steal NMEA; caller
+    // should restore UART via device troubleshooting if SubG was used first.
     (void)run_pinctrl({"set", "26", "op", "dh"}, pin_err);
 
     if (!g_held.gpio26_held) {
@@ -266,7 +380,7 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
     }
 
     if (kind == CapKindHint::Cc1101) {
-        // RF_SW0 high selects 868/915 band (with RF_SW1 high on Cap PCB).
+        // Default RF_SW0 high (868/915). Callers retune via set_cc1101_rf_path().
         if (!g_held.rf_sw_held) {
             g_held.rf_sw0 = GpioLine("/dev/gpiochip0", kGpioRfSw0);
             std::string e;
@@ -277,10 +391,14 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
             (void)g_held.rf_sw0.set_value(true, error);
             error.clear();
         }
-        // GDO0 as input for future RX IRQ use.
         g_held.gdo0 = GpioLine("/dev/gpiochip0", kGpioGdo0);
         std::string e;
         (void)g_held.gdo0.request_input(e);
+    }
+
+    if (kind == CapKindHint::Gps) {
+        // Cap LoRa-1262 GNSS: EXT5V (+ POWER_EN) already applied. No SPI / RST / Grove.
+        return true;
     }
 
     if (kind == CapKindHint::Sx1262) {
@@ -314,6 +432,50 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
     return true;
 }
 
+bool set_cc1101_rf_path(uint32_t hz, std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    // Low path for sub-500 MHz; high for 779–928 (RF_SW1 is hardwired high on Cap).
+    const bool high = hz >= 500000000u;
+    if (!g_held.rf_sw_held) {
+        g_held.rf_sw0 = GpioLine("/dev/gpiochip0", kGpioRfSw0);
+        if (!g_held.rf_sw0.request_output(high, error)) return false;
+        g_held.rf_sw_held = true;
+        return true;
+    }
+    return g_held.rf_sw0.set_value(high, error);
+}
+
+bool read_cc1101_gdo0(bool& high, std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    if (!g_held.gdo0.ok()) {
+        g_held.gdo0 = GpioLine("/dev/gpiochip0", kGpioGdo0);
+        if (!g_held.gdo0.request_input(error)) return false;
+    }
+    return g_held.gdo0.get_value(high, error);
+}
+
+bool request_cc1101_gdo0_edges(std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    g_held.gdo0 = GpioLine("/dev/gpiochip0", kGpioGdo0);
+    return g_held.gdo0.request_edge_events(error);
+}
+
+int cc1101_gdo0_fd() {
+    return g_held.gdo0.fd();
+}
+
 void release_cap_power(bool preserve_ext5v) {
     g_held.rf_sw0.release();
     g_held.gdo0.release();
@@ -334,6 +496,60 @@ void release_cap_power(bool preserve_ext5v) {
             (void)write_led_brightness(kExt5vLed, g_held.prev_ext5v > 0 ? 1 : 0, e);
             g_held.ext5v_owned = false;
         }
+    }
+}
+
+
+bool enable_grove_uart_power(std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Grove not present";
+        return false;
+    }
+    // grove_fun: 0 = UART (Unit GPS), 1 = I2C (Unit Scroll / scrolld).
+    // Write only when the rail/mode is wrong so we do not fork sudo every poll
+    // (that was starving the UI and making the battery meter flicker off).
+    if (led_exists(kGroveFunLed)) {
+        const int cur = read_led_brightness(kGroveFunLed);
+        if (!g_held.grove_fun_owned) {
+            g_held.prev_grove_fun = cur;
+            g_held.grove_fun_owned = true;
+        }
+        if (cur != 0) {
+            if (!write_led_brightness(kGroveFunLed, 0, error)) return false;
+        }
+    }
+    if (led_exists(kGrove5vLed)) {
+        const int cur = read_led_brightness(kGrove5vLed);
+        if (!g_held.grove5v_owned) {
+            g_held.prev_grove5v = cur;
+            g_held.grove5v_owned = true;
+        }
+        if (cur <= 0) {
+            if (!write_led_brightness(kGrove5vLed, 1, error)) return false;
+        }
+    } else {
+        error = "grove_5v_out LED class missing";
+        return false;
+    }
+    // Verify 5V actually stuck (catches silent sudo/permission failures).
+    if (led_exists(kGrove5vLed) && read_led_brightness(kGrove5vLed) <= 0) {
+        error = "grove_5v_out still off after enable";
+        return false;
+    }
+    return true;
+}
+
+void release_grove_uart_power(bool preserve_5v) {
+    if (kDesktop) return;
+    std::string e;
+    if (g_held.grove_fun_owned) {
+        (void)write_led_brightness(kGroveFunLed, g_held.prev_grove_fun > 0 ? 1 : 0, e);
+        g_held.grove_fun_owned = false;
+    }
+    if (g_held.grove5v_owned && !preserve_5v) {
+        (void)write_led_brightness(kGrove5vLed, g_held.prev_grove5v > 0 ? 1 : 0, e);
+        g_held.grove5v_owned = false;
     }
 }
 

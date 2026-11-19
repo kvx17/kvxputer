@@ -18,10 +18,10 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row. The green number is the 
 
 | Control | Action |
 | --- | --- |
-| **F / X / Z / C** | Up / down / left / right |
-| **Letter key** | Types the letter (desktop and device) |
-| **Sym + letter** | Punctuation on that key (**Sym+B**=`.` **Sym+V**=`,` **Sym+N**=`/` …). On device many Sym chords arrive as ready-made codes (`KEY_DOT`, `F13`…). Desktop: click **sym** or hold **Left Alt** |
-| **Fn + letter** | Orange Fn legend (Help, Insert, media…). **Fn+F/Z/X/C** types those letters |
+| **Fn + F / X / Z / C** | Up / down / left / right. Menus also accept those keys bare |
+| **Letter key** | Types the letter, including **F X Z C** while a text field is open |
+| **Sym + letter** | Blue punctuation on that key (**Sym+Q**=`~` **Sym+B**=`.` **Sym+V**=`,` **Sym+N**=`/` …). On device many Sym chords arrive as ready-made codes (`KEY_DOT`, `F13`…). Desktop: click **sym** or hold **Left Alt** |
+| **Fn + letter** | Orange Fn legend (Help, Insert, media, arrows) |
 | **4 / 8** on the channel home | Previous / next page |
 | **5 / 7 / 6** on the channel home | Up / down / open |
 | **4 / 5 / 6 / 7 / 8** on a menu | Back / up / select / down / home |
@@ -31,7 +31,7 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row. The green number is the 
 | **Fn+H** | Keyboard help overlay |
 | **Fn+J** | Screenshot |
 
-Letters are bare keys. **Sym** (or the firmware’s rewritten Sym codes) types the printed punctuation. Number keys stay digits so **4–8** keep driving the bar; **Fn+1**…**0** are F1–F10; **Sym+1**… emit `!@#…`.
+Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn** is the orange shortcut. Number keys stay digits so **4–8** keep driving the bar; **Fn+1**…**0** are F1–F10; **Sym+1**… emit `!@#…`.
 
 ### What’s available now
 
@@ -43,14 +43,15 @@ Letters are bare keys. **Sym** (or the firmware’s rewritten Sym codes) types t
 | **Ethernet** | Link status, Scan Hosts (onboard NIC) |
 | **Infrared** | Use, Learn, Browse, Read, Favorites (NEC / LIRC); TV-B-Gone, TagTinker ESL, IR Carrier |
 | **Files** | Browse home / mounts, text preview, confirmed delete; File Share stays under Wi-Fi |
-| **GPS** | View Captures (CSV); Live Wardrive table of networks (Enter expands a row). Scans continue, logs 0,0, retries GPS every 60s until the first fix |
+| **GPS** | ADV menu: **Wardriving** (Wi-Fi / BLE / Both → live table + WiGLE CSV; View Captures; WD Config; Master stub), **Site Survey**, **GPS Tracker** (GPX), **Config** (hardware Cap vs Unit GPS v1.1 / source / NMEA path / baud / live Status / captures folder). Prefs under `~/.config/kvxputerzero/gps/` (`hardware.txt`: `unit_v11` or `cap_lora`). Both use `/dev/serial0` @ 115200; Unit enables Grove UART+5V (and prefers NMEA over gpsd), Cap enables `ext_5v_out`. LED writes use `/usr/lib/kvxputerzero/sysfs-led` via sudoers when not root. Disable `scrolld` grove-setup if Unit GPS shares the Grove port. Desktop shows “No GPS on desktop” |
 | **Scripts** | Local allowlist runner under `~/.config/kvxputerzero/scripts/`; PC Connect script browser + how-to |
 | **PC Connect** | How to use / what you need; browse bundled host scripts; export to `~/.config/kvxputerzero/pcconnect/` (for a Cardputer running kvxputer PC Connect — not on Zero) |
 | **Modules** | Cap Probe, Bus / I2C scan, Unit Scroll, UART Shell, PaHub scan, iButton, PN532Killer UART, UART LLM, Joystick presence |
 | **RF** | Cap-CC1101 status, spectrum, listen, record `.sub`, library / replay, test TX (no jammer/bruteforce) |
 | **NRF24** | Info, status, spectrum, listen, send payload (no MouseJack / jammer) |
 | **LoRa** | Cap-SX1262 status, chat, antenna check, frequency / username; Meshtastic Nodes/Chat over USB CDC PhoneAPI (or TEXTMSG when `lora/mesh_mode.txt` is `text`), else one clear “no mesh serial API” row |
-| **RFID / NFC** | PN532 status, read/scan UID, load/save dumps (no emulate/write) |
+| **RFID** | Cap ST25 / PN532 status, read/scan UID, load/save dumps |
+| **NFC** | ADV menu parity: Read/Scan/Load/Erase; Classic (dict/magic/dump editor; Detect Reader/MFKey stubs); Tags (ISO15693/DESFire/FeliCa/forced type; UL-C stub); NDEF write/emulate/records/save-as/memory/chip/lock/password/format/APDU; Lab (APDU script, compare, field poll); Parsers; Companions (EMV on PN532, SRIX gate, BLE/UART status links); Config (Auto/ST25/PN532, wiring, MIF keys). Dumps under `~/.config/kvxputerzero/nfc/` (`.nfc` / `.rfid`) |
 | **FM** | Si4713 status, broadcast, stop, spectrum (no TA hijack) |
 | **Discovery** | Filterable index of every registered tool |
 | **Clock** | Live face (digital / charge-style); Enter → Timer |
@@ -58,7 +59,7 @@ Letters are bare keys. **Sym** (or the firmware’s rewritten Sym codes) types t
 | **Config** | Colors, brightness, dim time, sound, power (reboot / off), About |
 | **USB** | Placeholder (ESP HID / gadget unavailable) |
 
-Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI with soft-CS **GPIO22** (SPI mode 1), not PN532 I2C. Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
+Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI (mode 1, 5 MHz) with soft-CS **GPIO22** / IRQ **GPIO23** on Zero (Cap docs Adv map is G6/G4). Card Emulation is NFC-A Passive Target on the Cap PCB coil (not the RP-SMA). Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
 
 Meshtastic serial prefs (under `~/.config/kvxputerzero/lora/`): `mesh_port.txt` (e.g. `/dev/ttyACM0`), optional `mesh_baud.txt`, and `mesh_mode.txt`=`text` for TEXTMSG line mode. Cap-LoRa GPS UART (`/dev/serial0`) is not used as a mesh API.
 
@@ -69,7 +70,7 @@ Theme colors, PDA prefs, and tool data live under `~/.config/kvxputerzero/` (on 
 1. Open **Tools** → pick Calculator, Calculators, Codec / Hash, Passgen, TOTP, Combo, QRCodes, Barcode, PDA, Media Player, Timer, Matrix, DTMF, Morse, Microphone, MQTT, LLM, or Drone ID. Matrix plays the boot rain for 5 seconds; any key leaves it early.
 2. **Calculator**: type an expression (`sin(90)`, `2^10`, `ans*2`). **Enter** evaluates; empty field + **D** toggles DEG/RAD. PDA → Calc opens the same screen.
 3. On Codec/engineering-Calculators/Combo work screens: type input in the field, press **Enter** to run, **Esc** to go back to that tool’s menu (then Esc again to Tools).
-4. Engineering Calculators expect formats shown in the on-screen hint (e.g. subnet `192.168.1.10/24`, or a mode token first).
+4. **Calculator / Calculators:** type normally; ops strip inserts `.` `/` `-` `+` … (**↑** / **F** focuses it, **← → Enter** / **Z C Enter** inserts). Eng calcs: bare **F/X/Z/C** = Up/Down/Left/Right (no Fn). After **Enter**, **F/X** scroll the result. DEG/RAD is the first chip on Calculator.
 5. **Passgen**: **Z/C** length, **F/X** count, **Enter** / **Sym+G** generate, **Sym+U/L/D/C** charsets, **Sym+S** append to `~/.config/kvxputerzero/passwords.txt`.
 6. **TOTP**: accounts stored plaintext in `~/.config/kvxputerzero/totp.json` (mode 0600). Needs correct system time. **Z/C** switch accounts.
 7. **QR / Barcode**: Enter on the work screen draws the glyph; **Space** inverts QR; Esc returns to the tool menu. Type **B** for `.` in URLs / IPs.
@@ -161,7 +162,7 @@ cmake --build --preset cp0-cross-rel --target package
 The Debian package appears as:
 
 ```text
-dist/kvxputerzero_<version>_rev1_arm64.deb
+dist/kvxputerzero_<version>_rev4_arm64.deb
 ```
 
 ### 3. Copy the package to the device

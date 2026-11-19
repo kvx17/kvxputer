@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <unordered_map>
 
 #if !USE_DESKTOP
 #include <cerrno>
@@ -21,6 +22,9 @@
 #endif
 
 namespace platform {
+
+bool text_entry_mode = false;
+
 namespace {
 
 std::array<lv_obj_t*, kNavKeyCount> nav_buttons{};
@@ -232,6 +236,49 @@ uint32_t map_evdev_key(uint16_t code) {
             return kKeyPrintScreen;
         case KEY_HELP:
             return kKeyHelp;
+        case KEY_F1:
+            return kKeyF1;
+        case KEY_F2:
+            return kKeyF2;
+        case KEY_F3:
+            return kKeyF3;
+        case KEY_F4:
+            return kKeyF4;
+        case KEY_F5:
+            return kKeyF5;
+        case KEY_F6:
+            return kKeyF6;
+        case KEY_F7:
+            return kKeyF7;
+        case KEY_F8:
+            return kKeyF8;
+        case KEY_F9:
+            return kKeyF9;
+        case KEY_F10:
+            return kKeyF10;
+        case KEY_F11:
+            return kKeyF11;
+        case KEY_F12:
+            return kKeyF12;
+        // Fn chords the tca8418 keymap emits as a single code.
+        case KEY_FN_F:
+            return LV_KEY_UP;
+        case KEY_FN_1:
+            return kKeyF1;
+        case KEY_FN_2:
+            return kKeyF2;
+        // Sym punctuation the Zero keymap emits outside the letter range.
+        // Observed on device: 199={  200=}  211=;  216='  233=|
+        case 199:
+            return '{';
+        case KEY_PLAYCD:
+            return '}';
+        case KEY_HP:
+            return ';';
+        case KEY_CHAT:
+            return '\'';
+        case KEY_FORWARDMAIL:
+            return '|';
         // Hardware Sym layer may emit these directly (tca8418 rewrite).
         case KEY_SEMICOLON:
             return ';';
@@ -272,8 +319,6 @@ uint32_t map_evdev_key(uint16_t code) {
             return '&';
         case KEY_F20:
             return '*';
-        case KEY_F1:
-            return kKeyF1;
         default:
             break;
     }
@@ -284,10 +329,37 @@ uint32_t map_evdev_key(uint16_t code) {
     if (code == KEY_0) {
         return '0';
     }
-    if (code >= KEY_A && code <= KEY_Z) {
-        return static_cast<uint32_t>('a' + (code - KEY_A));
+    // Linux keycodes are not alphabetical. KEY_A is 30 and KEY_Z is 44, so a
+    // range would turn S into 'b' and drop Q/W/E and X/C/V/B/N/M entirely.
+    switch (code) {
+        case KEY_A: return 'a';
+        case KEY_B: return 'b';
+        case KEY_C: return 'c';
+        case KEY_D: return 'd';
+        case KEY_E: return 'e';
+        case KEY_F: return 'f';
+        case KEY_G: return 'g';
+        case KEY_H: return 'h';
+        case KEY_I: return 'i';
+        case KEY_J: return 'j';
+        case KEY_K: return 'k';
+        case KEY_L: return 'l';
+        case KEY_M: return 'm';
+        case KEY_N: return 'n';
+        case KEY_O: return 'o';
+        case KEY_P: return 'p';
+        case KEY_Q: return 'q';
+        case KEY_R: return 'r';
+        case KEY_S: return 's';
+        case KEY_T: return 't';
+        case KEY_U: return 'u';
+        case KEY_V: return 'v';
+        case KEY_W: return 'w';
+        case KEY_X: return 'x';
+        case KEY_Y: return 'y';
+        case KEY_Z: return 'z';
+        default: return 0;
     }
-    return 0;
 }
 
 bool has_key_bit(const unsigned long* key_bits, int code) {
@@ -330,6 +402,142 @@ struct HeldEvdevKey {
 
 std::vector<HeldEvdevKey> held_evdev_keys;
 
+// Cardputer Zero modifiers are sticky: hold applies while down, one tap applies
+// to the next key, a second tap locks until the modifier is pressed again.
+struct LayerMod {
+    bool down{false};
+    bool once{false};
+    bool locked{false};
+    bool unlock_release{false};
+    uint32_t down_at{0};
+    uint32_t up_at{0};
+};
+
+LayerMod fn_mod;
+LayerMod sym_mod;
+LayerMod shift_mod;
+uint32_t pending_scan{0};
+bool have_scan{false};
+std::unordered_map<uint32_t, char> scan_base;
+
+bool layer_on(const LayerMod& mod) {
+    return mod.down || mod.once || mod.locked;
+}
+
+void layer_down(LayerMod& mod) {
+    const auto now = lv_tick_get();
+    if (mod.locked) {
+        mod.locked = false;
+        mod.once = false;
+        mod.unlock_release = true;
+        mod.down = true;
+        mod.down_at = now;
+        return;
+    }
+    if (mod.once && mod.up_at != 0 && lv_tick_elaps(mod.up_at) < 400) {
+        mod.locked = true;
+        mod.once = false;
+        mod.down = true;
+        mod.down_at = now;
+        return;
+    }
+    mod.down = true;
+    mod.down_at = now;
+}
+
+void layer_up(LayerMod& mod) {
+    const bool tapped = lv_tick_elaps(mod.down_at) < 450;
+    mod.down = false;
+    mod.up_at = lv_tick_get();
+    if (mod.unlock_release) {
+        mod.unlock_release = false;
+        mod.once = false;
+        return;
+    }
+    if (!mod.locked) {
+        mod.once = tapped;
+    }
+}
+
+void consume_layer(LayerMod& mod) {
+    if (!mod.down && mod.once) {
+        mod.once = false;
+    }
+}
+
+void sync_layer_flags() {
+    fn_held = layer_on(fn_mod);
+    sym_held = layer_on(sym_mod);
+    shift_held = layer_on(shift_mod);
+}
+
+bool is_fn_keycode(uint16_t code) {
+    switch (code) {
+        case KEY_F1:
+        case KEY_F2:
+        case KEY_F3:
+        case KEY_F4:
+        case KEY_F5:
+        case KEY_F6:
+        case KEY_F7:
+        case KEY_F8:
+        case KEY_F9:
+        case KEY_F10:
+        case KEY_F11:
+        case KEY_F12:
+        case KEY_FN_F:
+        case KEY_FN_1:
+        case KEY_FN_2:
+        case KEY_UP:
+        case KEY_DOWN:
+        case KEY_LEFT:
+        case KEY_RIGHT:
+        case KEY_HOME:
+        case KEY_END:
+        case KEY_PAGEUP:
+        case KEY_PAGEDOWN:
+        case KEY_INSERT:
+        case KEY_DELETE:
+        case KEY_MUTE:
+        case KEY_VOLUMEDOWN:
+        case KEY_VOLUMEUP:
+        case KEY_PLAYPAUSE:
+        case KEY_NEXTSONG:
+        case KEY_PREVIOUSSONG:
+        case KEY_BRIGHTNESSDOWN:
+        case KEY_BRIGHTNESSUP:
+        case KEY_SYSRQ:
+        case KEY_HELP:
+            return true;
+        default:
+            return false;
+    }
+}
+
+char base_from_code(uint16_t code) {
+    const auto mapped = map_evdev_key(code);
+    if (mapped >= 'a' && mapped <= 'z') {
+        return static_cast<char>(mapped);
+    }
+    if (mapped >= '0' && mapped <= '9') {
+        return static_cast<char>(mapped);
+    }
+    return 0;
+}
+
+bool is_sym_key(uint16_t code) {
+    // Zero Sym is not a letter key. Kernel keymaps disagree on the code
+    // (Compose / Meta / Alt / Caps / Menu); accept all of them so Sym+B=. and
+    // Sym+N=/ reach text fields (subnet CIDR, calc expressions, prompts).
+    return code == KEY_COMPOSE || code == KEY_LEFTMETA || code == KEY_RIGHTMETA ||
+           code == KEY_CAPSLOCK || code == KEY_LEFTALT || code == KEY_RIGHTALT ||
+           code == KEY_MENU;
+}
+
+bool is_fn_key(uint16_t code) {
+    return code == KEY_FN;
+}
+
 uint32_t resolve_evdev_key(uint16_t code) {
     if (code == KEY_BACKSPACE) {
         return fn_held ? LV_KEY_DEL : LV_KEY_BACKSPACE;
@@ -345,6 +553,42 @@ uint32_t resolve_evdev_key(uint16_t code) {
         return resolve_printed_key(base, sym_char(base), fn_held, false, sym_held);
     }
     return mapped;
+}
+
+// Bare letters follow the kernel keycode. A different code from the same
+// physical key is the kernel's Sym/Fn rewrite; replace it with the Zero legend.
+uint32_t resolve_physical_key(uint16_t code) {
+    sync_layer_flags();
+    const char from_code = base_from_code(code);
+    char known = 0;
+    if (have_scan) {
+        const auto it = scan_base.find(pending_scan);
+        if (it != scan_base.end()) {
+            known = it->second;
+        }
+        if (from_code != 0) {
+            scan_base[pending_scan] = from_code;
+            known = from_code;
+        }
+    }
+
+    const bool rewritten = known != 0 && from_code != known;
+    if (!rewritten) {
+        return resolve_evdev_key(code);
+    }
+
+    const bool fn = fn_held || is_fn_keycode(code);
+    if (fn) {
+        const auto legend = fn_legend(known);
+        if (legend != 0) {
+            return legend;
+        }
+    }
+    const char punct = sym_char(known);
+    if (punct != 0) {
+        return static_cast<uint32_t>(static_cast<unsigned char>(punct));
+    }
+    return resolve_printed_key(known, 0, fn_held, shift_held, sym_held);
 }
 
 uint32_t take_held_evdev_key(uint16_t code, uint32_t fallback) {
@@ -368,24 +612,44 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 
     input_event input{};
     while (read(keypad->fd, &input, sizeof(input)) == sizeof(input)) {
+        if (input.type == EV_MSC && input.code == MSC_SCAN) {
+            pending_scan = static_cast<uint32_t>(input.value);
+            have_scan = true;
+            continue;
+        }
         if (input.type != EV_KEY) {
             continue;
         }
 
-        if (input.code == KEY_FN) {
-            fn_held = input.value != 0;
+        if (is_fn_key(input.code)) {
+            if (input.value == 1) {
+                layer_down(fn_mod);
+            }
+            else if (input.value == 0) {
+                layer_up(fn_mod);
+            }
+            sync_layer_flags();
             continue;
         }
         if (input.code == KEY_LEFTSHIFT || input.code == KEY_RIGHTSHIFT) {
-            shift_held = input.value != 0;
+            if (input.value == 1) {
+                layer_down(shift_mod);
+            }
+            else if (input.value == 0) {
+                layer_up(shift_mod);
+            }
+            sync_layer_flags();
             continue;
         }
-        // Sym may appear as Compose/Meta/Alt/Caps. Many Sym+chords are also
-        // rewritten by the tca8418 keymap to KEY_DOT / KEY_F13… (no modifier).
-        if (input.code == KEY_COMPOSE || input.code == KEY_LEFTMETA ||
-            input.code == KEY_RIGHTMETA || input.code == KEY_CAPSLOCK ||
-            input.code == KEY_LEFTALT || input.code == KEY_RIGHTALT) {
-            sym_held = input.value != 0;
+        // Sym is Compose/Meta/Alt/Caps on the tca8418 keymap, not a letter key.
+        if (is_sym_key(input.code)) {
+            if (input.value == 1) {
+                layer_down(sym_mod);
+            }
+            else if (input.value == 0) {
+                layer_up(sym_mod);
+            }
+            sync_layer_flags();
             continue;
         }
         if (input.value == 2) {
@@ -394,14 +658,27 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 
         uint32_t key = 0;
         if (input.value) {
-            key = resolve_evdev_key(input.code);
+            key = resolve_physical_key(input.code);
             if (!key) {
+                have_scan = false;
                 continue;
             }
+            if (fn_held) {
+                consume_layer(fn_mod);
+            }
+            if (sym_held) {
+                consume_layer(sym_mod);
+            }
+            if (shift_held) {
+                consume_layer(shift_mod);
+            }
+            sync_layer_flags();
+            have_scan = false;
             held_evdev_keys.push_back({input.code, key});
         }
         else {
-            key = take_held_evdev_key(input.code, resolve_evdev_key(input.code));
+            key = take_held_evdev_key(input.code, 0);
+            have_scan = false;
             if (!key) {
                 continue;
             }
@@ -854,23 +1131,18 @@ uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool
     }
 
     if (letter) {
-        // Sym+key → punctuation printed on the keycap (B→. N→/ …).
+        // Fn+key → orange legend. Fn+F/X/Z/C are the arrows. Fn wins over Sym.
+        if (fn_held && legend != 0) {
+            return legend;
+        }
+        // Sym+key → blue punctuation printed on the keycap (B→. N→/ Q→~ …).
         if (symbol_mode && punct != 0) {
             return static_cast<uint32_t>(static_cast<unsigned char>(punct));
         }
-        // Fn+key: orange legend (Help, Insert, media…). Fn+arrow types the letter.
-        if (fn_held) {
-            if (arrow || legend == 0) {
-                return letter_out();
-            }
+        // Menus also accept bare F/X/Z/C as arrows. Text entry types the letter.
+        if (arrow && !text_entry_mode) {
             return legend;
         }
-        // Bare F/Z/X/C stay arrows for navigation.
-        if (arrow) {
-            return legend;
-        }
-        // Bare letter keycodes type the letter. Hardware Sym chords that already
-        // arrive as KEY_DOT / KEY_COMMA / F13… never reach this branch.
         return letter_out();
     }
 
@@ -881,6 +1153,10 @@ uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool
         return 0;
     }
     return static_cast<uint32_t>(static_cast<unsigned char>(base));
+}
+
+void set_text_entry(bool enabled) {
+    text_entry_mode = enabled;
 }
 
 } // namespace platform
