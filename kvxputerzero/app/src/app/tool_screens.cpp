@@ -33,6 +33,8 @@
 #include "net_info.h"
 #include "doc_screen.h"
 #include "info_screen.h"
+#include "theme.h"
+#include "ui_const.h"
 #include "options_list_screen.h"
 #include "prompt_screen.h"
 #include "result_list_screen.h"
@@ -3447,17 +3449,21 @@ Screen make_ir_entry_list(VM& vm, AssetManager& assets, const std::string& title
 }
 
 Screen make_ir_use(VM& vm, AssetManager& assets) {
-    const auto tx = platform::read_sender_info();
-    if (!tx.present) {
-        return make_info_card(vm, assets, "IR Use",
-                              {{"sender", tx.error.empty() ? "not present" : tx.error},
-                               {"hint", "Attach an IR TX accessory"}},
-                              "missing", view::StatusPillKind::Missing);
-    }
     std::vector<tools::ir::Entry> entries;
     std::string err;
     if (!tools::ir::list_all_entries(entries, err) && entries.empty()) {
         return make_info(vm, assets, "IR Use", err.empty() ? "Cannot load remotes" : err);
+    }
+    if (entries.empty()) {
+        const auto tx = platform::read_sender_info();
+        const std::string lib = tools::ir::library_dir();
+        return make_info_card(vm, assets, "IR Use",
+                              {{"learned", "none"},
+                               {"library", lib.empty() ? "not set" : lib},
+                               {"emitter", tx.present ? tx.name : tx.error},
+                               {"hint", "Learn a button, or set a library in Config and Browse"}},
+                              tx.present ? "empty" : "missing",
+                              tx.present ? view::StatusPillKind::Idle : view::StatusPillKind::Missing);
     }
     return make_ir_entry_list(vm, assets, "IR Use", entries);
 }
@@ -3466,9 +3472,10 @@ Worker ir_learn_worker() {
     return [](Cancel& cancel, const Log& log, const Status& status) {
         const auto rx = platform::read_receiver_info();
         if (!rx.present) {
-            log(rx.error.empty() ? "No IR receiver" : rx.error);
+            log(rx.error.empty() ? "Onboard IR RX GPIO13 unavailable" : rx.error);
             return;
         }
+        log(rx.name + " " + rx.path);
         platform::IrReceiverSession session;
         if (!session.start()) {
             log("start failed: " + session.last_error());
@@ -3478,6 +3485,9 @@ Worker ir_learn_worker() {
         log("point remote and press a button");
         while (!cancel) {
             const auto pkt = session.poll();
+            if (pkt.activity && !pkt.valid) {
+                log(sfmt("raw frame, %u pulses", pkt.pulses));
+            }
             if (pkt.valid) {
                 {
                     auto& p = ir_learn_pending();
@@ -3551,42 +3561,482 @@ Screen make_ir_learn(VM& vm, AssetManager& assets, const Stage& st) {
     return make_options(vm, assets, "IR Learn", std::move(e));
 }
 
+std::string ir_child_rel(const std::string& rel, const std::string& name) {
+    if (rel.empty()) return name;
+    return rel + "/" + name;
+}
+
+struct IrStay {
+    std::string rel;
+    std::string title;
+    bool show{false};
+};
+
+IrStay& ir_stay() {
+    static IrStay stay;
+    return stay;
+}
+
+void ir_send_and_stay(VM& vm, ToolId id, const std::string& rel, const tools::ir::Signal& signal) {
+    std::vector<uint32_t> pulses;
+    uint32_t hz = 38000;
+    std::string err;
+    auto& stay = ir_stay();
+    stay.rel = rel;
+    stay.show = true;
+    if (!tools::ir::encode_signal(signal, pulses, hz, err)) {
+        stay.title = shorten(err.empty() ? "Cannot send" : err, 28);
+        nav(vm, id, "file", rel);
+        return;
+    }
+    const auto r = platform::send_raw(pulses.data(), pulses.size(), hz);
+    stay.title = shorten(r.ok ? ("Sent " + signal.name) : ("Fail " + r.error), 28);
+    nav(vm, id, "file", rel);
+}
+
+std::string ir_picker_arg() {
+    const std::string home = home_dir();
+    const std::string lib = tools::ir::library_dir();
+    std::error_code ec;
+    if (!lib.empty() && fs::is_directory(lib, ec)) {
+        if (lib == home || lib.rfind(home + "/", 0) == 0) {
+            const std::string rel = lib == home ? std::string() : lib.substr(home.size() + 1);
+            return join_root_rel(home, rel);
+        }
+        return lib;
+    }
+    return home;
+}
+
+Screen make_ir_folder_picker(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
+    if (st.name == "pickdir") {
+        std::string root, rel;
+        if (!split_root_rel(st.arg, root, rel)) return make_info(vm, assets, "Library", "Bad path");
+        std::string err;
+        const std::string dir = platform::resolve_under_root(root, rel, err);
+        if (dir.empty() || !platform::path_is_under_root(root, dir)) {
+            return make_info(vm, assets, "Library", err.empty() ? "Path rejected" : err);
+        }
+        std::error_code ec;
+        if (!fs::is_directory(dir, ec)) return make_info(vm, assets, "Library", "Not a folder");
+        std::vector<std::string> subs;
+        for (const auto& de : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            const std::string name = de.path().filename().string();
+            if (name.empty() || name[0] == '.') continue;
+            std::error_code ec2;
+            if (de.is_directory(ec2)) subs.push_back(name);
+        }
+        std::sort(subs.begin(), subs.end(), [](const std::string& a, const std::string& b) { return lower(a) < lower(b); });
+        std::vector<MenuEntry> e;
+        e.push_back(stage_entry(vm, id, "Use this folder", "savelib", dir));
+        if (!rel.empty()) {
+            e.push_back(stage_entry(vm, id, "../", "pickdir", join_root_rel(root, parent_rel(rel))));
+        } else {
+            e.push_back(stage_entry(vm, id, "Change root...", "pick"));
+        }
+        for (const auto& name : subs) {
+            const std::string child = rel.empty() ? name : (rel + "/" + name);
+            e.push_back(stage_entry(vm, id, name + "/", "pickdir", join_root_rel(root, child)));
+        }
+        return make_options(vm, assets, "Find library", std::move(e));
+    }
+    std::vector<MenuEntry> e;
+    for (const auto& root : list_mount_roots()) {
+        e.push_back(stage_entry(vm, id, root, "pickdir", root));
+    }
+    if (e.empty()) e.push_back({"No folders", [&vm]() { vm.go_back(); }});
+    return make_options(vm, assets, "Find library", std::move(e));
+}
+
+Screen make_ir_learned(VM& vm, AssetManager& assets) {
+    std::vector<tools::ir::Entry> entries;
+    std::string err;
+    if (!tools::ir::list_all_entries(entries, err) && entries.empty()) {
+        return make_info(vm, assets, "Learned", err.empty() ? "Cannot load" : err);
+    }
+    return make_ir_entry_list(vm, assets, "Learned", entries);
+}
+
+Screen make_ir_library_dir(VM& vm, AssetManager& assets, ToolId id, const std::string& rel) {
+    std::vector<tools::ir::LibraryEntry> items;
+    std::string err;
+    if (!tools::ir::list_library(rel, items, err)) {
+        return make_info(vm, assets, "IR Browse", err.empty() ? "Cannot open library" : err);
+    }
+    std::vector<MenuEntry> e;
+    e.push_back(stage_entry(vm, id, "Search", "asksearch"));
+    if (rel.empty()) {
+        e.push_back(stage_entry(vm, id, "Change library...", "pickdir", ir_picker_arg()));
+        e.push_back(stage_entry(vm, id, "Learned remotes", "learned"));
+    } else {
+        e.push_back(stage_entry(vm, id, "../", "dir", parent_rel(rel)));
+    }
+    for (const auto& item : items) {
+        if (item.directory) {
+            e.push_back(stage_entry(vm, id, item.name + "/", "dir", ir_child_rel(rel, item.name)));
+        } else {
+            e.push_back(stage_entry(vm, id, item.name, "file", ir_child_rel(rel, item.name)));
+        }
+    }
+    if (items.empty()) e.push_back({"No .ir files here", [&vm]() { vm.go_back(); }});
+    const std::string title = rel.empty() ? "Library" : shorten(rel, 28);
+    return make_options(vm, assets, title, std::move(e));
+}
+
+Screen make_ir_file_signals(VM& vm, AssetManager& assets, ToolId id, const std::string& rel) {
+    std::vector<tools::ir::Signal> signals;
+    std::string err;
+    if (!tools::ir::load_library_file(rel, signals, err)) {
+        return make_info(vm, assets, "IR", err.empty() ? "Cannot load" : err);
+    }
+    std::string title = shorten(fs::path(rel).filename().string(), 28);
+    auto& stay = ir_stay();
+    if (stay.show && stay.rel == rel && !stay.title.empty()) {
+        title = stay.title;
+        stay.show = false;
+    }
+    std::vector<MenuEntry> e;
+    const bool fav = tools::ir::is_favorite(rel);
+    e.push_back(stage_entry(vm, id, fav ? "Remove Favorite" : "Set as Favorite", "fav", rel));
+    for (const auto& signal : signals) {
+        const std::string proto = signal.protocol.empty() ? signal.type : signal.protocol;
+        const std::string label = shorten(signal.name, 16) + "  " + shorten(proto, 10);
+        e.push_back({label, [&vm, id, rel, signal]() { ir_send_and_stay(vm, id, rel, signal); }});
+    }
+    if (signals.empty()) e.push_back({"No signals", [&vm]() { vm.go_back(); }});
+    return make_options(vm, assets, title, std::move(e));
+}
+
+struct IrSearchBox {
+    std::mutex mu;
+    std::string query;
+    std::string error;
+    std::vector<tools::ir::LibraryHit> hits;
+    bool ok{false};
+    bool done{false};
+};
+
+IrSearchBox& ir_search_box() {
+    static IrSearchBox box;
+    return box;
+}
+
+std::string ir_search_query() {
+    std::lock_guard<std::mutex> lock(ir_search_box().mu);
+    return ir_search_box().query;
+}
+
+// The library walk can take several seconds. Doing it while the screen is built freezes LVGL,
+// and the next key (often Esc) then hits go_back() and lands on the Infrared menu.
+class IrSearchWaitScreen final : public screen::KvxScreen {
+public:
+    IrSearchWaitScreen(VM& vm, AssetManager& assets, std::string query)
+        : screen::KvxScreen(vm, assets), query_(std::move(query)) {
+        {
+            auto& box = ir_search_box();
+            std::lock_guard<std::mutex> lock(box.mu);
+            box.query = query_;
+            box.error.clear();
+            box.hits.clear();
+            box.ok = false;
+            box.done = false;
+        }
+        init();
+    }
+
+    ~IrSearchWaitScreen() override { shutdown_worker(); }
+
+protected:
+    void build() override {
+        make_header(content(), "Search");
+        const auto tok = tokens();
+        const lv_font_t* font = assets().load_standard_font(12);
+        if (!font) font = &lv_font_montserrat_12;
+
+        status_ = lv_label_create(content());
+        lv_label_set_text(status_, "Scanning library");
+        lv_obj_set_style_text_color(status_, tok.ink, 0);
+        lv_obj_set_style_text_font(status_, font, 0);
+        lv_label_set_long_mode(status_, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(status_, view::kScreenWidth - 8);
+        lv_obj_align(status_, LV_ALIGN_TOP_LEFT, 4, 22);
+
+        auto* hint = lv_label_create(content());
+        lv_label_set_text(hint, query_.empty() ? "Type a name" : query_.c_str());
+        lv_obj_set_style_text_color(hint, tok.ink_dim, 0);
+        lv_obj_set_style_text_font(hint, font, 0);
+        lv_label_set_long_mode(hint, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(hint, view::kScreenWidth - 8);
+        lv_obj_align(hint, LV_ALIGN_TOP_LEFT, 4, 42);
+
+        cancel_.store(false);
+        scanned_.store(0);
+        timer_ = lv_timer_create(&IrSearchWaitScreen::poll_cb, 100, this);
+        worker_ = std::thread([this]() { run(); });
+    }
+
+    bool handle_key(uint32_t key) override {
+        if (key == LV_KEY_ESC) {
+            leave_to_library();
+            return true;
+        }
+        return true;
+    }
+
+    std::array<view::widgets::ActionSlot, 5> nav_actions() override {
+        return {{
+            {view::ICON_ARROW_BACK, [this]() { leave_to_library(); }},
+            {},
+            {},
+            {},
+            {view::ICON_HOUSE, [this]() { leave_home(); }},
+        }};
+    }
+
+private:
+    static void poll_cb(lv_timer_t* timer) {
+        auto* self = static_cast<IrSearchWaitScreen*>(lv_timer_get_user_data(timer));
+        if (self) self->poll();
+    }
+
+    void run() {
+        std::vector<tools::ir::LibraryHit> hits;
+        std::string err;
+        const bool ok = tools::ir::search_library(query_, hits, err, &cancel_, &scanned_);
+        auto& box = ir_search_box();
+        std::lock_guard<std::mutex> lock(box.mu);
+        if (!cancel_.load(std::memory_order_relaxed)) {
+            box.query = query_;
+            box.hits = std::move(hits);
+            box.error = std::move(err);
+            box.ok = ok;
+        }
+        box.done = true;
+    }
+
+    void poll() {
+        if (left_) return;
+        if (status_) {
+            const std::string text = "Scanning library   " + std::to_string(scanned_.load(std::memory_order_relaxed));
+            lv_label_set_text(status_, text.c_str());
+        }
+        bool done = false;
+        {
+            std::lock_guard<std::mutex> lock(ir_search_box().mu);
+            done = ir_search_box().done;
+        }
+        if (!done) return;
+        left_ = true;
+        if (timer_) lv_timer_pause(timer_);
+        if (worker_.joinable()) worker_.join();
+        nav(view_model(), ToolId::IrBrowse, "hits");
+    }
+
+    void leave_to_library() {
+        if (left_) return;
+        left_ = true;
+        shutdown_worker();
+        nav(view_model(), ToolId::IrBrowse, "dir", "");
+    }
+
+    void leave_home() {
+        if (left_) return;
+        left_ = true;
+        shutdown_worker();
+        view_model().go_home();
+    }
+
+    void shutdown_worker() {
+        cancel_.store(true, std::memory_order_relaxed);
+        if (timer_) {
+            lv_timer_delete(timer_);
+            timer_ = nullptr;
+        }
+        if (worker_.joinable()) worker_.join();
+    }
+
+    std::string query_;
+    std::atomic<bool> cancel_{false};
+    std::atomic<int> scanned_{0};
+    std::thread worker_;
+    lv_timer_t* timer_{nullptr};
+    lv_obj_t* status_{nullptr};
+    bool left_{false};
+};
+
+Screen make_ir_search_results(VM& vm, AssetManager& assets, ToolId id) {
+    std::string query;
+    std::string error;
+    std::vector<tools::ir::LibraryHit> hits;
+    bool ok = false;
+    {
+        auto& box = ir_search_box();
+        std::lock_guard<std::mutex> lock(box.mu);
+        query = box.query;
+        error = box.error;
+        hits = box.hits;
+        ok = box.ok;
+    }
+    std::vector<MenuEntry> e;
+    e.push_back(stage_entry(vm, id, "Search", "asksearch"));
+    e.push_back(stage_entry(vm, id, "Library", "dir", ""));
+    if (!ok) {
+        e.push_back({shorten(error.empty() ? "Search failed" : error, 36),
+                     [&vm, id]() { nav(vm, id, "dir", ""); }});
+    } else {
+        for (const auto& hit : hits) {
+            const std::string label = hit.relative == hit.name ? hit.name : hit.relative;
+            e.push_back(stage_entry(vm, id, shorten(label, 36), "file", hit.relative));
+        }
+        if (hits.empty()) {
+            e.push_back({"No matching .ir files", [&vm, id]() { nav(vm, id, "dir", ""); }});
+        }
+    }
+    const std::string title = query.empty() ? "Search" : shorten("Search " + query, 28);
+    return make_options(vm, assets, title, std::move(e));
+}
+
+bool ir_toggle_favorite(const std::string& rel, std::string& err) {
+    bool now = false;
+    const std::string name = fs::path(rel).filename().string();
+    return tools::ir::toggle_favorite(rel, name, now, err);
+}
+
+Screen make_ir_search_menu(VM& vm, AssetManager& assets, ToolId id, const std::string& title) {
+    std::vector<MenuEntry> e;
+    e.push_back(stage_entry(vm, id, "Find folder...", "pickdir", ir_picker_arg()));
+    e.push_back(stage_entry(vm, id, "Learned remotes", "learned"));
+    return make_options(vm, assets, title, std::move(e));
+}
+
 Screen make_ir_browse(VM& vm, AssetManager& assets, const Stage& st) {
     const ToolId id = ToolId::IrBrowse;
-    if (st.name == "file") {
-        std::vector<tools::ir::Entry> entries;
+    if (st.name == "pick" || st.name == "pickdir") return make_ir_folder_picker(vm, assets, id, st);
+    if (st.name == "savelib") {
         std::string err;
-        if (!tools::ir::load_remote_file(st.arg, entries, err)) {
-            return make_info(vm, assets, "IR Browse", err.empty() ? "Cannot load" : err);
+        if (!tools::ir::set_library_dir(st.arg, err)) {
+            return make_info(vm, assets, "IR library", err.empty() ? "Cannot save" : err);
         }
-        return make_ir_entry_list(vm, assets, st.arg, entries, "NEC only");
+        if (tools::ir::library_dir().empty()) return make_info(vm, assets, "IR library", "Library cleared");
+        return make_ir_library_dir(vm, assets, id, "");
     }
-    if (st.name == "remotes") {
-        std::vector<tools::ir::Entry> remotes;
-        std::string e2;
-        tools::ir::load_remotes(remotes, e2);
-        return make_ir_entry_list(vm, assets, "remotes.txt", remotes, "NEC only");
+    if (st.name == "asksearch") {
+        return make_prompt(vm, assets, "Search library", "part of a .ir file name", ir_search_query(),
+                           [&vm, id](const std::string& v) { nav(vm, id, "search", trim(v)); });
     }
-    std::string err;
-    const auto files = tools::ir::list_remote_files(err);
+    if (st.name == "search") return std::make_unique<IrSearchWaitScreen>(vm, assets, st.arg);
+    if (st.name == "hits") return make_ir_search_results(vm, assets, id);
+    if (st.name == "fav") {
+        std::string err;
+        if (!ir_toggle_favorite(st.arg, err)) return make_info(vm, assets, "Favorite", err.empty() ? "Cannot save" : err);
+        return make_ir_file_signals(vm, assets, id, st.arg);
+    }
+    if (st.name == "learned") return make_ir_learned(vm, assets);
+    if (st.name == "file") return make_ir_file_signals(vm, assets, id, st.arg);
+    if (st.name == "dir") return make_ir_library_dir(vm, assets, id, st.arg);
+
+    const std::string lib = tools::ir::library_dir();
+    std::error_code ec;
+    if (lib.empty() || !fs::is_directory(lib, ec)) {
+        return make_ir_search_menu(vm, assets, id, lib.empty() ? "Find library" : "Library missing");
+    }
+    return make_ir_library_dir(vm, assets, id, "");
+}
+
+Worker ir_test_tx_worker() {
+    return [](Cancel& cancel, const Log& log, const Status& status) {
+        const auto tx = platform::read_sender_info();
+        if (!tx.present) {
+            log(tx.error.empty() ? "Onboard IR TX GPIO12 unavailable" : tx.error);
+            return;
+        }
+        log(tx.name + " " + tx.path);
+        status("38 kHz, 300 ms");
+        const auto r = platform::send_carrier(38000, 300, cancel_ptr(cancel));
+        if (cancel) log("Stopped");
+        else if (!r.ok) log(r.error.empty() ? "Send failed" : r.error);
+        else log("Emitter test sent on GPIO12");
+    };
+}
+
+Worker ir_test_rx_worker() {
+    return [](Cancel& cancel, const Log& log, const Status& status) {
+        const auto rx = platform::read_receiver_info();
+        if (!rx.present) {
+            log(rx.error.empty() ? "Onboard IR RX GPIO13 unavailable" : rx.error);
+            return;
+        }
+        log(rx.name + " " + rx.path);
+        platform::IrReceiverSession session;
+        if (!session.start()) {
+            log("start failed: " + session.last_error());
+            return;
+        }
+        status("listening on RX...");
+        log("point a remote at the device");
+        log("Esc to stop");
+        while (!cancel) {
+            const auto pkt = session.poll();
+            if (pkt.valid) {
+                log(sfmt("NEC addr=0x%X cmd=0x%X", static_cast<unsigned>(pkt.address),
+                         static_cast<unsigned>(pkt.command)));
+            } else if (pkt.activity) {
+                log(sfmt("raw frame, %u pulses", pkt.pulses));
+            }
+            sleep_cancel(cancel, 40);
+        }
+        session.stop();
+        log("stopped");
+    };
+}
+
+Screen make_ir_config(VM& vm, AssetManager& assets, const Stage& st) {
+    const ToolId id = ToolId::IrConfig;
+    if (st.name == "pick" || st.name == "pickdir") return make_ir_folder_picker(vm, assets, id, st);
+    if (st.name == "savelib") {
+        std::string err;
+        if (!tools::ir::set_library_dir(st.arg, err)) {
+            return make_info(vm, assets, "IR library", err.empty() ? "Cannot save" : err);
+        }
+        return make_ir_config(vm, assets, Stage{});
+    }
+    if (st.name == "learned") return make_ir_learned(vm, assets);
+    if (st.name == "tx") return make_run(vm, assets, "Test emitter", ir_test_tx_worker());
+    if (st.name == "rx") return make_run(vm, assets, "Test receiver", ir_test_rx_worker());
+    if (st.name == "hw") {
+        const auto tx = platform::read_sender_info();
+        const auto rx = platform::read_receiver_info();
+        const std::string lib = tools::ir::library_dir();
+        const bool ok = tx.present && rx.present;
+        return make_info_card(
+            vm, assets, "IR hardware",
+            {{"TX pin", "GPIO12"},
+             {"RX pin", "GPIO13"},
+             {"emitter", tx.present ? (tx.name + " " + tx.path) : tx.error},
+             {"receiver", rx.present ? (rx.name + " " + rx.path) : rx.error},
+             {"library", lib.empty() ? "not set" : lib}},
+            ok ? "ready" : "check", ok ? view::StatusPillKind::Ok : view::StatusPillKind::Missing);
+    }
+
+    const std::string lib = tools::ir::library_dir();
     std::vector<MenuEntry> e;
-    e.push_back({"NEC remotes in config/ir", [&vm]() { vm.go_back(); }});
-    for (const auto& f : files) e.push_back(stage_entry(vm, id, f, "file", f));
-    std::vector<tools::ir::Entry> all;
-    if (tools::ir::load_remotes(all, err) && !all.empty()) {
-        e.push_back(stage_entry(vm, id, "remotes.txt", "remotes"));
-    }
-    if (e.size() <= 1) e.push_back({"(no .ir/.txt files)", [&vm]() { vm.go_back(); }});
-    return make_options(vm, assets, "IR Browse", std::move(e));
+    e.push_back(stage_entry(vm, id, lib.empty() ? "Choose library folder..." : ("Library: " + shorten(lib, 22)),
+                           "pickdir", ir_picker_arg()));
+    e.push_back(stage_entry(vm, id, "Test emitter", "tx"));
+    e.push_back(stage_entry(vm, id, "Test receiver", "rx"));
+    e.push_back(stage_entry(vm, id, "Hardware", "hw"));
+    return make_options(vm, assets, "IR Config", std::move(e));
 }
 
 Worker ir_read_worker() {
     return [](Cancel& cancel, const Log& log, const Status& status) {
         const auto rx = platform::read_receiver_info();
         if (!rx.present) {
-            log(rx.error.empty() ? "No IR receiver" : rx.error);
+            log(rx.error.empty() ? "Onboard IR RX GPIO13 unavailable" : rx.error);
             return;
         }
+        log(rx.name + " " + rx.path);
         platform::IrReceiverSession session;
         if (!session.start()) {
             log("start failed: " + session.last_error());
@@ -3597,8 +4047,10 @@ Worker ir_read_worker() {
         while (!cancel) {
             const auto pkt = session.poll();
             if (pkt.valid) {
-                log(sfmt("addr=0x%X cmd=0x%X", static_cast<unsigned>(pkt.address),
+                log(sfmt("NEC addr=0x%X cmd=0x%X", static_cast<unsigned>(pkt.address),
                          static_cast<unsigned>(pkt.command)));
+            } else if (pkt.activity) {
+                log(sfmt("raw frame, %u pulses", pkt.pulses));
             }
             sleep_cancel(cancel, 40);
         }
@@ -3606,14 +4058,28 @@ Worker ir_read_worker() {
     };
 }
 
-Screen make_ir_favorites(VM& vm, AssetManager& assets) {
-    std::vector<tools::ir::Entry> entries;
-    std::string err;
-    if (!tools::ir::load_remotes(entries, err) || entries.empty()) {
-        tools::ir::list_all_entries(entries, err);
+Screen make_ir_favorites(VM& vm, AssetManager& assets, const Stage& st) {
+    const ToolId id = ToolId::IrFavorites;
+    if (st.name == "fav") {
+        std::string err;
+        if (!ir_toggle_favorite(st.arg, err)) return make_info(vm, assets, "Favorite", err.empty() ? "Cannot save" : err);
+        return make_ir_file_signals(vm, assets, id, st.arg);
     }
-    if (entries.size() > 8) entries.resize(8);
-    return make_ir_entry_list(vm, assets, "Favorites", entries);
+    if (st.name == "file") return make_ir_file_signals(vm, assets, id, st.arg);
+    std::vector<tools::ir::Favorite> favs;
+    std::string err;
+    if (!tools::ir::load_favorites(favs, err)) {
+        return make_info(vm, assets, "Favorites", err.empty() ? "Cannot load favorites" : err);
+    }
+    if (favs.empty()) {
+        return make_info(vm, assets, "Favorites",
+                         "No favorites yet.\nOpen a library remote and choose Set as Favorite.\nSaved in ir_favorites.json");
+    }
+    std::vector<MenuEntry> e;
+    for (const auto& fav : favs) {
+        e.push_back(stage_entry(vm, id, shorten(fav.name, 28), "file", fav.relative));
+    }
+    return make_options(vm, assets, "Favorites", std::move(e));
 }
 
 struct WifiPskPending {
@@ -4414,7 +4880,8 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::IrLearn: return make_ir_learn(vm, assets, st);
     case ToolId::IrBrowse: return make_ir_browse(vm, assets, st);
     case ToolId::IrRead: return make_run(vm, assets, "IR Read", ir_read_worker());
-    case ToolId::IrFavorites: return make_ir_favorites(vm, assets);
+    case ToolId::IrConfig: return make_ir_config(vm, assets, st);
+    case ToolId::IrFavorites: return make_ir_favorites(vm, assets, st);
     case ToolId::TvBGone: return make_tv_b_gone(vm, assets, st);
     case ToolId::TagTinker: return make_tagtinker(vm, assets, st);
     case ToolId::IrCarrier: return make_ir_carrier(vm, assets);

@@ -1,10 +1,18 @@
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <vector>
 
 namespace platform {
+
+// Cardputer Zero pinmap: IR transmitter is GPIO12, receiver is GPIO13.
+constexpr unsigned kOnboardIrTxGpio = 12;
+constexpr unsigned kOnboardIrRxGpio = 13;
 
 struct IrDeviceInfo {
     bool present{false};
@@ -17,6 +25,9 @@ struct IrPacket {
     uint16_t address{0};
     uint16_t command{0};
     bool valid{false};
+    // Set when a frame was seen but it is not a decoded NEC packet.
+    bool activity{false};
+    unsigned pulses{0};
 };
 
 IrDeviceInfo read_receiver_info();
@@ -58,6 +69,14 @@ private:
     // MODE2 decode scratch (pulse/space durations in us).
     unsigned int mode2_buf_[128]{};
     size_t mode2_len_{0};
+    // Onboard GPIO13 receive when the kernel has no LIRC receiver.
+    bool gpio_mode_{false};
+    std::atomic<bool> gpio_stop_{false};
+    std::thread gpio_thread_;
+    std::mutex gpio_mu_;
+    std::vector<IrPacket> gpio_queue_;
+
+    void gpio_loop();
 };
 
 } // namespace platform

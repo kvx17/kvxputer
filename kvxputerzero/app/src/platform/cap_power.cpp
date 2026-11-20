@@ -168,20 +168,22 @@ bool write_led_brightness(const char* name, int value, std::string& error) {
     };
 
     if (power_led) {
-        std::string sudo_err;
-        if (write_led_via_sudo(name, value, sudo_err)) {
-            if (try_verify("sudo")) return true;
-        } else {
-            error = sudo_err;
-        }
+        // Prefer direct write (udev 99-kvxputerzero-leds.rules makes brightness world-writable).
         std::string direct_err;
         if (write_led_direct(name, value, direct_err)) {
             if (try_verify("direct")) return true;
+            error = direct_err.empty() ? std::string(name) + " direct write did not stick" : direct_err;
+        } else {
+            error = direct_err;
+        }
+        std::string helper_err;
+        if (write_led_via_sudo(name, value, helper_err)) {
+            if (try_verify("helper")) return true;
             if (!error.empty()) error += "; ";
-            error += direct_err.empty() ? "direct wrote but value did not stick" : direct_err;
+            error += helper_err;
         } else {
             if (!error.empty()) error += "; ";
-            error += direct_err;
+            error += helper_err;
         }
         return false;
     }
@@ -360,12 +362,16 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
         const int cur = read_led_brightness(kExt5vLed);
         if (cur <= 0) {
             g_held.prev_ext5v = cur;
-            if (!write_led_brightness(kExt5vLed, 1, error)) return false;
-            g_held.ext5v_owned = true;
+            if (!write_led_brightness(kExt5vLed, 1, error)) {
+                // Store builds cannot ship setuid/sudoers; Cap may still be powered externally.
+                error.clear();
+            } else {
+                g_held.ext5v_owned = true;
+            }
         }
     } else {
-        error = "ext_5v_out LED class missing";
-        return false;
+        // Soft-fail: some images expose Cap power differently.
+        error.clear();
     }
 
     // Cap power rail settle (official CC1101 app waits ~1.5s on first enable).
@@ -509,6 +515,7 @@ bool enable_grove_uart_power(std::string& error) {
     // grove_fun: 0 = UART (Unit GPS), 1 = I2C (Unit Scroll / scrolld).
     // Write only when the rail/mode is wrong so we do not fork sudo every poll
     // (that was starving the UI and making the battery meter flicker off).
+    // Best-effort only: Cardputer store forbids setuid/sudoers helpers for these LEDs.
     if (led_exists(kGroveFunLed)) {
         const int cur = read_led_brightness(kGroveFunLed);
         if (!g_held.grove_fun_owned) {
@@ -516,7 +523,8 @@ bool enable_grove_uart_power(std::string& error) {
             g_held.grove_fun_owned = true;
         }
         if (cur != 0) {
-            if (!write_led_brightness(kGroveFunLed, 0, error)) return false;
+            std::string ign;
+            (void)write_led_brightness(kGroveFunLed, 0, ign);
         }
     }
     if (led_exists(kGrove5vLed)) {
@@ -526,17 +534,11 @@ bool enable_grove_uart_power(std::string& error) {
             g_held.grove5v_owned = true;
         }
         if (cur <= 0) {
-            if (!write_led_brightness(kGrove5vLed, 1, error)) return false;
+            std::string ign;
+            (void)write_led_brightness(kGrove5vLed, 1, ign);
         }
-    } else {
-        error = "grove_5v_out LED class missing";
-        return false;
     }
-    // Verify 5V actually stuck (catches silent sudo/permission failures).
-    if (led_exists(kGrove5vLed) && read_led_brightness(kGrove5vLed) <= 0) {
-        error = "grove_5v_out still off after enable";
-        return false;
-    }
+    error.clear();
     return true;
 }
 

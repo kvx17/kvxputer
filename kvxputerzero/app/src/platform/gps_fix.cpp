@@ -226,15 +226,11 @@ bool GpsSession::start(GpsSource source, const std::string& nmea_tty, int baud, 
             // Unit GPS v1.1 on Grove: UART mode (grove_fun=0) + grove_5v_out.
             powered = enable_grove_uart_power(perr);
         }
-        if (!powered) {
+        if (!powered && !perr.empty()) {
             std::lock_guard<std::mutex> lock(mu_);
-            st_.last_error = perr.empty() ? "GPS power enable failed" : perr;
-            st_.open_result = st_.last_error;
-            error = st_.last_error;
-            return false;
+            st_.last_error = perr; // continue anyway — UART may already be live
         }
-        // Module needs a beat after Grove 5V before NMEA streams.
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
     // Physical Cap/Unit UART: prefer raw NMEA. gpsd often holds serial0 with no sats.
     if (source == GpsSource::Auto) source = GpsSource::Nmea;

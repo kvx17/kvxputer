@@ -666,10 +666,5 @@ target_link_libraries(${PROJECT_NAME}-nfctest
 
 # Package deb
 
-# Setuid Cap/Grove LED helper (Unit GPS / Cap EXT5V). Avoids sudoers fragility.
-if(NOT USE_DESKTOP)
-    add_executable(kvxputerzero_sysfs_led scripts/sysfs-led.c)
-    set_target_properties(kvxputerzero_sysfs_led PROPERTIES OUTPUT_NAME sysfs-led)
-endif()
 
 include(cmake/cm0-package.cmake)

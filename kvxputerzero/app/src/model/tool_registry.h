@@ -191,6 +191,7 @@ enum class ToolId {
     NfcModule,
     NfcWiring,
     NfcAddKey,
+    IrConfig,
     Count,
 };
 
@@ -401,6 +402,8 @@ inline constexpr ToolDesc kTools[] = {
     {ToolId::IrBrowse, "ir_browse", "Browse", "infrared"},
     {ToolId::IrRead, "ir_read", "Read", "infrared"},
     {ToolId::IrFavorites, "ir_favorites", "Favorites", "infrared"},
+    {ToolId::IrConfig, "ir_config", "Config", "infrared"},
+    {ToolId::Roku, "roku", "Roku Remote", "infrared"},
     {ToolId::TvBGone, "tv_b_gone", "TV-B-Gone", "infrared"},
     {ToolId::TagTinker, "tagtinker", "TagTinker ESL", "infrared"},
     {ToolId::IrCarrier, "ir_carrier", "IR Carrier", "infrared"},

@@ -70,21 +70,6 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-if(TARGET kvxputerzero_sysfs_led)
-    install(TARGETS kvxputerzero_sysfs_led
-        RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}/kvxputerzero"
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_EXECUTE SETUID
-    )
-else()
-    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/sysfs-led"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/kvxputerzero"
-    )
-endif()
-install(FILES "${CMAKE_CURRENT_LIST_DIR}/templates/kvxputerzero-leds.sudoers"
-    DESTINATION "/etc/sudoers.d"
-    RENAME "kvxputerzero-leds"
-    PERMISSIONS OWNER_READ GROUP_READ
-)
 
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     DESTINATION "${CMAKE_INSTALL_DOCDIR}"
@@ -127,12 +112,6 @@ configure_file(
     "${APP_GENERATED_DIR}/conffiles"
     @ONLY
 )
-configure_file(
-    "${CMAKE_CURRENT_LIST_DIR}/templates/postinst"
-    "${APP_GENERATED_DIR}/postinst"
-    COPYONLY
-)
-file(CHMOD "${APP_GENERATED_DIR}/postinst" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles;${APP_GENERATED_DIR}/postinst")
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles")
 
 include(CPack)

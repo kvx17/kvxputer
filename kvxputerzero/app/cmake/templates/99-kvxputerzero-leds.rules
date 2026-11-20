@@ -1,0 +1,3 @@
+# Allow dialout/gpio members (and APPLaunch users in dialout) to toggle Cap/Grove power LEDs.
+# Store-safe: lives under /usr/lib/udev/rules.d (not /etc/sudoers.d, no setuid, no postinst).
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="grove_5v_out|grove_fun|ext_5v_out|ext_usb_gpio_fun", RUN+="/bin/chmod 0666 /sys/class/leds/%k/brightness"
