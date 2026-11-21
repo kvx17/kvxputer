@@ -206,6 +206,8 @@ void BaseViewModel::go_back() {
         break;
     case model::AppPage::ClockFace:
     case model::AppPage::ChargeFace:
+    case model::AppPage::Camera:
+    case model::AppPage::Gallery:
         show_page(model::AppPage::ChannelGrid);
         break;
     case model::AppPage::Matrix:
@@ -278,6 +280,12 @@ void BaseViewModel::open_selected_channel() {
         break;
     case model::ChannelKind::ChargeFill:
         show_page(model::AppPage::ChargeFace);
+        break;
+    case model::ChannelKind::CameraFill:
+        show_page(model::AppPage::Camera);
+        break;
+    case model::ChannelKind::GalleryFill:
+        show_page(model::AppPage::Gallery);
         break;
     case model::ChannelKind::ChannelFill:
         open_tool_menu();

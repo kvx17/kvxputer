@@ -46,6 +46,8 @@
 #include "tvbgone_lib.h"
 #include "uart_session.h"
 #include "user_paths.h"
+#include "wifi_analyzer_screen.h"
+#include "wifi_monitor.h"
 #include "wifi_scan.h"
 
 #include <arpa/inet.h>
@@ -4112,6 +4114,58 @@ Worker wifi_disconnect_worker(bool radio_off) {
     };
 }
 
+Screen make_wifi_monitor_adapter(VM& vm, AssetManager& assets) {
+    std::string err;
+    const auto list = platform::list_monitor_ifaces(err);
+    const std::string saved = platform::load_monitor_iface();
+    const bool onboard = platform::monitor_iface_is_onboard(saved);
+    std::vector<MenuEntry> e;
+
+    e.push_back({std::string(onboard ? "* " : "") + "Onboard Wi-Fi (scan)", [&vm]() {
+                     platform::save_monitor_iface("onboard");
+                     vm.go_back();
+                 }});
+
+    bool any_usb = false;
+    for (const auto& row : list) {
+        if (!row.selectable) {
+            std::string label = "(x) " + row.ifname + " — " +
+                                (row.unavailable_reason.empty() ? "unavailable" : row.unavailable_reason);
+            e.push_back({label, []() {}});
+            continue;
+        }
+        any_usb = true;
+        std::string label = row.ifname;
+        if (!row.driver.empty()) label += " [" + row.driver + "]";
+        if (!row.phy.empty()) label += " " + row.phy;
+        if (!row.usb_product.empty()) label += " " + row.usb_product;
+        if (!onboard && row.ifname == saved) label = "* " + label;
+        const std::string ifname = row.ifname;
+        e.push_back({label, [&vm, ifname]() {
+                         platform::save_monitor_iface(ifname);
+                         vm.go_back();
+                     }});
+    }
+
+    if (!any_usb) {
+        e.push_back({err.empty() ? "No USB monitor stick (optional; Host switch + drivers)" : err,
+                     []() {}});
+    } else if (!onboard && !saved.empty()) {
+        std::string valid_err;
+        if (!platform::monitor_iface_valid(saved, valid_err)) {
+            e.insert(e.begin() + 1,
+                     {"Saved " + saved + " unavailable: " + valid_err, []() {}});
+        }
+    }
+
+    return make_options(vm, assets, "Monitor adapter", std::move(e));
+}
+
+Screen make_wifi_analyzer(VM& vm, AssetManager& assets) {
+    // Always open the live analyzer. Default = onboard nmcli scan; USB monitor is optional.
+    return std::make_unique<screen::WifiAnalyzerScreen>(vm, assets);
+}
+
 Screen make_wifi_connect(VM& vm, AssetManager& assets, const Stage& st) {
     const ToolId id = ToolId::WifiConnect;
     if (st.name == "scan") return make_run(vm, assets, "Wi-Fi scan", wifi_scan_worker(false));
@@ -4885,6 +4939,8 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::TvBGone: return make_tv_b_gone(vm, assets, st);
     case ToolId::TagTinker: return make_tagtinker(vm, assets, st);
     case ToolId::IrCarrier: return make_ir_carrier(vm, assets);
+    case ToolId::WifiMonitorAdapter: return make_wifi_monitor_adapter(vm, assets);
+    case ToolId::WifiAnalyzer: return make_wifi_analyzer(vm, assets);
     case ToolId::WifiConnect: return make_wifi_connect(vm, assets, st);
     case ToolId::WifiDisconnect: return make_wifi_disconnect(vm, assets, st);
     case ToolId::WifiApInfo: return make_wifi_ap_info(vm, assets);

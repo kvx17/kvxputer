@@ -147,6 +147,32 @@ bool KvxScreen::handle_key(uint32_t key) {
     return false;
 }
 
+void KvxScreen::set_chrome_visible(bool visible) {
+    chrome_visible_ = visible;
+    if (title_bar_ && title_bar_->root()) {
+        if (visible) {
+            lv_obj_clear_flag(title_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(title_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (action_bar_ && action_bar_->root()) {
+        if (visible) {
+            lv_obj_clear_flag(action_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(action_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (!content_) return;
+    if (visible) {
+        lv_obj_set_size(content_, view::kScreenWidth, view::kContentHeight);
+        lv_obj_align(content_, LV_ALIGN_TOP_MID, 0, view::kTitleBarHeight);
+    } else {
+        lv_obj_set_size(content_, view::kScreenWidth, view::kScreenHeight);
+        lv_obj_align(content_, LV_ALIGN_TOP_MID, 0, 0);
+    }
+}
+
 bool KvxScreen::on_global_key(uint32_t key, const char* /*key_name*/, bool /*long_pressed*/, void* user_data) {
     auto* self = static_cast<KvxScreen*>(user_data);
     if (!self) return false;

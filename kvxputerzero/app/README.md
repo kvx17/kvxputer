@@ -38,11 +38,13 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 | Channel | What you get |
 | --- | --- |
 | **Tools** | **Calculator** (scientific), Calculators (engineering), Codec / Hash, Passgen, TOTP, Combo, QR / Barcode, **PDA**, Media Player, Timer, **Matrix**, DTMF, Morse, Microphone, MQTT, LLM Chat, Drone ID (BLE), iButton hint |
-| **WiFi / NetOps** | Connect, Disconnect, AP info, Net Toolkit, Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
+| **WiFi / NetOps** | **WiFi Analyzer** (Adv-style channel bars + SSIDs; onboard scan, optional USB monitor), Monitor adapter, Connect, Disconnect, AP info, Net Toolkit, Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
 | **BLE** | Scan, Hunter, Sniffer UI, Wall Of Flipper / Airtag, Skimmer Detector, Disconnect; Ninebot / Amiibolink / PN532 / Chameleon status (connect/read only) |
 | **Ethernet** | Link status, Scan Hosts (onboard NIC) |
 | **Infrared** | Use, Learn, Browse (Flipper `.ir` library), Read, Favorites, Config (library folder, onboard TX GPIO12 / RX GPIO13 test); TV-B-Gone, TagTinker ESL, IR Carrier; Roku Remote |
 | **Files** | Browse home / mounts, text preview, confirmed delete; File Share stays under Wi-Fi |
+| **Camera** | Live filtered preview (desktop: labeled Simulation; device: V4L2 / CSI when present). Cycle filters, brightness, framing guides (grid / diamond / lines), stills to `~/Pictures/DCIM/Camera`, MJPEG AVI to `~/Videos/Camera`. Keys: left/right or H/J filter, up/down brightness, Enter/6 shutter, R record, G guides, 1 hide chrome, 8 open Gallery |
+| **Gallery** | Recursive stills under `~/Pictures` (JPEG/PNG). Enter opens detail with zoom/pan; 1 hides chrome; 8 resets zoom. Esc backs out |
 | **GPS** | ADV menu: **Wardriving** (Wi-Fi / BLE / Both → live table + WiGLE CSV; View Captures; WD Config; Master stub), **Site Survey**, **GPS Tracker** (GPX), **Config** (hardware Cap vs Unit GPS v1.1 / source / NMEA path / baud / live Status / captures folder). Prefs under `~/.config/kvxputerzero/gps/` (`hardware.txt`: `unit_v11` or `cap_lora`). Both use `/dev/serial0` @ 115200; Unit enables Grove UART+5V (and prefers NMEA over gpsd), Cap enables `ext_5v_out`. Disable `scrolld` grove-setup if Unit GPS shares the Grove port. Desktop shows “No GPS on desktop” |
 | **Scripts** | Local allowlist runner under `~/.config/kvxputerzero/scripts/`; PC Connect script browser + how-to |
 | **PC Connect** | How to use / what you need; browse bundled host scripts; export to `~/.config/kvxputerzero/pcconnect/` (for a Cardputer running kvxputer PC Connect — not on Zero) |
@@ -64,6 +66,14 @@ Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.
 Meshtastic serial prefs (under `~/.config/kvxputerzero/lora/`): `mesh_port.txt` (e.g. `/dev/ttyACM0`), optional `mesh_baud.txt`, and `mesh_mode.txt`=`text` for TEXTMSG line mode. Cap-LoRa GPS UART (`/dev/serial0`) is not used as a mesh API.
 
 Theme colors, PDA prefs, and tool data live under `~/.config/kvxputerzero/` (on device or desktop). Network / BLE / audio helpers need the matching host tools (`nmcli`, `bluetoothctl`, `aplay`/`arecord`, …); desktop builds show a clear error instead of hanging.
+
+**WiFi Analyzer** (`WiFi → WiFi Analyzer`) always opens: channel bars + SSID list using the **onboard** radio via `nmcli` scan by default. Optional **WiFi → Monitor adapter**: pick a USB stick with monitor mode for real airtime hopping (Host switch toward the hub; drivers already installed). Saved as `~/.config/kvxputerzero/wifi_monitor_iface` (`onboard` or iface name). USB capture uses `/usr/lib/kvxputerzero/kvxputerzero-wifimon` (`postinst` runs `setcap`; re-grant with):
+
+```bash
+sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/kvxputerzero/kvxputerzero-wifimon
+```
+
+Keys: **F/X** select channel, **Z/C** dwell, **Enter** AP list for channel, **L** all APs, **K** lock/hop (monitor), **E** export CSV, **Esc** back.
 
 ### Tools briefly
 

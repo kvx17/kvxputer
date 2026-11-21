@@ -59,6 +59,8 @@ enum class AppPage {
     ClockFace,
     ClockSubMenu,
     ChargeFace,
+    Camera,
+    Gallery,
     FilesBrowser,
     MediaPlayer,
     Brightness,

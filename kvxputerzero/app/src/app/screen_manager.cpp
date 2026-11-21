@@ -3,9 +3,11 @@
 #include "barcode_lib.h"
 #include "backlight.h"
 #include "calculator_screen.h"
+#include "camera_screen.h"
 #include "channel_grid_screen.h"
 #include "channel_registry.h"
 #include "clock_face_screen.h"
+#include "gallery_screen.h"
 #include "codec_lib.h"
 #include "combo_lib.h"
 #include "device_status.h"
@@ -247,6 +249,12 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::ChargeFace:
         return std::make_unique<screen::ClockFaceScreen>(view_model_, assets_, true);
+
+    case model::AppPage::Camera:
+        return std::make_unique<screen::CameraScreen>(view_model_, assets_);
+
+    case model::AppPage::Gallery:
+        return std::make_unique<screen::GalleryScreen>(view_model_, assets_);
 
     case model::AppPage::ClockSubMenu: {
         std::vector<MenuEntry> entries;

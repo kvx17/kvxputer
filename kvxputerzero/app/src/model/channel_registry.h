@@ -10,6 +10,8 @@ enum class ChannelKind {
     ConfigFill,     // theme colors
     ClockFill,      // live clock face (+ Timer submenu)
     ChargeFill,     // charge / battery face
+    CameraFill,     // live camera preview
+    GalleryFill,    // Pictures browser
     ChannelFill,    // tool_registry menu for this channel id
     DiscoveryFill,  // flat index of all tools
     ComingSoon,     // later wave
@@ -40,6 +42,8 @@ inline constexpr ChannelDesc kChannels[] = {
     {"rfid", "RFID", ChannelKind::ChannelFill, nullptr},
     {"nfc", "NFC", ChannelKind::ChannelFill, nullptr},
     {"files", "Files", ChannelKind::ChannelFill, nullptr},
+    {"camera", "Camera", ChannelKind::CameraFill, nullptr},
+    {"gallery", "Gallery", ChannelKind::GalleryFill, nullptr},
     {"scripts", "Scripts", ChannelKind::ChannelFill, nullptr},
     {"pcconnect", "PC Connect", ChannelKind::ChannelFill, nullptr},
     {"clock", "Clock", ChannelKind::ClockFill, nullptr},

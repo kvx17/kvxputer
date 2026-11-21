@@ -69,7 +69,7 @@ Waves use only **rewrite** / **onboard** that are not **os**. Submenu headers (`
 | TelNET | `clients.cpp` | tool | rewrite | TCP telnet client | `!LITE` | no |
 | SSH | `clients.cpp` | tool | os | launcher SSH / Store Zero SSH | `!LITE` | no |
 | Sniffer | `sniffer.cpp` | tool | blocked | `esp_wifi_set_promiscuous` | `!LITE` | no |
-| kvx wifi analyzer | `channel_analyzer.cpp` | tool | blocked | promiscuous hop (ESP path) | `!LITE` | no |
+| kvx wifi analyzer | `channel_analyzer.cpp` | tool | rewrite | Ported as Wi-Fi → WiFi Analyzer + Monitor adapter (USB monitor NIC via `kvxputerzero-wifimon`; onboard brcmfmac never used) | `!LITE` | no |
 | Jam Detect | `jam_detect.cpp` | tool | blocked | promiscuous mgmt counters | `!LITE` | no |
 | Deauth IDS → Start | `jam_detect.cpp` | tool | blocked | promiscuous deauth IDS | `!LITE` | no |
 | Deauth IDS → Help | `jam_detect.cpp` | setting | rewrite | UI text | `!LITE` | no |

@@ -34,6 +34,10 @@ install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}-nfctest
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+install(TARGETS ${PROJECT_NAME}-wifimon
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/kvxputerzero
+)
+
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config/kvxputerzero.conf"
     DESTINATION "/etc"
 )
@@ -99,7 +103,10 @@ set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${APP_DEBIAN_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${APP_MAINTAINER}")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16, libjpeg62-turbo, zlib1g")
+# Same model as FXCam App Center packages: soft OR-chain so apt accepts the
+# libcamera already on the Cardputer (do not force a mismatched IPA). Stock
+# images already ship libcamera0.x + libcamera-ipa — no extra user installs.
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16, libjpeg62-turbo, zlib1g, iw, iproute2, libcap2-bin, libcamera0.8 | libcamera0.7 | libcamera0.6 | libcamera0.5 | libcamera0.4 | libcamera0.3 | libcamera0.2 | libcamera0, libcamera-ipa")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()
@@ -112,6 +119,12 @@ configure_file(
     "${APP_GENERATED_DIR}/conffiles"
     @ONLY
 )
-set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles")
+configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/templates/postinst.in"
+    "${APP_GENERATED_DIR}/postinst"
+    @ONLY
+)
+file(CHMOD "${APP_GENERATED_DIR}/postinst" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${APP_GENERATED_DIR}/conffiles;${APP_GENERATED_DIR}/postinst")
 
 include(CPack)

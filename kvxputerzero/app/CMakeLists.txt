@@ -8,7 +8,8 @@ cmake_minimum_required(VERSION 3.31)
 
 project(kvxputerzero VERSION 0.1.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+# libcamera 0.8 (Cardputer / App Center) uses std::span in public headers.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
@@ -135,7 +136,8 @@ if(USE_DESKTOP)
         target_link_libraries(lvgl PUBLIC ${SDL2_LIBRARIES})
     endif()
 
-    target_compile_definitions(lvgl PUBLIC USE_DESKTOP=1)
+    set(KVX_HAVE_LIBCAMERA 0)
+    target_compile_definitions(lvgl PUBLIC USE_DESKTOP=1 KVX_HAVE_LIBCAMERA=0)
     
     if(MSVC)
         target_compile_options(lvgl PUBLIC /utf-8)
@@ -273,6 +275,61 @@ else()
     endif()
     cm0_add_imported_library(CM0::JPEG "${JPEG_LIBRARY}" "${JPEG_INCLUDE_DIR}")
 
+    # CSI camera via libcamera — same as FXCam: link libcamera into the app.
+    # App Center users only need packages already on Cardputer (libcamera0.x +
+    # libcamera-ipa). The optional device-libcamera cache is for developers so
+    # the ELF NEEDED soname matches the Zero OS (currently 0.8).
+    set(KVX_HAVE_LIBCAMERA 0)
+    set(KVX_DEVICE_LIBCAMERA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.cache/device-libcamera/root")
+    set(KVX_DEVICE_LIBCAMERA_LIBDIR
+        "${KVX_DEVICE_LIBCAMERA_ROOT}/usr/lib/aarch64-linux-gnu")
+    unset(LIBCAMERA_INCLUDE_DIR CACHE)
+    unset(LIBCAMERA_LIBRARY CACHE)
+    unset(LIBCAMERA_BASE_LIBRARY CACHE)
+    if(EXISTS "${KVX_DEVICE_LIBCAMERA_LIBDIR}/libcamera.so.0.8")
+        # Pin to device 0.8 so the packaged ELF NEEDs libcamera.so.0.8 (App Center /
+        # stock Cardputer). Do not let the cross sysroot redirect to BSP 0.7.
+        # Debian -dev layout: include/libcamera/libcamera/camera.h
+        if(EXISTS "${KVX_DEVICE_LIBCAMERA_ROOT}/usr/include/libcamera/libcamera/camera.h")
+            set(LIBCAMERA_INCLUDE_DIR "${KVX_DEVICE_LIBCAMERA_ROOT}/usr/include/libcamera")
+        elseif(EXISTS "${KVX_DEVICE_LIBCAMERA_ROOT}/usr/include/libcamera/camera.h")
+            set(LIBCAMERA_INCLUDE_DIR "${KVX_DEVICE_LIBCAMERA_ROOT}/usr/include")
+        else()
+            set(LIBCAMERA_INCLUDE_DIR "${CM0_SYSROOT}/usr/include")
+        endif()
+        set(LIBCAMERA_LIBRARY "${KVX_DEVICE_LIBCAMERA_LIBDIR}/libcamera.so.0.8")
+        set(LIBCAMERA_BASE_LIBRARY "${KVX_DEVICE_LIBCAMERA_LIBDIR}/libcamera-base.so.0.8")
+        message(STATUS "Using device-pulled libcamera 0.8 from ${KVX_DEVICE_LIBCAMERA_ROOT}")
+    else()
+        set(LIBCAMERA_SEARCH_INC "${CM0_SYSROOT}/usr/include")
+        set(LIBCAMERA_SEARCH_LIB ${CM0_LIBRARY_HINTS})
+        message(STATUS "Device libcamera 0.8 cache missing — using BSP (run scripts/pull_device_libcamera.sh)")
+        find_path(LIBCAMERA_INCLUDE_DIR
+            NAMES libcamera/camera.h
+            HINTS ${LIBCAMERA_SEARCH_INC}
+            NO_DEFAULT_PATH
+        )
+        find_library(LIBCAMERA_LIBRARY
+            NAMES camera libcamera.so
+            HINTS ${LIBCAMERA_SEARCH_LIB}
+            NO_DEFAULT_PATH
+        )
+        find_library(LIBCAMERA_BASE_LIBRARY
+            NAMES camera-base libcamera-base.so
+            HINTS ${LIBCAMERA_SEARCH_LIB}
+            NO_DEFAULT_PATH
+        )
+    endif()
+    if(LIBCAMERA_INCLUDE_DIR AND LIBCAMERA_LIBRARY AND LIBCAMERA_BASE_LIBRARY
+       AND EXISTS "${LIBCAMERA_LIBRARY}" AND EXISTS "${LIBCAMERA_BASE_LIBRARY}")
+        set(KVX_HAVE_LIBCAMERA 1)
+        cm0_add_imported_library(CM0::libcamera "${LIBCAMERA_LIBRARY}" "${LIBCAMERA_INCLUDE_DIR}")
+        cm0_add_imported_library(CM0::libcamera_base "${LIBCAMERA_BASE_LIBRARY}" "${LIBCAMERA_INCLUDE_DIR}")
+        message(STATUS "libcamera enabled: ${LIBCAMERA_LIBRARY}")
+    else()
+        message(STATUS "libcamera not found — CSI camera backend disabled")
+    endif()
+
     cm0_find_header(ZLIB_INCLUDE_DIR zlib.h
         "${CM0_SYSROOT}/usr/include"
     )
@@ -369,6 +426,7 @@ else()
         PUBLIC
             USE_DESKTOP=0
             APP_USE_DRM=$<BOOL:${APP_USE_DRM}>
+            KVX_HAVE_LIBCAMERA=${KVX_HAVE_LIBCAMERA}
     )
 
     # fix: issue of compiling lvgl on gcc >= 15.0
@@ -487,6 +545,43 @@ target_include_directories(${PROJECT_NAME}_tools
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/third_party"
 )
+
+# Camera session encodes JPEG/PNG and applies filters from tools.
+# libcamera is linked directly (same approach as FXCam).
+target_link_libraries(${PROJECT_NAME}_platform
+    PUBLIC
+        ${PROJECT_NAME}_tools
+)
+if(USE_DESKTOP)
+    target_link_libraries(${PROJECT_NAME}_platform
+        PUBLIC
+            PNG::PNG
+            ${JPEG_TARGET}
+    )
+else()
+    target_link_libraries(${PROJECT_NAME}_platform
+        PUBLIC
+            CM0::PNG
+            CM0::JPEG
+    )
+    if(KVX_HAVE_LIBCAMERA)
+        target_link_libraries(${PROJECT_NAME}_platform
+            PUBLIC
+                CM0::libcamera
+                CM0::libcamera_base
+        )
+        # Force -I ahead of the BSP sysroot's libcamera 0.7 headers so we
+        # compile against the same 0.8 API we link (FXCam/App Center path).
+        target_include_directories(${PROJECT_NAME}_platform
+            BEFORE PUBLIC
+                "${LIBCAMERA_INCLUDE_DIR}"
+        )
+        target_compile_options(${PROJECT_NAME}_platform
+            PUBLIC
+                "-I${LIBCAMERA_INCLUDE_DIR}"
+        )
+    endif()
+endif()
 
 file(GLOB_RECURSE UI_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/view/*.c"
@@ -663,6 +758,34 @@ target_link_libraries(${PROJECT_NAME}-nfctest
         ${PROJECT_NAME}_view
         ${PROJECT_NAME}_viewmodel
 )
+
+# Privileged Wi-Fi monitor helper (file capabilities, not setuid).
+add_executable(${PROJECT_NAME}-wifimon
+    src/helpers/wifimon_main.cpp
+)
+
+if(USE_DESKTOP)
+    add_executable(camera_filter_selftest
+        src/helpers/camera_filter_selftest.cpp
+        src/tools/camera_filter.cpp
+    )
+    target_include_directories(camera_filter_selftest
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
+    )
+
+    add_executable(camera_session_smoke
+        src/helpers/camera_session_smoke.cpp
+    )
+    target_link_libraries(camera_session_smoke
+        PRIVATE
+            ${PROJECT_NAME}_platform
+            ${PROJECT_NAME}_tools
+            PNG::PNG
+            ${JPEG_TARGET}
+            pthread
+    )
+endif()
 
 # Package deb
 

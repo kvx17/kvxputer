@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+HELPER="/usr/lib/kvxputerzero/kvxputerzero-wifimon"
+if [ -x "$HELPER" ] && command -v setcap >/dev/null 2>&1; then
+    setcap cap_net_admin,cap_net_raw+ep "$HELPER" || true
+fi
+exit 0

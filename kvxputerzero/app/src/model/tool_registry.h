@@ -70,6 +70,8 @@ enum class ToolId {
     TvBGone,
     TagTinker,
     IrCarrier,
+    WifiMonitorAdapter,
+    WifiAnalyzer,
     WifiConnect,
     WifiDisconnect,
     WifiApInfo,
@@ -203,6 +205,8 @@ struct ToolDesc {
 };
 
 inline constexpr ToolDesc kTools[] = {
+    {ToolId::WifiMonitorAdapter, "wifi_monitor_adapter", "Monitor adapter", "wifi"},
+    {ToolId::WifiAnalyzer, "wifi_analyzer", "WiFi Analyzer", "wifi"},
     {ToolId::WifiConnect, "wifi_connect", "Connect", "wifi"},
     {ToolId::WifiDisconnect, "wifi_disconnect", "Disconnect", "wifi"},
     {ToolId::WifiApInfo, "wifi_ap_info", "AP info", "wifi"},

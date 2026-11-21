@@ -48,6 +48,10 @@ protected:
     // Return true if handled. Esc is always handled by base unless overridden returns and calls go_back.
     virtual bool handle_key(uint32_t key);
 
+    // Hide title + action bars and expand content to the full 320x170 viewport.
+    void set_chrome_visible(bool visible);
+    bool chrome_visible() const { return chrome_visible_; }
+
     lv_color_t pri_color() const;
     lv_color_t sec_color() const;
     lv_color_t bg_color() const;
@@ -62,6 +66,7 @@ private:
     std::unique_ptr<view::widgets::ActionBar> action_bar_;
     lv_obj_t* root_{nullptr};
     lv_obj_t* content_{nullptr};
+    bool chrome_visible_{true};
 };
 
 } // namespace screen

@@ -30,6 +30,8 @@ public:
     ActionBar(const ActionBar&) = delete;
     ActionBar& operator=(const ActionBar&) = delete;
 
+    lv_obj_t* root() const { return root_; }
+
 private:
     static void on_click(lv_event_t* event);
 

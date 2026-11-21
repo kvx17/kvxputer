@@ -32,6 +32,8 @@ const char* channel_icon(const char* id) {
     if (std::strcmp(id, "rfid") == 0) return view::ICON_CH_RFID;
     if (std::strcmp(id, "nfc") == 0) return view::ICON_CH_NFC;
     if (std::strcmp(id, "files") == 0) return view::ICON_CH_FILES;
+    if (std::strcmp(id, "camera") == 0) return view::ICON_CH_CAMERA;
+    if (std::strcmp(id, "gallery") == 0) return view::ICON_CH_GALLERY;
     if (std::strcmp(id, "scripts") == 0) return view::ICON_CH_SCRIPTS;
     if (std::strcmp(id, "pcconnect") == 0) return view::ICON_CH_USB;
     if (std::strcmp(id, "clock") == 0) return view::ICON_CH_CLOCK;
