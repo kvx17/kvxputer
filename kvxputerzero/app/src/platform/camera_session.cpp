@@ -1,5 +1,7 @@
 #include "camera_session.h"
 
+#include "photo_footer.h"
+
 #include <jpeglib.h>
 #include <png.h>
 
@@ -83,12 +85,15 @@ void jpeg_fail(j_common_ptr cinfo) {
 }
 
 bool encode_jpeg_mem(const std::vector<uint8_t>& rgb, int w, int h, std::vector<uint8_t>& out,
-                     std::string& error) {
+                     std::string& error, int quality = 70) {
     out.clear();
-    if (w <= 0 || h <= 0 || w > 1920 || h > 1080 || rgb.size() < static_cast<size_t>(w) * h * 3) {
+    if (w <= 0 || h <= 0 || w > 4096 || h > 3072 ||
+        rgb.size() < static_cast<size_t>(w) * static_cast<size_t>(h) * 3) {
         error = "bad rgb buffer";
         return false;
     }
+    if (quality < 1) quality = 1;
+    if (quality > 100) quality = 100;
     // libjpeg's default error handler calls exit(). A failed encode must not take down the app.
     jpeg_compress_struct cinfo{};
     JpegErrMgr jerr{};
@@ -111,7 +116,7 @@ bool encode_jpeg_mem(const std::vector<uint8_t>& rgb, int w, int h, std::vector<
     cinfo.input_components = 3;
     cinfo.in_color_space = JCS_RGB;
     jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, 70, TRUE);
+    jpeg_set_quality(&cinfo, quality, TRUE);
     jpeg_start_compress(&cinfo, TRUE);
     while (cinfo.next_scanline < cinfo.image_height) {
         JSAMPROW row = const_cast<JSAMPROW>(&rgb[static_cast<size_t>(cinfo.next_scanline) * static_cast<size_t>(w) * 3]);
@@ -127,6 +132,114 @@ bool encode_jpeg_mem(const std::vector<uint8_t>& rgb, int w, int h, std::vector<
     out.assign(mem, mem + mem_size);
     std::free(mem);
     return true;
+}
+
+bool encode_jpeg_i420(const std::vector<uint8_t>& i420, int width, int height, int stride, const std::string& path,
+                      int quality, std::string& error) {
+    if (width <= 0 || height <= 0 || stride < width || (width & 1) || (height & 1) || (stride & 1) ||
+        (width % 16) != 0 || (height % 16) != 0) {
+        error = "still geometry cannot be encoded";
+        return false;
+    }
+    const size_t y_size = static_cast<size_t>(stride) * static_cast<size_t>(height);
+    const int uv_stride = stride / 2;
+    const size_t uv_size = static_cast<size_t>(uv_stride) * static_cast<size_t>(height / 2);
+    if (i420.size() < y_size + uv_size * 2) {
+        error = "short yuv frame";
+        return false;
+    }
+    if (quality < 1) quality = 1;
+    if (quality > 100) quality = 100;
+
+    FILE* fp = std::fopen(path.c_str(), "wb");
+    if (!fp) {
+        error = "cannot write jpeg";
+        return false;
+    }
+
+    jpeg_compress_struct cinfo{};
+    JpegErrMgr jerr{};
+    cinfo.err = jpeg_std_error(&jerr.pub);
+    jerr.pub.error_exit = jpeg_fail;
+    volatile bool created = false;
+    if (setjmp(jerr.jump)) {
+        if (created) jpeg_destroy_compress(&cinfo);
+        std::fclose(fp);
+        std::remove(path.c_str());
+        error = "jpeg encode failed";
+        return false;
+    }
+    jpeg_create_compress(&cinfo);
+    created = true;
+    jpeg_stdio_dest(&cinfo, fp);
+    cinfo.image_width = static_cast<JDIMENSION>(width);
+    cinfo.image_height = static_cast<JDIMENSION>(height);
+    cinfo.input_components = 3;
+    cinfo.in_color_space = JCS_YCbCr;
+    jpeg_set_defaults(&cinfo);
+    cinfo.raw_data_in = TRUE;
+    cinfo.comp_info[0].h_samp_factor = 2;
+    cinfo.comp_info[0].v_samp_factor = 2;
+    cinfo.comp_info[1].h_samp_factor = 1;
+    cinfo.comp_info[1].v_samp_factor = 1;
+    cinfo.comp_info[2].h_samp_factor = 1;
+    cinfo.comp_info[2].v_samp_factor = 1;
+    jpeg_set_quality(&cinfo, quality, TRUE);
+    jpeg_start_compress(&cinfo, TRUE);
+
+    const uint8_t* y_plane = i420.data();
+    const uint8_t* u_plane = y_plane + y_size;
+    const uint8_t* v_plane = u_plane + uv_size;
+    JSAMPROW y_rows[16];
+    JSAMPROW u_rows[8];
+    JSAMPROW v_rows[8];
+    while (cinfo.next_scanline < cinfo.image_height) {
+        const size_t y_row = cinfo.next_scanline;
+        const size_t uv_row = y_row / 2;
+        for (size_t i = 0; i < 16; ++i) {
+            const size_t row = std::min(y_row + i, static_cast<size_t>(height - 1));
+            y_rows[i] = const_cast<JSAMPROW>(y_plane + row * static_cast<size_t>(stride));
+        }
+        for (size_t i = 0; i < 8; ++i) {
+            const size_t row = std::min(uv_row + i, static_cast<size_t>(height / 2 - 1));
+            u_rows[i] = const_cast<JSAMPROW>(u_plane + row * static_cast<size_t>(uv_stride));
+            v_rows[i] = const_cast<JSAMPROW>(v_plane + row * static_cast<size_t>(uv_stride));
+        }
+        JSAMPARRAY rows[] = {y_rows, u_rows, v_rows};
+        jpeg_write_raw_data(&cinfo, rows, 16);
+    }
+    jpeg_finish_compress(&cinfo);
+    jpeg_destroy_compress(&cinfo);
+    created = false;
+    std::fclose(fp);
+    return true;
+}
+
+void i420_to_rgb888(const std::vector<uint8_t>& i420, int width, int height, int stride, std::vector<uint8_t>& rgb) {
+    rgb.clear();
+    if (width <= 0 || height <= 0 || stride < width) return;
+    const size_t y_size = static_cast<size_t>(stride) * static_cast<size_t>(height);
+    const int uv_stride = stride / 2;
+    const size_t uv_size = static_cast<size_t>(uv_stride) * static_cast<size_t>(height / 2);
+    if (i420.size() < y_size + uv_size * 2) return;
+    const uint8_t* y_plane = i420.data();
+    const uint8_t* u_plane = y_plane + y_size;
+    const uint8_t* v_plane = u_plane + uv_size;
+    rgb.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 3);
+    for (int y = 0; y < height; ++y) {
+        const uint8_t* yrow = y_plane + static_cast<size_t>(y) * static_cast<size_t>(stride);
+        const uint8_t* urow = u_plane + static_cast<size_t>(y / 2) * static_cast<size_t>(uv_stride);
+        const uint8_t* vrow = v_plane + static_cast<size_t>(y / 2) * static_cast<size_t>(uv_stride);
+        uint8_t* dst = rgb.data() + static_cast<size_t>(y) * static_cast<size_t>(width) * 3;
+        for (int x = 0; x < width; ++x) {
+            const int yy = yrow[x];
+            const int uu = static_cast<int>(urow[x / 2]) - 128;
+            const int vv = static_cast<int>(vrow[x / 2]) - 128;
+            dst[x * 3] = static_cast<uint8_t>(std::max(0, std::min(255, yy + ((1436 * vv) >> 10))));
+            dst[x * 3 + 1] = static_cast<uint8_t>(std::max(0, std::min(255, yy - ((352 * uu + 731 * vv) >> 10))));
+            dst[x * 3 + 2] = static_cast<uint8_t>(std::max(0, std::min(255, yy + ((1815 * uu) >> 10))));
+        }
+    }
 }
 
 void scale_rgb565(const std::vector<uint16_t>& src, int sw, int sh, std::vector<uint16_t>& dst, int dw, int dh) {
@@ -259,9 +372,9 @@ void CameraSession::rgb565_to_rgb888(const std::vector<uint16_t>& src, std::vect
 }
 
 bool CameraSession::encode_jpeg_rgb888(const std::vector<uint8_t>& rgb, int w, int h,
-                                       const std::string& path, std::string& error) {
+                                       const std::string& path, std::string& error, int quality) {
     std::vector<uint8_t> jpeg;
-    if (!encode_jpeg_mem(rgb, w, h, jpeg, error)) return false;
+    if (!encode_jpeg_mem(rgb, w, h, jpeg, error, quality)) return false;
     FILE* fp = std::fopen(path.c_str(), "wb");
     if (!fp) {
         error = "cannot write jpeg";
@@ -276,18 +389,82 @@ bool CameraSession::encode_jpeg_rgb888(const std::vector<uint8_t>& rgb, int w, i
     return true;
 }
 
-bool CameraSession::capture_still(std::string& out_path, std::string& error) {
-    CameraFrame frame;
-    if (!copy_preview(frame) || frame.width <= 0 || frame.height <= 0) {
-        error = "no preview frame";
-        return false;
-    }
+void CameraSession::set_details_footer(bool enabled) {
+    details_footer_.store(enabled);
+}
+
+bool CameraSession::capture_still(std::string& out_path, std::string& error, int* saved_w, int* saved_h) {
     std::error_code ec;
     std::filesystem::create_directories(camera_stills_dir(), ec);
     out_path = (std::filesystem::path(camera_stills_dir()) / timestamp_name(".jpg")).string();
+
     std::vector<uint8_t> rgb;
-    rgb565_to_rgb888(frame.rgb565, rgb);
-    return encode_jpeg_rgb888(rgb, frame.width, frame.height, out_path, error);
+    int w = 0;
+    int h = 0;
+    SensorStill sensor;
+    const bool full_still = backend_ == "libcamera" && !recording_.load() && libcamera_.still_ready();
+    if (full_still) {
+        if (!libcamera_.capture_sensor_still(sensor, error)) return false;
+        w = sensor.width;
+        h = sensor.height;
+    } else {
+        CameraFrame frame;
+        if (!copy_preview(frame) || frame.width <= 0 || frame.height <= 0) {
+            error = "no preview frame";
+            return false;
+        }
+        w = frame.width;
+        h = frame.height;
+        rgb565_to_rgb888(frame.rgb565, rgb);
+    }
+
+    const auto filt = filter();
+    const int stride = sensor.stride > 0 ? sensor.stride : w;
+    const bool sensor_color = full_still && filt == tools::camfilter::Filter::Original &&
+                              std::fabs(brightness_.load() - 1.0f) < 0.05f;
+    bool footer_in_yuv = false;
+    if (sensor_color && !sensor.i420.empty()) {
+        if (details_footer_.load()) {
+            apply_photo_footer_i420(sensor.i420, w, h, stride, tools::camfilter::filter_name(filt));
+            footer_in_yuv = true;
+        }
+        if (encode_jpeg_i420(sensor.i420, w, h, stride, out_path, 95, error)) {
+            if (saved_w) *saved_w = w;
+            if (saved_h) *saved_h = h;
+            return true;
+        }
+    }
+
+    try {
+        if (full_still) {
+            if (!sensor.rgb888.empty()) {
+                rgb = std::move(sensor.rgb888);
+            } else {
+                i420_to_rgb888(sensor.i420, w, h, stride, rgb);
+            }
+            sensor.i420.clear();
+            sensor.i420.shrink_to_fit();
+            sensor.rgb888.clear();
+            sensor.rgb888.shrink_to_fit();
+            if (rgb.empty()) {
+                error = "still convert failed";
+                return false;
+            }
+            // The preview copy is already filtered. The still is the sensor image.
+            tools::camfilter::apply_gain_rgb888(rgb, brightness_.load());
+            tools::camfilter::apply_rgb888(rgb, w, h, filt);
+        }
+        if (details_footer_.load() && !footer_in_yuv) {
+            apply_photo_footer(rgb, w, h, tools::camfilter::filter_name(filt));
+        }
+    } catch (const std::bad_alloc&) {
+        error = "out of memory";
+        return false;
+    }
+    if (!encode_jpeg_rgb888(rgb, w, h, out_path, error, 95)) return false;
+    if (saved_w) *saved_w = w;
+    if (saved_h) *saved_h = h;
+    return true;
 }
 
 bool CameraSession::start_recording(std::string& out_path, std::string& error) {

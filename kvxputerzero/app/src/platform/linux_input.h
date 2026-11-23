@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace platform {
 
@@ -32,6 +33,7 @@ constexpr uint32_t kKeyVolumeUp = kSpecialKeyBase | 0x45U;
 constexpr uint32_t kKeyBrightnessDown = kSpecialKeyBase | 0x46U;
 constexpr uint32_t kKeyBrightnessUp = kSpecialKeyBase | 0x47U;
 constexpr uint32_t kKeyInsert = kSpecialKeyBase | 0x48U;
+constexpr uint32_t kKeyTab = kSpecialKeyBase | 0x49U;
 
 // Cardputer Zero layers (printed keycap guide, not Cardputer ADV):
 //   bare letter/digit = the keycap; shift = uppercase
@@ -62,6 +64,20 @@ void clear_global_key_listener(GlobalKeyListener listener, void* user_data);
 // Screen navigation handler; invoked after the global/shortcut listener returns false.
 void set_screen_key_listener(GlobalKeyListener listener, void* user_data);
 void clear_screen_key_listener(GlobalKeyListener listener, void* user_data);
+// Runs before the global shortcut handler. Return true to consume the key.
+void set_early_key_listener(GlobalKeyListener listener, void* user_data);
+void clear_early_key_listener(GlobalKeyListener listener, void* user_data);
+// Key-up for the active screen. Does not replace the shortcut release listener.
+void set_screen_key_release_listener(KeyReleaseListener listener, void* user_data);
+void clear_screen_key_release_listener(KeyReleaseListener listener, void* user_data);
 const char* describe_key(uint32_t key);
+// Deliver a key to the active screen only. Does not re-enter shortcut handling.
+void deliver_screen_key(uint32_t key);
+
+// Letters the user may bind. Movement, the 4–8 bar, Ok, Esc, Space, Tab, and
+// the Fn system keys are rejected.
+bool shortcut_key_reserved(uint32_t key);
+bool shortcut_key_allowed(uint32_t key);
+std::string shortcut_key_label(uint32_t key);
 
 } // namespace platform

@@ -44,6 +44,7 @@ public:
 
     // Deterministic desktop automation (KVX_UI_SCRIPT). Returns false if keypad missing.
     bool inject_named_key(const std::string& name);
+    bool inject_named_key_state(const std::string& name, bool pressed);
     bool inject_char(char ch);
     void inject_text(const std::string& text);
 

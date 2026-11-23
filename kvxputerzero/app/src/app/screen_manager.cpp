@@ -14,10 +14,16 @@
 #include "doc_screen.h"
 #include "eng_calc_lib.h"
 #include "eng_calc_screen.h"
+#include "life_counter_screen.h"
 #include "glyph_screen.h"
 #include "info_screen.h"
 #include "kvx_style.h"
+#include "launch_catalog.h"
+#include "menu_icons.h"
 #include "linux_input.h"
+#include "search_screen.h"
+#include "shortcut_capture_screen.h"
+#include "shortcut_pick_screen.h"
 #include "matrix_screen.h"
 #include "net_info.h"
 #include "options_list_screen.h"
@@ -158,8 +164,11 @@ lv_obj_t* ScreenManager::current_screen() const {
 void ScreenManager::load_screen(std::unique_ptr<screen::KvxScreen> next_screen) {
     if (!next_screen || !next_screen->root()) return;
     lv_screen_load(next_screen->root());
+    // Assign first so the previous screen's destructor runs (closes listeners) before
+    // the new screen starts workers in on_shown().
     current_screen_ = std::move(next_screen);
     platform::set_text_entry(current_screen_->accepts_text());
+    current_screen_->on_shown();
 }
 
 std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage page) {
@@ -181,16 +190,24 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
         entries.push_back({"QRCodes", [this]() { view_model_.open_qr_menu(); }, view::ICON_MENU_QR});
         entries.push_back({"Barcode", [this]() { view_model_.open_barcode_menu(); }, view::ICON_MENU_BARCODE});
         entries.push_back({"PDA", [this]() { view_model_.open_pda_hub(); }, view::ICON_MENU_PDA});
-        entries.push_back({"Media Player", [this]() { view_model_.open_tool(model::ToolId::MediaPlayer); }});
+        entries.push_back({"Media Player", [this]() { view_model_.open_tool(model::ToolId::MediaPlayer); },
+                           view::tool_icon(model::ToolId::MediaPlayer)});
         entries.push_back({"Timer", [this]() { view_model_.open_timer(); }, view::ICON_MENU_TIMER});
-        entries.push_back({"Matrix", [this]() { view_model_.open_matrix(); }, nullptr, 0x39FF14});
-        entries.push_back({"DTMF", [this]() { view_model_.open_tool(model::ToolId::Dtmf); }});
-        entries.push_back({"Morse", [this]() { view_model_.open_tool(model::ToolId::Morse); }});
-        entries.push_back({"Microphone", [this]() { view_model_.open_tool(model::ToolId::Microphone); }});
-        entries.push_back({"MQTT", [this]() { view_model_.open_tool(model::ToolId::Mqtt); }});
-        entries.push_back({"LLM Chat", [this]() { view_model_.open_tool(model::ToolId::LlmChat); }});
-        entries.push_back({"Drone ID", [this]() { view_model_.open_tool(model::ToolId::DroneId); }});
-        entries.push_back({"iButton", [this]() { view_model_.open_tool(model::ToolId::IButtonHint); }});
+        entries.push_back({"Matrix", [this]() { view_model_.open_matrix(); }, view::ICON_CH_SCRIPTS, 0x39FF14});
+        entries.push_back({"DTMF", [this]() { view_model_.open_tool(model::ToolId::Dtmf); },
+                           view::tool_icon(model::ToolId::Dtmf)});
+        entries.push_back({"Morse", [this]() { view_model_.open_tool(model::ToolId::Morse); },
+                           view::tool_icon(model::ToolId::Morse)});
+        entries.push_back({"Microphone", [this]() { view_model_.open_tool(model::ToolId::Microphone); },
+                           view::tool_icon(model::ToolId::Microphone)});
+        entries.push_back({"MQTT", [this]() { view_model_.open_tool(model::ToolId::Mqtt); },
+                           view::tool_icon(model::ToolId::Mqtt)});
+        entries.push_back({"LLM Chat", [this]() { view_model_.open_tool(model::ToolId::LlmChat); },
+                           view::tool_icon(model::ToolId::LlmChat)});
+        entries.push_back({"Drone ID", [this]() { view_model_.open_tool(model::ToolId::DroneId); },
+                           view::tool_icon(model::ToolId::DroneId)});
+        entries.push_back({"iButton", [this]() { view_model_.open_tool(model::ToolId::IButtonHint); },
+                           view::tool_icon(model::ToolId::IButtonHint)});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Tools", std::move(entries));
     }
 
@@ -199,6 +216,36 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::Discovery:
         return make_discovery_screen(view_model_, assets_);
+
+    case model::AppPage::Search:
+        return std::make_unique<screen::SearchScreen>(view_model_, assets_);
+
+    case model::AppPage::ShortcutMenu: {
+        std::vector<MenuEntry> entries;
+        for (const auto& binding : view_model_.model().shortcuts()) {
+            const auto* target = model::find_launch_target(binding.target_id);
+            const std::string name = target ? target->label : binding.target_id;
+            const std::string label = (binding.hold ? "Hold " : "Tap ") +
+                                      platform::shortcut_key_label(binding.key) + "  " + name;
+            const uint32_t key = binding.key;
+            const bool hold = binding.hold;
+            entries.push_back({label, [this, key, hold]() { view_model_.remove_shortcut(key, hold); }});
+        }
+        entries.push_back({"Add tap shortcut", [this]() { view_model_.begin_shortcut_bind(false); },
+                           view::ICON_PLUS});
+        entries.push_back({"Add hold shortcut", [this]() { view_model_.begin_shortcut_bind(true); },
+                           view::ICON_PLAY});
+        if (!view_model_.model().shortcuts().empty()) {
+            entries.push_back({"Clear shortcuts", [this]() { view_model_.clear_shortcuts(); }});
+        }
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, "Shortcuts", std::move(entries));
+    }
+
+    case model::AppPage::ShortcutPick:
+        return std::make_unique<screen::ShortcutPickScreen>(view_model_, assets_);
+
+    case model::AppPage::ShortcutCapture:
+        return std::make_unique<screen::ShortcutCaptureScreen>(view_model_, assets_);
 
     case model::AppPage::ToolRun:
     case model::AppPage::ToolPrompt:
@@ -233,6 +280,9 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
             entries.push_back(
                 {tools::engcalc::op_label(op), [this, i]() { view_model_.open_eng_calc_op(i); }});
         }
+        entries.push_back({"Yu-Gi-Oh LP", [this]() { view_model_.open_life_counter(0); }});
+        entries.push_back({"Magic Life", [this]() { view_model_.open_life_counter(1); }});
+        entries.push_back({"Truco", [this]() { view_model_.open_life_counter(2); }});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Calcs", std::move(entries));
     }
 
@@ -240,6 +290,10 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
         auto op = static_cast<tools::engcalc::Op>(view_model_.eng_calc_op());
         return std::make_unique<screen::EngCalcScreen>(view_model_, assets_, op);
     }
+
+    case model::AppPage::LifeCounter:
+        return std::make_unique<screen::LifeCounterScreen>(
+            view_model_, assets_, static_cast<screen::LifeGame>(view_model_.eng_calc_op()));
 
     case model::AppPage::Timer:
         return std::make_unique<screen::TimerScreen>(view_model_, assets_);
@@ -259,7 +313,7 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
     case model::AppPage::ClockSubMenu: {
         std::vector<MenuEntry> entries;
         entries.push_back({"Timer", [this]() { view_model_.open_timer(); }, view::ICON_MENU_TIMER});
-        entries.push_back({"Exit", [this]() { view_model_.go_home(); }});
+        entries.push_back({"Exit", [this]() { view_model_.go_home(); }, view::ICON_SIGN_OUT});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Clock", std::move(entries));
     }
 
@@ -515,10 +569,11 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
                                view_model_.reset_colors();
                                view_model_.go_home();
                            }, view::ICON_MENU_RESET});
-        entries.push_back({"Brightness", [this]() { view_model_.open_brightness(); }});
-        entries.push_back({"Dim time", [this]() { view_model_.open_dim_time(); }});
-        entries.push_back({"Sound", [this]() { view_model_.open_sound_menu(); }});
-        entries.push_back({"Power", [this]() { view_model_.open_power_menu(); }});
+        entries.push_back({"Brightness", [this]() { view_model_.open_brightness(); }, view::ICON_SUN});
+        entries.push_back({"Dim time", [this]() { view_model_.open_dim_time(); }, view::ICON_MOON});
+        entries.push_back({"Sound", [this]() { view_model_.open_sound_menu(); }, view::ICON_CH_FM});
+        entries.push_back({"Power", [this]() { view_model_.open_power_menu(); }, view::ICON_CH_CHARGE});
+        entries.push_back({"Shortcuts", [this]() { view_model_.open_shortcut_menu(); }, view::ICON_CH_CONFIG});
         entries.push_back({"About", [this]() { view_model_.open_about(); }, view::ICON_MENU_ABOUT});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Config", std::move(entries));
     }

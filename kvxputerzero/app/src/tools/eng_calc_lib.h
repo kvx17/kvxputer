@@ -36,6 +36,16 @@ enum class Op {
     Motor,
     Gas,
     Flow,
+    Parallel,
+    RcTimer,
+    Battery,
+    Frequency,
+    Pwm,
+    Percentage,
+    DateDiff,
+    TimeDiff,
+    TipSplit,
+    Distance,
     Count,
 };
 

@@ -64,6 +64,13 @@ private:
     void leave();
     void go_home();
     void stop_worker();
+    void arm_display_blank();
+    void cancel_display_blank();
+    void blank_display();
+    void wake_display();
+    static void blank_timer_cb(lv_timer_t* timer);
+    static bool on_early_key(uint32_t key, const char* key_name, bool long_pressed, void* user_data);
+    static void on_key_up(uint32_t key, const char* key_name, void* user_data);
 
     std::string title_;
     std::string name_column_;
@@ -97,6 +104,13 @@ private:
     std::string selected_key_;
     bool expanded_{false};
     std::string expanded_key_;
+
+    lv_obj_t* blank_cover_{nullptr};
+    lv_timer_t* blank_timer_{nullptr};
+    bool display_off_{false};
+    int32_t saved_brightness_{70};
+    bool saved_brightness_valid_{false};
+    uint32_t swallow_long_{0};
 };
 
 } // namespace screen

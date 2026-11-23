@@ -2,10 +2,9 @@
 
 #include "asset_manager.h"
 #include "kvx_style.h"
+#include "menu_icons.h"
 #include "theme.h"
 #include "ui_const.h"
-
-#include <cstring>
 
 namespace screen {
 namespace {
@@ -13,35 +12,6 @@ namespace {
 void channel_obs(lv_observer_t* observer, lv_subject_t* /*subject*/) {
     auto* self = static_cast<ChannelGridScreen*>(lv_observer_get_user_data(observer));
     if (self) self->refresh_selection();
-}
-
-const char* channel_icon(const char* id) {
-    if (!id) return view::ICON_CH_TOOLS;
-    if (std::strcmp(id, "wifi") == 0) return view::ICON_CH_WIFI;
-    if (std::strcmp(id, "discovery") == 0) return view::ICON_CH_DISCOVERY;
-    if (std::strcmp(id, "netops") == 0) return view::ICON_CH_NETOPS;
-    if (std::strcmp(id, "ble") == 0) return view::ICON_CH_BLE;
-    if (std::strcmp(id, "rf") == 0) return view::ICON_CH_RF;
-    if (std::strcmp(id, "nrf24") == 0) return view::ICON_CH_NRF24;
-    if (std::strcmp(id, "lora") == 0) return view::ICON_CH_LORA;
-    if (std::strcmp(id, "fm") == 0) return view::ICON_CH_FM;
-    if (std::strcmp(id, "infrared") == 0) return view::ICON_CH_IR;
-    if (std::strcmp(id, "ethernet") == 0) return view::ICON_CH_ETH;
-    if (std::strcmp(id, "usb") == 0) return view::ICON_CH_USB;
-    if (std::strcmp(id, "gps") == 0) return view::ICON_CH_GPS;
-    if (std::strcmp(id, "rfid") == 0) return view::ICON_CH_RFID;
-    if (std::strcmp(id, "nfc") == 0) return view::ICON_CH_NFC;
-    if (std::strcmp(id, "files") == 0) return view::ICON_CH_FILES;
-    if (std::strcmp(id, "camera") == 0) return view::ICON_CH_CAMERA;
-    if (std::strcmp(id, "gallery") == 0) return view::ICON_CH_GALLERY;
-    if (std::strcmp(id, "scripts") == 0) return view::ICON_CH_SCRIPTS;
-    if (std::strcmp(id, "pcconnect") == 0) return view::ICON_CH_USB;
-    if (std::strcmp(id, "clock") == 0) return view::ICON_CH_CLOCK;
-    if (std::strcmp(id, "charge") == 0) return view::ICON_CH_CHARGE;
-    if (std::strcmp(id, "others") == 0) return view::ICON_CH_TOOLS;
-    if (std::strcmp(id, "modules") == 0) return view::ICON_CH_MODULES;
-    if (std::strcmp(id, "config") == 0) return view::ICON_CH_CONFIG;
-    return view::ICON_CH_TOOLS;
 }
 
 view::TileKind tile_kind_for(model::ChannelKind kind) {
@@ -197,7 +167,7 @@ void ChannelGridScreen::rebuild_tiles() {
         if (ch >= 0 && static_cast<size_t>(ch) < model::kChannelCount) {
             const auto& desc = model::kChannels[static_cast<size_t>(ch)];
             if (icon_font_) {
-                lv_label_set_text(icon, channel_icon(desc.id));
+                lv_label_set_text(icon, view::channel_icon(desc.id));
             } else {
                 char letter[2] = {desc.label[0], '\0'};
                 lv_label_set_text(icon, letter);
@@ -310,7 +280,11 @@ bool ChannelGridScreen::handle_key(uint32_t key) {
         move_selection(-1, 0);
         return true;
     }
-    if (key == LV_KEY_ENTER || key == '\n' || key == ' ') {
+    if (key == ' ') {
+        view_model().open_search();
+        return true;
+    }
+    if (key == LV_KEY_ENTER || key == '\n') {
         view_model().open_selected_channel();
         return true;
     }

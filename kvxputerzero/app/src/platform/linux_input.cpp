@@ -45,8 +45,26 @@ GlobalKeyListener global_key_listener = nullptr;
 void* global_key_listener_user_data = nullptr;
 GlobalKeyListener screen_key_listener = nullptr;
 void* screen_key_listener_user_data = nullptr;
+GlobalKeyListener early_key_listener = nullptr;
+void* early_key_listener_user_data = nullptr;
+KeyReleaseListener screen_key_release_listener = nullptr;
+void* screen_key_release_listener_user_data = nullptr;
+uint32_t system_repeat_at = 0;
 
 constexpr uint32_t kLongPressMs = 700;
+constexpr uint32_t kSystemRepeatDelayMs = 380;
+constexpr uint32_t kSystemRepeatEveryMs = 140;
+constexpr uint32_t kNavRepeatDelayMs = 280;
+constexpr uint32_t kNavRepeatEveryMs = 55;
+
+bool system_repeat_key(uint32_t key) {
+    return key == kKeyBrightnessDown || key == kKeyBrightnessUp || key == kKeyVolumeDown ||
+           key == kKeyVolumeUp;
+}
+
+bool nav_repeat_key(uint32_t key) {
+    return key == LV_KEY_UP || key == LV_KEY_DOWN || key == LV_KEY_LEFT || key == LV_KEY_RIGHT;
+}
 
 #if !USE_DESKTOP
 struct EvdevKeypad {
@@ -110,6 +128,10 @@ void dispatch_nav_key(uint32_t key) {
 
 bool emit_global_key(uint32_t key, bool long_pressed) {
     const char* name = describe_key(key);
+    if (early_key_listener &&
+        early_key_listener(key, name, long_pressed, early_key_listener_user_data)) {
+        return true;
+    }
     if (global_key_listener &&
         global_key_listener(key, name, long_pressed, global_key_listener_user_data)) {
         return true;
@@ -122,7 +144,32 @@ bool emit_global_key(uint32_t key, bool long_pressed) {
 }
 
 void long_press_timer_cb(lv_timer_t*) {
-    if (!pressed_key || long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
+    if (!pressed_key) {
+        return;
+    }
+
+    // Brightness and volume keep stepping while held, the same way the OS does.
+    if (system_repeat_key(pressed_key)) {
+        const auto elapsed = lv_tick_elaps(press_started_at);
+        if (elapsed >= kSystemRepeatDelayMs &&
+            (system_repeat_at == 0 || lv_tick_elaps(system_repeat_at) >= kSystemRepeatEveryMs)) {
+            system_repeat_at = lv_tick_get();
+            emit_global_key(pressed_key, false);
+        }
+    }
+
+    // Arrows, and bare F/X/Z/C once they have been resolved to arrows, keep moving.
+    if (nav_repeat_key(pressed_key)) {
+        const auto elapsed = lv_tick_elaps(press_started_at);
+        if (elapsed >= kNavRepeatDelayMs &&
+            (system_repeat_at == 0 || lv_tick_elaps(system_repeat_at) >= kNavRepeatEveryMs)) {
+            system_repeat_at = lv_tick_get();
+            emit_global_key(pressed_key, false);
+        }
+        return;
+    }
+
+    if (long_press_sent || lv_tick_elaps(press_started_at) < kLongPressMs) {
         return;
     }
 
@@ -148,6 +195,7 @@ void route_key_state(uint32_t key, bool pressed) {
         pressed_key = key;
         press_started_at = lv_tick_get();
         long_press_sent = false;
+        system_repeat_at = 0;
         pressed_key_consumed = emit_global_key(key, false);
         ensure_long_press_timer();
         if (!pressed_key_consumed) {
@@ -158,8 +206,12 @@ void route_key_state(uint32_t key, bool pressed) {
         if (key_release_listener) {
             key_release_listener(key, describe_key(key), key_release_listener_user_data);
         }
+        if (screen_key_release_listener) {
+            screen_key_release_listener(key, describe_key(key), screen_key_release_listener_user_data);
+        }
         pressed_key = 0;
         pressed_key_consumed = false;
+        system_repeat_at = 0;
         if (long_press_timer) {
             lv_timer_pause(long_press_timer);
         }
@@ -221,7 +273,7 @@ uint32_t map_evdev_key(uint16_t code) {
         case KEY_DELETE:
             return LV_KEY_DEL;
         case KEY_TAB:
-            return LV_KEY_NEXT;
+            return kKeyTab;
         case KEY_HOME:
             return LV_KEY_HOME;
         case KEY_END:
@@ -319,6 +371,34 @@ uint32_t map_evdev_key(uint16_t code) {
             return '&';
         case KEY_F20:
             return '*';
+        // Orange Fn legends the Cardputer OS emits as ordinary evdev codes.
+        // The app grabs the keypad, so these never reach the desktop session.
+        case KEY_MUTE:
+            return kKeyMute;
+        case KEY_VOLUMEDOWN:
+            return kKeyVolumeDown;
+        case KEY_VOLUMEUP:
+            return kKeyVolumeUp;
+        case KEY_PLAYPAUSE:
+        case KEY_PLAY:
+        case KEY_PAUSE:
+            return kKeyMediaPlay;
+        case KEY_NEXTSONG:
+            return kKeyMediaNext;
+        case KEY_PREVIOUSSONG:
+            return kKeyMediaPrev;
+        case KEY_BRIGHTNESSDOWN:
+            return kKeyBrightnessDown;
+        case KEY_BRIGHTNESSUP:
+            return kKeyBrightnessUp;
+        case KEY_PRINT:
+            return kKeyPrintScreen;
+        case KEY_INSERT:
+            return kKeyInsert;
+        case KEY_NEXT:
+            return LV_KEY_NEXT;
+        case KEY_PREVIOUS:
+            return LV_KEY_PREV;
         default:
             break;
     }
@@ -502,11 +582,14 @@ bool is_fn_keycode(uint16_t code) {
         case KEY_VOLUMEDOWN:
         case KEY_VOLUMEUP:
         case KEY_PLAYPAUSE:
+        case KEY_PLAY:
+        case KEY_PAUSE:
         case KEY_NEXTSONG:
         case KEY_PREVIOUSSONG:
         case KEY_BRIGHTNESSDOWN:
         case KEY_BRIGHTNESSUP:
         case KEY_SYSRQ:
+        case KEY_PRINT:
         case KEY_HELP:
             return true;
         default:
@@ -894,6 +977,31 @@ void clear_screen_key_listener(GlobalKeyListener listener, void* user_data) {
     }
 }
 
+void set_early_key_listener(GlobalKeyListener listener, void* user_data) {
+    early_key_listener = listener;
+    early_key_listener_user_data = user_data;
+}
+
+void clear_early_key_listener(GlobalKeyListener listener, void* user_data) {
+    if (early_key_listener == listener && early_key_listener_user_data == user_data) {
+        early_key_listener = nullptr;
+        early_key_listener_user_data = nullptr;
+    }
+}
+
+void set_screen_key_release_listener(KeyReleaseListener listener, void* user_data) {
+    screen_key_release_listener = listener;
+    screen_key_release_listener_user_data = user_data;
+}
+
+void clear_screen_key_release_listener(KeyReleaseListener listener, void* user_data) {
+    if (screen_key_release_listener == listener &&
+        screen_key_release_listener_user_data == user_data) {
+        screen_key_release_listener = nullptr;
+        screen_key_release_listener_user_data = nullptr;
+    }
+}
+
 const char* describe_key(uint32_t key) {
     switch (key) {
         case LV_KEY_ESC:
@@ -954,6 +1062,8 @@ const char* describe_key(uint32_t key) {
             return "Bright+";
         case kKeyInsert:
             return "Insert";
+        case kKeyTab:
+            return "Tab";
         default:
             break;
     }
@@ -966,6 +1076,104 @@ const char* describe_key(uint32_t key) {
         std::snprintf(buffer, sizeof(buffer), "Key_%u", key);
     }
     return buffer;
+}
+
+void deliver_screen_key(uint32_t key) {
+    if (!screen_key_listener || key == 0) return;
+    screen_key_listener(key, describe_key(key), false, screen_key_listener_user_data);
+}
+
+bool shortcut_key_reserved(uint32_t key) {
+    switch (key) {
+    case LV_KEY_ESC:
+    case LV_KEY_ENTER:
+    case '\r':
+    case ' ':
+    case LV_KEY_UP:
+    case LV_KEY_DOWN:
+    case LV_KEY_LEFT:
+    case LV_KEY_RIGHT:
+    case LV_KEY_BACKSPACE:
+    case LV_KEY_DEL:
+    case LV_KEY_HOME:
+    case LV_KEY_END:
+    case LV_KEY_NEXT:
+    case LV_KEY_PREV:
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    case 'f':
+    case 'F':
+    case 'x':
+    case 'X':
+    case 'z':
+    case 'Z':
+    case 'c':
+    case 'C':
+        return true;
+    default:
+        break;
+    }
+    if (key == kKeyTab || key == kKeyHelp || key == kKeyPrintScreen || key == kKeyInsert) return true;
+    if (key == kKeyBrightnessDown || key == kKeyBrightnessUp) return true;
+    if (key == kKeyVolumeDown || key == kKeyVolumeUp || key == kKeyMute) return true;
+    if (key == kKeyMediaPlay || key == kKeyMediaPrev || key == kKeyMediaNext) return true;
+    if (key >= kKeyF1 && key <= kKeyF12) return true;
+    if (key < 128) {
+        switch (static_cast<char>(key)) {
+        case '.':
+        case ',':
+        case '/':
+        case ';':
+        case '\'':
+        case '`':
+        case '~':
+        case '-':
+        case '=':
+        case '[':
+        case ']':
+        case '\\':
+        case '|':
+        case '{':
+        case '}':
+        case '!':
+        case '@':
+        case '#':
+        case '$':
+        case '%':
+        case '^':
+        case '&':
+        case '*':
+        case '(':
+        case ')':
+        case '<':
+        case '>':
+        case '?':
+        case '"':
+        case ':':
+            return true;
+        default:
+            break;
+        }
+    }
+    return false;
+}
+
+bool shortcut_key_allowed(uint32_t key) {
+    if (shortcut_key_reserved(key)) return false;
+    return (key >= 'a' && key <= 'z') || (key >= 'A' && key <= 'Z');
+}
+
+std::string shortcut_key_label(uint32_t key) {
+    if (key >= 32 && key < 127) return std::string(1, static_cast<char>(key));
+    return "?";
 }
 
 char sym_char(char base) {

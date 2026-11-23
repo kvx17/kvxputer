@@ -1,7 +1,43 @@
 #!/bin/sh
+# Runs as root on apt/dpkg install (App Store + sideload .deb). Grants helper
+# privileges so Wall Of Flipper/AirTag and WiFi monitor work with zero user setup.
 set -e
-HELPER="/usr/lib/kvxputerzero/kvxputerzero-wifimon"
-if [ -x "$HELPER" ] && command -v setcap >/dev/null 2>&1; then
-    setcap cap_net_admin,cap_net_raw+ep "$HELPER" || true
+
+grant_net_caps() {
+    _bin="$1"
+    [ -x "$_bin" ] || return 0
+
+    # Prefer file capabilities (same model as FXCam / wifimon).
+    if command -v setcap >/dev/null 2>&1; then
+        if setcap cap_net_raw,cap_net_admin+ep "$_bin" 2>/dev/null; then
+            if command -v getcap >/dev/null 2>&1; then
+                getcap "$_bin" 2>/dev/null | grep -q 'cap_net' && return 0
+            else
+                return 0
+            fi
+        fi
+    fi
+
+    # Fallback: setuid root so the helper still works if setcap is unavailable
+    # or the filesystem drops xattrs. No user action required after install.
+    chown root:root "$_bin" 2>/dev/null || true
+    chmod 4755 "$_bin" 2>/dev/null || true
+}
+
+grant_net_caps "/usr/lib/kvxputerzero/kvxputerzero-wifimon"
+grant_net_caps "/usr/lib/kvxputerzero/kvxputerzero-blescan"
+
+# Optional Cap LED helper (older builds).
+if [ -f /usr/lib/kvxputerzero/sysfs-led ]; then
+    chown root:root /usr/lib/kvxputerzero/sysfs-led 2>/dev/null || true
+    chmod 4755 /usr/lib/kvxputerzero/sysfs-led 2>/dev/null || true
 fi
+if [ -f /etc/sudoers.d/kvxputerzero-leds ]; then
+    chmod 440 /etc/sudoers.d/kvxputerzero-leds 2>/dev/null || true
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload 2>/dev/null || true
+fi
+
 exit 0

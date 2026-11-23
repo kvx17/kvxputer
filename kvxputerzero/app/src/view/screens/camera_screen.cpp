@@ -164,6 +164,7 @@ void CameraScreen::build_help() {
         "F / Up       Dimmer",
         "X / Down     Brighter",
         "6 / Enter    Take photo",
+        "D            Photo details footer",
         "R            Record / stop video",
         "G            Framing guides",
         "1            Hide chrome",
@@ -208,18 +209,62 @@ void CameraScreen::on_timer() {
     update_hud();
 }
 
+void CameraScreen::update_fit(int frame_w, int frame_h) {
+    int view_w = plot_w_;
+    int view_h = plot_h_;
+    if (draw_ && draw_->header.h > 0 && view_h > static_cast<int>(draw_->header.h)) {
+        view_h = static_cast<int>(draw_->header.h);
+    }
+    if (draw_ && draw_->header.w > 0 && view_w > static_cast<int>(draw_->header.w)) {
+        view_w = static_cast<int>(draw_->header.w);
+    }
+    fit_view_h_ = view_h;
+    if (frame_w <= 0 || frame_h <= 0 || view_w <= 0 || view_h <= 0) {
+        fit_x_ = 0;
+        fit_y_ = 0;
+        fit_w_ = view_w;
+        fit_h_ = view_h;
+        return;
+    }
+    int dw = view_w;
+    int dh = frame_h * view_w / frame_w;
+    if (dh > view_h) {
+        dh = view_h;
+        dw = std::max(1, frame_w * view_h / frame_h);
+    }
+    if (dw < 1) dw = 1;
+    if (dh < 1) dh = 1;
+    fit_w_ = dw;
+    fit_h_ = dh;
+    fit_x_ = (view_w - dw) / 2;
+    fit_y_ = (view_h - dh) / 2;
+}
+
 void CameraScreen::draw_preview() {
     if (!draw_ || !draw_->data || !canvas_) return;
     platform::CameraFrame frame;
     if (!session_.copy_preview(frame) || frame.width <= 0 || frame.height <= 0) return;
+    if (frame.rgb565.size() < static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height)) return;
+
+    if (frame.width != preview_w_ || frame.height != preview_h_ || plot_h_ != fitted_plot_h_) {
+        preview_w_ = frame.width;
+        preview_h_ = frame.height;
+        fitted_plot_h_ = plot_h_;
+        update_fit(preview_w_, preview_h_);
+        rebuild_guides();
+    }
 
     auto* dst = static_cast<uint8_t*>(draw_->data);
-    std::memset(dst, 0, static_cast<size_t>(stride_ * plot_h_));
-    for (int y = 0; y < plot_h_ && y < frame.height; ++y) {
-        auto* row = reinterpret_cast<uint16_t*>(dst + y * stride_);
-        const int copy_w = std::min(plot_w_, frame.width);
-        std::memcpy(row, frame.rgb565.data() + static_cast<size_t>(y * frame.width),
-                    static_cast<size_t>(copy_w) * sizeof(uint16_t));
+    const int view_h = fit_view_h_ > 0 ? fit_view_h_ : plot_h_;
+    std::memset(dst, 0, static_cast<size_t>(stride_ * view_h));
+    for (int y = 0; y < fit_h_; ++y) {
+        const int sy = y * frame.height / fit_h_;
+        const uint16_t* src = frame.rgb565.data() + static_cast<size_t>(sy) * static_cast<size_t>(frame.width);
+        auto* row = reinterpret_cast<uint16_t*>(dst + static_cast<size_t>(fit_y_ + y) * static_cast<size_t>(stride_));
+        for (int x = 0; x < fit_w_; ++x) {
+            const int sx = x * frame.width / fit_w_;
+            row[fit_x_ + x] = src[sx];
+        }
     }
     lv_obj_invalidate(canvas_);
 }
@@ -227,8 +272,9 @@ void CameraScreen::draw_preview() {
 void CameraScreen::update_hud() {
     if (filter_lbl_) {
         char buf[96];
-        std::snprintf(buf, sizeof(buf), "%s  br %.1f  %s", tools::camfilter::filter_name(session_.filter()),
-                      session_.brightness(), guide_name(static_cast<int>(guide_)));
+        std::snprintf(buf, sizeof(buf), "%s  br %.1f  %s%s", tools::camfilter::filter_name(session_.filter()),
+                      session_.brightness(), guide_name(static_cast<int>(guide_)),
+                      session_.details_footer() ? "  det" : "");
         lv_label_set_text(filter_lbl_, buf);
     }
     if (rec_lbl_) {
@@ -243,8 +289,10 @@ void CameraScreen::rebuild_guides() {
     if (!guide_layer_) return;
     lv_obj_clean(guide_layer_);
     const auto accent = sec_color();
-    const int w = plot_w_;
-    const int h = plot_h_;
+    const int x0 = fit_x_;
+    const int y0 = fit_y_;
+    const int w = fit_w_ > 0 ? fit_w_ : plot_w_;
+    const int h = fit_h_ > 0 ? fit_h_ : plot_h_;
     auto add_line = [&](int x1, int y1, int x2, int y2) {
         auto* line = lv_line_create(guide_layer_);
         static thread_local lv_point_precise_t pts[2];
@@ -271,20 +319,20 @@ void CameraScreen::rebuild_guides() {
     const bool lines = guide_ == GuideMode::Lines || guide_ == GuideMode::All;
 
     if (grid) {
-        add_line(w / 3, 0, w / 3, h);
-        add_line(2 * w / 3, 0, 2 * w / 3, h);
-        add_line(0, h / 3, w, h / 3);
-        add_line(0, 2 * h / 3, w, 2 * h / 3);
+        add_line(x0 + w / 3, y0, x0 + w / 3, y0 + h);
+        add_line(x0 + 2 * w / 3, y0, x0 + 2 * w / 3, y0 + h);
+        add_line(x0, y0 + h / 3, x0 + w, y0 + h / 3);
+        add_line(x0, y0 + 2 * h / 3, x0 + w, y0 + 2 * h / 3);
     }
     if (diamond) {
-        add_line(w / 2, 0, w, h / 2);
-        add_line(w, h / 2, w / 2, h);
-        add_line(w / 2, h, 0, h / 2);
-        add_line(0, h / 2, w / 2, 0);
+        add_line(x0 + w / 2, y0, x0 + w, y0 + h / 2);
+        add_line(x0 + w, y0 + h / 2, x0 + w / 2, y0 + h);
+        add_line(x0 + w / 2, y0 + h, x0, y0 + h / 2);
+        add_line(x0, y0 + h / 2, x0 + w / 2, y0);
     }
     if (lines) {
-        add_line(w / 2, 0, w / 2, h);
-        add_line(0, h / 2, w, h / 2);
+        add_line(x0 + w / 2, y0, x0 + w / 2, y0 + h);
+        add_line(x0, y0 + h / 2, x0 + w, y0 + h / 2);
     }
 }
 
@@ -301,8 +349,12 @@ void CameraScreen::adjust_brightness(float delta) {
 
 void CameraScreen::take_photo() {
     std::string path, err;
-    if (session_.capture_still(path, err)) {
-        last_msg_ = path;
+    int w = 0;
+    int h = 0;
+    if (session_.capture_still(path, err, &w, &h)) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "saved %dx%d", w, h);
+        last_msg_ = buf;
     } else {
         last_msg_ = err.empty() ? "capture failed" : err;
     }
@@ -390,6 +442,11 @@ bool CameraScreen::handle_key(uint32_t key) {
         cycle_guide();
         return true;
     }
+    if (key == 'd' || key == 'D') {
+        session_.set_details_footer(!session_.details_footer());
+        last_msg_ = session_.details_footer() ? "photo details on" : "photo details off";
+        return true;
+    }
     if (key == '1') {
         chrome_on_ = !chrome_on_;
         set_chrome_visible(chrome_on_);
@@ -404,6 +461,8 @@ bool CameraScreen::handle_key(uint32_t key) {
         plot_h_ = chrome_on_ ? view::kContentHeight : view::kScreenHeight;
         if (canvas_) lv_obj_set_size(canvas_, plot_w_, plot_h_);
         if (guide_layer_) lv_obj_set_size(guide_layer_, plot_w_, plot_h_);
+        update_fit(preview_w_, preview_h_);
+        fitted_plot_h_ = plot_h_;
         rebuild_guides();
         return true;
     }

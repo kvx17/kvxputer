@@ -456,11 +456,14 @@ endif()
 # ====================================================
 # Platform sources
 # ====================================================
-# Create application platform sources and static library
+# Create application platform sources and static library.
+# LVGL-facing input/screenshot live in core so CLI can link platform without LVGL.
 file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/*.cpp"
 )
+list(FILTER PLATFORM_SOURCES EXCLUDE REGEX ".*/linux_input\\.cpp$")
+list(FILTER PLATFORM_SOURCES EXCLUDE REGEX ".*/screenshot_service\\.cpp$")
 
 add_library(${PROJECT_NAME}_platform 
     STATIC
@@ -469,22 +472,18 @@ add_library(${PROJECT_NAME}_platform
 
 target_include_directories(${PROJECT_NAME}_platform
     PUBLIC
-        ${LVGL_INCLUDE_DIR}
         "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
 )
 
 target_compile_definitions(${PROJECT_NAME}_platform
     PUBLIC
-        APP_KEY_INPUT_DEVICE="${APP_KEY_INPUT_DEVICE}"
         APP_FRAMEBUFFER_DEVICE="${APP_FRAMEBUFFER_DEVICE}"
         APP_DRM_DEVICE="${APP_DRM_DEVICE}"
         APP_DRM_CONNECTOR_ID=${APP_DRM_CONNECTOR_ID}
-)
-
-target_link_libraries(${PROJECT_NAME}_platform
-    PUBLIC
-        lvgl
+        # This library owns camera_libcamera.cpp. The flag on lvgl does not
+        # reach it, and without the flag the camera opens the unlinked stub.
+        KVX_HAVE_LIBCAMERA=${KVX_HAVE_LIBCAMERA}
 )
 
 # ====================================================
@@ -548,9 +547,78 @@ target_include_directories(${PROJECT_NAME}_tools
 
 # Camera session encodes JPEG/PNG and applies filters from tools.
 # libcamera is linked directly (same approach as FXCam).
+#
+# BlueZ (libbluetooth): Wall Of Flipper/AirTag helper needs HCI headers + lib.
+# CM0 BSP often ships only the runtime .so.N (no -dev symlink/headers).
+# An empty normal variable makes find_path skip the search, so clear it first.
+unset(BLUEZ_INCLUDE_DIR)
+if(USE_DESKTOP)
+    find_library(BLUEZ_LIBRARY NAMES bluetooth)
+    find_path(BLUEZ_INCLUDE_DIR NAMES bluetooth/bluetooth.h)
+else()
+    cm0_find_library(BLUEZ_LIBRARY bluetooth libbluetooth.so.3 libbluetooth.so.3.19.15)
+    cm0_find_header(BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h
+        "${CM0_SYSROOT}/usr/include"
+    )
+    if(NOT BLUEZ_INCLUDE_DIR)
+        # Headers are arch-independent; stage a tiny include tree so we do not
+        # pollute the cross compile with the whole host /usr/include.
+        set(_bluez_hdr_cache "${CMAKE_CURRENT_SOURCE_DIR}/.cache/bluez-headers")
+        set(_bluez_src_dir "")
+        if(EXISTS "/usr/include/bluetooth/hci.h" AND EXISTS "/usr/include/bluetooth/hci_lib.h")
+            set(_bluez_src_dir "/usr/include/bluetooth")
+        endif()
+        if(_bluez_src_dir STREQUAL "" AND CM0_ALLOW_FETCH_DEPS)
+            message(STATUS "BlueZ headers missing in BSP; fetching libbluetooth-dev (amd64) for headers")
+            set(_bluez_deb_cache "${CMAKE_CURRENT_SOURCE_DIR}/.cache/bluez-dev")
+            file(MAKE_DIRECTORY "${_bluez_deb_cache}")
+            execute_process(
+                COMMAND bash -c "cd '${_bluez_deb_cache}' && apt-get download libbluetooth-dev 2>/dev/null || true"
+                RESULT_VARIABLE _bluez_dl_rc
+            )
+            file(GLOB _bluez_debs "${_bluez_deb_cache}/libbluetooth-dev_*.deb")
+            if(_bluez_debs)
+                list(GET _bluez_debs 0 _bluez_deb)
+                execute_process(
+                    COMMAND dpkg-deb -x "${_bluez_deb}" "${_bluez_deb_cache}/root"
+                    RESULT_VARIABLE _bluez_x_rc
+                )
+                if(EXISTS "${_bluez_deb_cache}/root/usr/include/bluetooth/hci.h")
+                    set(_bluez_src_dir "${_bluez_deb_cache}/root/usr/include/bluetooth")
+                endif()
+            endif()
+        endif()
+        if(NOT _bluez_src_dir STREQUAL "")
+            file(MAKE_DIRECTORY "${_bluez_hdr_cache}/bluetooth")
+            foreach(_h IN ITEMS bluetooth.h hci.h hci_lib.h)
+                file(COPY "${_bluez_src_dir}/${_h}" DESTINATION "${_bluez_hdr_cache}/bluetooth")
+            endforeach()
+            set(BLUEZ_INCLUDE_DIR "${_bluez_hdr_cache}")
+            message(STATUS "Using staged BlueZ headers: ${BLUEZ_INCLUDE_DIR}")
+        endif()
+    endif()
+endif()
+if(NOT BLUEZ_LIBRARY)
+    message(FATAL_ERROR
+        "libbluetooth not found (needed for BLE advert sniff / Wall of Flipper+Airtag).\n"
+        "Desktop: install bluez / libbluetooth. CM0: ensure libbluetooth.so.3 is in ${CM0_SYSROOT}."
+    )
+endif()
+if(NOT BLUEZ_INCLUDE_DIR)
+    message(FATAL_ERROR
+        "bluetooth/*.h not found (need bluetooth.h, hci.h, hci_lib.h).\n"
+        "Install libbluetooth-dev on the build host, or place headers under the BSP sysroot."
+    )
+endif()
+
 target_link_libraries(${PROJECT_NAME}_platform
     PUBLIC
         ${PROJECT_NAME}_tools
+        ${BLUEZ_LIBRARY}
+)
+target_include_directories(${PROJECT_NAME}_platform
+    PUBLIC
+        "${BLUEZ_INCLUDE_DIR}"
 )
 if(USE_DESKTOP)
     target_link_libraries(${PROJECT_NAME}_platform
@@ -678,8 +746,14 @@ target_link_libraries(logger
         ${PLATFORM_LIBS}
 )
 
+set(CORE_GUI_PLATFORM_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/linux_input.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/platform/screenshot_service.cpp"
+)
+
 add_library(${PROJECT_NAME}_core STATIC
     ${APP_SOURCES}
+    ${CORE_GUI_PLATFORM_SOURCES}
 )
 
 target_include_directories(${PROJECT_NAME}_core
@@ -701,6 +775,7 @@ target_compile_definitions(${PROJECT_NAME}_core
         APP_CONFIG_FILE="${APP_CONFIG_FILE}"
         APP_CMAKE_ASSETS_ROOT="${APP_ASSETS_ROOT}"
         APP_SOURCE_ASSETS_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        APP_KEY_INPUT_DEVICE="${APP_KEY_INPUT_DEVICE}"
         APP_FRAMEBUFFER_DEVICE="${APP_FRAMEBUFFER_DEVICE}"
         APP_DRM_DEVICE="${APP_DRM_DEVICE}"
         APP_DRM_CONNECTOR_ID=${APP_DRM_CONNECTOR_ID}
@@ -730,6 +805,33 @@ if(USE_DESKTOP)
 endif()
 
 # ====================================================
+# Runners — shared tool work for GUI screens and CLI
+# ====================================================
+file(GLOB_RECURSE RUNNER_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/runners/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/runners/*.cpp"
+)
+
+add_library(${PROJECT_NAME}_runners STATIC
+    ${RUNNER_SOURCES}
+)
+
+target_include_directories(${PROJECT_NAME}_runners
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runners"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/model"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/platform"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
+)
+
+target_link_libraries(${PROJECT_NAME}_runners
+    PUBLIC
+        ${PROJECT_NAME}_model
+        ${PROJECT_NAME}_platform
+        ${PROJECT_NAME}_tools
+)
+
+# ====================================================
 # main
 # ====================================================
 add_executable(${PROJECT_NAME}
@@ -743,6 +845,7 @@ target_link_libraries(${PROJECT_NAME}
         ${PROJECT_NAME}_model
         ${PROJECT_NAME}_view
         ${PROJECT_NAME}_viewmodel
+        ${PROJECT_NAME}_runners
 )
 
 # On-device Cap ST25 test harness (same platform code as the UI).
@@ -762,6 +865,38 @@ target_link_libraries(${PROJECT_NAME}-nfctest
 # Privileged Wi-Fi monitor helper (file capabilities, not setuid).
 add_executable(${PROJECT_NAME}-wifimon
     src/helpers/wifimon_main.cpp
+)
+
+# Privileged BLE advert helper (raw AD payload for Wall of Flipper / AirTag).
+add_executable(${PROJECT_NAME}-blescan
+    src/helpers/blescan_main.cpp
+)
+target_include_directories(${PROJECT_NAME}-blescan PRIVATE "${BLUEZ_INCLUDE_DIR}")
+target_link_libraries(${PROJECT_NAME}-blescan PRIVATE ${BLUEZ_LIBRARY})
+
+# SSH / TTY CLI — no LVGL, SDL, view, or core.
+file(GLOB_RECURSE CLI_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cli/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/cli/*.cpp"
+)
+
+add_executable(${PROJECT_NAME}-cli
+    ${CLI_SOURCES}
+)
+
+target_include_directories(${PROJECT_NAME}-cli
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/cli"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/runners"
+)
+
+target_link_libraries(${PROJECT_NAME}-cli
+    PRIVATE
+        ${PROJECT_NAME}_runners
+        ${PROJECT_NAME}_platform
+        ${PROJECT_NAME}_tools
+        ${PROJECT_NAME}_model
+        pthread
 )
 
 if(USE_DESKTOP)

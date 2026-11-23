@@ -702,8 +702,7 @@ bool WifiMonitorSession::start(const std::string& ifname, std::string& error) {
     }
     const std::string helper = find_wifimon_helper();
     if (helper.empty()) {
-        error = "kvxputerzero-wifimon missing. sudo setcap cap_net_admin,cap_net_raw+ep "
-                "/usr/lib/kvxputerzero/kvxputerzero-wifimon";
+        error = "kvxputerzero-wifimon missing (reinstall kvxputerzero package)";
         return false;
     }
 
@@ -767,7 +766,7 @@ bool WifiMonitorSession::start(const std::string& ifname, std::string& error) {
     while (!first.empty() && (first.back() == '\r' || first.back() == ' ')) first.pop_back();
     if (first != "OK") {
         error = first.empty()
-                    ? ("helper failed. sudo setcap cap_net_admin,cap_net_raw+ep " + helper)
+                    ? ("helper failed (reinstall package if privileges missing): " + helper)
                     : first;
         stop();
         return false;

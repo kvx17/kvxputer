@@ -53,6 +53,7 @@ uint32_t map_control_key(SDL_Keycode key) {
         case SDLK_RETURN:
             return LV_KEY_ENTER;
         case SDLK_TAB:
+            return platform::kKeyTab;
         case SDLK_PAGEDOWN:
             return LV_KEY_NEXT;
         case SDLK_PAGEUP:
@@ -575,6 +576,11 @@ void DesktopSimulatorFrame::render() {
 }
 
 bool DesktopSimulatorFrame::inject_named_key(const std::string& name) {
+    if (!inject_named_key_state(name, true)) return false;
+    return inject_named_key_state(name, false);
+}
+
+bool DesktopSimulatorFrame::inject_named_key_state(const std::string& name, bool pressed) {
     if (!keypad_ || name.empty()) return false;
 
     auto lower = name;
@@ -582,61 +588,38 @@ bool DesktopSimulatorFrame::inject_named_key(const std::string& name) {
         if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
     }
 
-    if (lower == "up") {
-        keypad_->emit_key(LV_KEY_UP);
+    auto emit = [&](uint32_t key) {
+        keypad_->emit_key_state(key, pressed);
         return true;
-    }
-    if (lower == "down") {
-        keypad_->emit_key(LV_KEY_DOWN);
-        return true;
-    }
-    if (lower == "left") {
-        keypad_->emit_key(LV_KEY_LEFT);
-        return true;
-    }
-    if (lower == "right") {
-        keypad_->emit_key(LV_KEY_RIGHT);
-        return true;
-    }
-    if (lower == "enter" || lower == "return" || lower == "ok") {
-        keypad_->emit_key(LV_KEY_ENTER);
-        return true;
-    }
-    if (lower == "esc" || lower == "escape" || lower == "back") {
-        keypad_->emit_key(LV_KEY_ESC);
-        return true;
-    }
-    if (lower == "backspace" || lower == "del" || lower == "delete") {
-        keypad_->emit_key(LV_KEY_BACKSPACE);
-        return true;
-    }
-    if (lower == "tab") {
-        keypad_->emit_key(LV_KEY_NEXT);
-        return true;
-    }
-    if (lower == "home") {
-        // Action-bar slot 8 → house
-        keypad_->emit_key(static_cast<uint32_t>('8'));
-        return true;
-    }
-    if (lower == "fn+h" || lower == "help") {
-        keypad_->emit_key(platform::kKeyHelp);
-        return true;
-    }
+    };
+
+    if (lower == "up") return emit(LV_KEY_UP);
+    if (lower == "down") return emit(LV_KEY_DOWN);
+    if (lower == "left") return emit(LV_KEY_LEFT);
+    if (lower == "right") return emit(LV_KEY_RIGHT);
+    if (lower == "enter" || lower == "return" || lower == "ok") return emit(LV_KEY_ENTER);
+    if (lower == "esc" || lower == "escape" || lower == "back") return emit(LV_KEY_ESC);
+    if (lower == "backspace" || lower == "del" || lower == "delete") return emit(LV_KEY_BACKSPACE);
+    if (lower == "tab") return emit(platform::kKeyTab);
+    if (lower == "space" || lower == "spc") return emit(static_cast<uint32_t>(' '));
+    if (lower == "home") return emit(static_cast<uint32_t>('8'));
+    if (lower == "fn+h" || lower == "help") return emit(platform::kKeyHelp);
     if (lower == "fn+j" || lower == "printscreen" || lower == "screenshot") {
-        keypad_->emit_key(platform::kKeyPrintScreen);
-        return true;
+        return emit(platform::kKeyPrintScreen);
     }
     if (lower.rfind("fn+", 0) == 0 && lower.size() == 4) {
         const char base = lower[3];
-        keypad_->set_host_fn(true);
-        keypad_->host_key_event(base, true);
-        keypad_->host_key_event(base, false);
-        keypad_->set_host_fn(false);
+        if (pressed) keypad_->set_host_fn(true);
+        keypad_->host_key_event(base, pressed);
+        if (!pressed) keypad_->set_host_fn(false);
         return true;
     }
-    if (name.size() == 1) {
-        return inject_char(name[0]);
+    if (lower.size() == 1) {
+        const char ch = lower[0];
+        if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+            keypad_->host_key_event(ch, pressed);
+            return true;
+        }
     }
     LOG_WARN("ui script: unknown key '{}'", name);
     return false;

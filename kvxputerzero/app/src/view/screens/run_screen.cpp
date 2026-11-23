@@ -61,7 +61,15 @@ void RunScreen::build() {
     refresh_list();
 
     poll_timer_ = lv_timer_create(poll_cb, 100, this);
+}
 
+void RunScreen::on_shown() {
+    start_worker();
+}
+
+void RunScreen::start_worker() {
+    if (worker_started_) return;
+    worker_started_ = true;
     cancel_ = false;
     worker_done_ = false;
     worker_thread_ = std::thread([this]() {

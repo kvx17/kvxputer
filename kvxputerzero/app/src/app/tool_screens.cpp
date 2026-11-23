@@ -1,4 +1,4 @@
-// Tool screens for kvxputerzero: channel tool menus, Discovery, and every ToolId run screen.
+// Tool screens for kvxputerzero: channel tool menus, Discovery tools, and every ToolId run screen.
 //
 // Navigation model
 // ----------------
@@ -11,13 +11,14 @@
 // and AppPage::Discovery via make_discovery_screen().
 //
 // ToolId::None is used for small generic helpers: "info:<text>" (one-line result list),
-// "ethlink", "gpsfolder" and "filter" (Discovery filter prompt).
+// "ethlink", "gpsfolder" and "filter" (legacy discovery filter prompt).
 //
 // All blocking work runs in RunScreen workers (cancel = Esc). Platform helpers report errors as
 // strings, so nothing here hangs on desktop builds that lack BlueZ, nmcli, ALSA, etc.
 
 #include "tool_screens.h"
 
+#include "launch_catalog.h"
 #include "cap_screens.h"
 #include "gps_screens.h"
 #include "audio.h"
@@ -33,6 +34,7 @@
 #include "net_info.h"
 #include "doc_screen.h"
 #include "info_screen.h"
+#include "menu_icons.h"
 #include "theme.h"
 #include "ui_const.h"
 #include "options_list_screen.h"
@@ -46,6 +48,9 @@
 #include "tvbgone_lib.h"
 #include "uart_session.h"
 #include "user_paths.h"
+#include "file_share_screen.h"
+#include "file_share_server.h"
+#include "roku_screen.h"
 #include "wifi_analyzer_screen.h"
 #include "wifi_monitor.h"
 #include "wifi_scan.h"
@@ -1681,26 +1686,27 @@ void http_handle(int fd, const std::string& root, bool writable, Cancel& cancel,
 
 Worker http_share_worker(std::string root, bool writable, std::string label) {
     return [root, writable, label](Cancel& cancel, const Log& log, const Status& status) {
-        constexpr uint16_t kPort = 8080;
-        std::string err;
-        int lfd = listen_on("0.0.0.0", kPort, err);
-        if (lfd < 0) {
-            log("listen failed: " + err);
+        auto listen = tools::file_share::listen_first_free(8080, 8099);
+        if (listen.fd < 0) {
+            log("listen failed: " + listen.error);
+            if (!listen.occupant.empty()) log("port busy: " + listen.occupant);
             status("error");
             return;
         }
-        log(label + " on :8080");
+        if (!listen.occupant.empty()) log("skipped busy port: " + listen.occupant);
+        log(label + " on :" + std::to_string(listen.port));
         log("root " + root);
         log(writable ? "PUT uploads enabled" : "read-only, dotfiles hidden");
-        status("serving :8080");
+        status(sfmt("serving :%u", listen.port));
         int served = 0;
+        int lfd = listen.fd;
         while (!cancel) {
             std::string peer;
             int cfd = accept_poll(lfd, cancel, 250, &peer);
             if (cfd < 0) continue;
             http_handle(cfd, root, writable, cancel, log, peer);
             ::close(cfd);
-            status(sfmt("serving :8080 (%d req)", ++served));
+            status(sfmt("serving :%u (%d req)", listen.port, ++served));
         }
         close_fd(lfd);
     };
@@ -1710,76 +1716,8 @@ Worker http_share_worker(std::string root, bool writable, std::string label) {
 // Net tools: Roku / WireGuard / Printer / UPnP
 // ---------------------------------------------------------------------------------------------
 
-struct RokuState {
-    std::mutex mu;
-    std::string last = "-";
-};
-
-RokuState& roku_state() {
-    static RokuState s;
-    return s;
-}
-
-void roku_send_key(const std::string& ip, const std::string& key) {
-    std::thread([ip, key]() {
-        const auto r = platform::http_request("POST", "http://" + ip + ":8060/keypress/" + key, {}, 2, 256);
-        auto& s = roku_state();
-        std::lock_guard<std::mutex> lock(s.mu);
-        s.last = r.error.empty() ? (r.status == 200 ? key + " OK" : sfmt("%s HTTP %d", key.c_str(), r.status))
-                                 : shorten(r.error, 24);
-    }).detach();
-}
-
-Worker roku_find_worker() {
-    return [](Cancel& cancel, const Log& log, const Status& status) {
-        status("SSDP search...");
-        std::string err;
-        const auto hits = ssdp_search("roku:ecp", 3000, cancel, err);
-        if (!err.empty()) {
-            log("ssdp error: " + err);
-            return;
-        }
-        if (hits.empty()) {
-            log("no Roku found; set the IP manually");
-            return;
-        }
-        for (const auto& h : hits) log("Roku " + h.from + " " + shorten(h.location, 30));
-        write_text_file(tools::config_file("roku_ip.txt"), hits[0].from + "\n");
-        log("saved " + hits[0].from + "; Esc and reopen Roku");
-    };
-}
-
-Screen make_roku(VM& vm, AssetManager& assets, const Stage& st) {
-    const ToolId id = ToolId::Roku;
-    if (st.name == "setip") {
-        return make_prompt(vm, assets, "Roku IP", "IPv4 address of the Roku", read_config_value("roku_ip.txt", ""),
-                           [&vm, id](const std::string& v) {
-                               const std::string ip = trim(v);
-                               if (valid_host(ip)) write_text_file(tools::config_file("roku_ip.txt"), ip + "\n");
-                               nav(vm, id, "");
-                           });
-    }
-    if (st.name == "find") return make_run(vm, assets, "Roku SSDP", roku_find_worker());
-    const std::string ip = read_config_value("roku_ip.txt", "");
-    std::string last;
-    {
-        auto& s = roku_state();
-        std::lock_guard<std::mutex> lock(s.mu);
-        last = s.last;
-    }
-    std::vector<MenuEntry> e;
-    e.push_back(stage_entry(vm, id, "IP: " + (ip.empty() ? std::string("(not set)") : ip) + "  [" + last + "]", ""));
-    e.push_back(stage_entry(vm, id, "Set IP...", "setip"));
-    e.push_back(stage_entry(vm, id, "Discover (SSDP)", "find"));
-    if (!ip.empty() && valid_host(ip)) {
-        static const char* kKeys[] = {"Home", "Back", "Select", "Up", "Down", "Left", "Right", "Play", "Rev", "Fwd",
-                                      "InstantReplay", "Info", "VolumeUp", "VolumeDown", "VolumeMute", "PowerOff"};
-        for (const char* k : kKeys) {
-            const std::string key = k;
-            e.push_back({key, [ip, key]() { roku_send_key(ip, key); }});
-        }
-    }
-    return make_options(vm, assets, "Roku Remote", std::move(e));
+Screen make_roku(VM& vm, AssetManager& assets, const Stage& /*st*/) {
+    return std::make_unique<screen::RokuScreen>(vm, assets);
 }
 
 std::string wg_prefix() {
@@ -1942,59 +1880,122 @@ std::string hex_digits(const std::string& s) {
     return out;
 }
 
-// mfg_hex is continuous hex (company id little-endian + payload), entries joined with ';'.
-// Apple company 0x004C => "4c00", Find My type 0x12. Matches firmware parseFindMy().
+// Mirror Cardputer wall_of_airtag parseFindMy() / wall_of_flipper looksLikeFlipper().
 struct FindMyInfo {
     uint8_t battery = 0xff;
     bool separated = false;
     std::string key_prefix;
 };
 
+bool parse_find_my_bytes(const uint8_t* md, size_t n, FindMyInfo& out) {
+    // Firmware: cid LE at [0..1], type [2]==0x12, status [4].
+    if (!md || n < 5) return false;
+    const uint16_t cid = static_cast<uint16_t>(md[0] | (static_cast<uint16_t>(md[1]) << 8));
+    if (cid != 0x004C) return false;
+    if (md[2] != 0x12) return false;
+    const uint8_t status = md[4];
+    out.battery = static_cast<uint8_t>((status >> 6) & 0x03);
+    out.separated = (status & 0x20) != 0;
+    out.key_prefix.clear();
+    if (n >= 8) {
+        char buf[7];
+        std::snprintf(buf, sizeof(buf), "%02X%02X%02X", md[5], md[6], md[7]);
+        out.key_prefix = buf;
+    }
+    return true;
+}
+
 bool parse_find_my_mfg(const std::string& mfg_hex, FindMyInfo& out) {
+    auto try_chunk = [&](const std::string& hex) -> bool {
+        if (hex.size() < 10) return false;
+        std::vector<uint8_t> raw;
+        raw.reserve(hex.size() / 2);
+        for (size_t i = 0; i + 1 < hex.size(); i += 2) {
+            try {
+                raw.push_back(static_cast<uint8_t>(std::stoul(hex.substr(i, 2), nullptr, 16)));
+            } catch (...) {
+                return false;
+            }
+        }
+        return parse_find_my_bytes(raw.data(), raw.size(), out);
+    };
+    // Prefer per-entry parse (mfg records joined with ';').
+    size_t pos = 0;
+    while (pos < mfg_hex.size()) {
+        const size_t semi = mfg_hex.find(';', pos);
+        const std::string part =
+            hex_digits(semi == std::string::npos ? mfg_hex.substr(pos) : mfg_hex.substr(pos, semi - pos));
+        if (try_chunk(part)) return true;
+        if (semi == std::string::npos) break;
+        pos = semi + 1;
+    }
+    // Fallback: sliding window on concatenated hex (legacy).
     const std::string all = hex_digits(mfg_hex);
     for (size_t i = 0; i + 10 <= all.size(); ++i) {
-        if (all.compare(i, 4, "4c00") != 0) continue;
-        if (all.compare(i + 4, 2, "12") != 0) continue;
-        unsigned status = 0;
-        try {
-            status = std::stoul(all.substr(i + 8, 2), nullptr, 16);
-        } catch (...) {
-            continue;
+        if (all.compare(i, 6, "4c0012") != 0) continue;
+        if (try_chunk(all.substr(i))) return true;
+    }
+    return false;
+}
+
+bool parse_find_my_device(const platform::BleDevice& d, FindMyInfo& out) {
+    // Prefer raw AD manufacturer field (Cardputer path).
+    const auto& pl = d.adv_payload;
+    size_t i = 0;
+    while (i + 1 < pl.size()) {
+        const uint8_t dlen = pl[i];
+        if (dlen == 0) break;
+        if (i + 1 + dlen > pl.size()) break;
+        const uint8_t type = pl[i + 1];
+        const uint8_t* v = pl.data() + i + 2;
+        const uint8_t vlen = static_cast<uint8_t>(dlen - 1);
+        if (type == 0xFF && vlen >= 5) {
+            if (parse_find_my_bytes(v, vlen, out)) return true;
         }
-        out.battery = static_cast<uint8_t>((status >> 6) & 0x03);
-        out.separated = (status & 0x20) != 0;
-        out.key_prefix.clear();
-        if (i + 16 <= all.size()) {
-            out.key_prefix = all.substr(i + 10, 6);
-            for (char& c : out.key_prefix) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        i += static_cast<size_t>(dlen) + 1;
+    }
+    return parse_find_my_mfg(d.mfg_hex, out);
+}
+
+bool payload_has_uuid16(const std::vector<uint8_t>& payload, uint16_t uuid) {
+    // Exact copy of Cardputer wall_of_flipper::payloadHasUuid16().
+    size_t i = 0;
+    const size_t len = payload.size();
+    while (i + 1 < len) {
+        const uint8_t dlen = payload[i];
+        if (dlen == 0) break;
+        if (i + 1 + dlen > len) break;
+        const uint8_t type = payload[i + 1];
+        if (type == 0x02 || type == 0x03) {
+            for (size_t j = 2; j + 1 <= static_cast<size_t>(dlen); j += 2) {
+                const uint16_t u =
+                    static_cast<uint16_t>(payload[i + j] | (static_cast<uint16_t>(payload[i + j + 1]) << 8));
+                if (u == uuid) return true;
+            }
         }
-        return true;
+        i += static_cast<size_t>(dlen) + 1;
     }
     return false;
 }
 
 bool looks_like_flipper(const platform::BleDevice& d) {
-    // Mirror firmware looksLikeFlipper(): name, or 16-bit service UUID 0x3080..0x3083
-    // in BlueZ UUIDs / ServiceData / raw advert leftovers.
-    if (contains_ci(d.name, "flipper")) return true;
-    static const char* kIds[] = {"3080", "3081", "3082", "3083"};
-    static const char* kFull[] = {
-        "00003080-0000-1000-8000-00805f9b34fb",
-        "00003081-0000-1000-8000-00805f9b34fb",
-        "00003082-0000-1000-8000-00805f9b34fb",
-        "00003083-0000-1000-8000-00805f9b34fb",
-    };
-    for (const char* full : kFull) {
+    // Exact Cardputer looksLikeFlipper() logic.
+    if (d.name.find("Flipper") != std::string::npos || d.name.find("flipper") != std::string::npos) {
+        return true;
+    }
+    static const uint16_t kIds[] = {0x3080, 0x3081, 0x3082, 0x3083};
+    for (uint16_t id : kIds) {
+        char hex[5];
+        std::snprintf(hex, sizeof(hex), "%04X", id);
+        if (contains_ci(d.services, hex)) return true;
+        char full[40];
+        std::snprintf(full, sizeof(full), "0000%04x-0000-1000-8000-00805f9b34fb", id);
         if (contains_ci(d.services, full)) return true;
     }
-    const std::string svc = hex_digits(d.services);
-    const std::string mfg = hex_digits(d.mfg_hex);
-    for (const char* id : kIds) {
-        // Prefer Bluetooth base UUID form (...0000308x00001000...) over random hex hits.
-        const std::string base = std::string("0000") + id + "00001000";
-        if (svc.find(base) != std::string::npos) return true;
-        if (svc.find(id) != std::string::npos) return true;
-        if (mfg.find(id) != std::string::npos) return true;
+    if (!d.adv_payload.empty()) {
+        for (uint16_t id : kIds) {
+            if (payload_has_uuid16(d.adv_payload, id)) return true;
+        }
     }
     return false;
 }
@@ -2020,16 +2021,15 @@ bool ble_matches(BleMode mode, const platform::BleDevice& d, std::string& tag) {
         tag = "FLIPPER";
         return looks_like_flipper(d);
     case BleMode::Airtag: {
+        // Cardputer only accepts parseFindMy() hits (Apple mfg 0x004C type 0x12).
         FindMyInfo info;
-        if (parse_find_my_mfg(d.mfg_hex, info)) {
+        if (parse_find_my_device(d, info)) {
             tag = std::string("FINDMY ") + find_my_battery_label(info.battery) +
                   (info.separated ? " sep" : " near");
             if (!info.key_prefix.empty()) tag += " " + info.key_prefix;
             return true;
         }
-        tag = "FINDMY";
-        return contains_ci(d.name, "airtag") || contains_ci(d.name, "find my") ||
-               contains_ci(d.name, "findmy");
+        return false;
     }
     case BleMode::Skimmer: {
         tag = "SKIMMER?";
@@ -2081,11 +2081,11 @@ Worker ble_worker(BleMode mode, std::string target) {
                 noted = true;
             }
             if (mode == BleMode::Flipper && !noted) {
-                log("looking for name Flipper or UUID 3080-3083");
+                log("match: name Flipper or UUID 3080-3083 (raw AD)");
                 noted = true;
             }
             if (mode == BleMode::Airtag && !noted) {
-                log("looking for Apple Find My mfg 4C:00 type 12");
+                log("match: Apple mfg 0x004C type 0x12 (Find My)");
                 noted = true;
             }
             if (mode == BleMode::Hunter) {
@@ -2111,7 +2111,7 @@ Worker ble_worker(BleMode mode, std::string target) {
                     std::string line = sfmt("%s %s %d", label.c_str(), d.address.c_str(), d.rssi);
                     if (mode == BleMode::Airtag) {
                         FindMyInfo info;
-                        if (parse_find_my_mfg(d.mfg_hex, info)) {
+                        if (parse_find_my_device(d, info)) {
                             const float meters =
                                 std::pow(10.0f, (-59.0f - static_cast<float>(d.rssi)) / 20.0f);
                             const float m = std::max(0.1f, std::min(99.0f, meters));
@@ -4788,7 +4788,7 @@ std::unique_ptr<screen::KvxScreen> make_channel_tool_menu(viewmodel::BaseViewMod
 
     auto add_tool = [&](const model::ToolDesc* d) {
         const ToolId tid = d->id;
-        e.push_back({d->label, [&vm, tid]() { vm.open_tool(tid); }});
+        e.push_back({d->label, [&vm, tid]() { vm.open_tool(tid); }, view::tool_icon(tid)});
     };
     auto add_by_id = [&](ToolId tid) {
         for (const auto* d : tools) {
@@ -4850,15 +4850,12 @@ std::unique_ptr<screen::KvxScreen> make_channel_tool_menu(viewmodel::BaseViewMod
 }
 
 std::unique_ptr<screen::KvxScreen> make_discovery_screen(viewmodel::BaseViewModel& vm, AssetManager& assets) {
-    const std::string filter = vm.discovery_filter();
     std::vector<MenuEntry> e;
-    e.push_back({filter.empty() ? std::string("Filter...") : "Filter: " + filter, [&vm]() { nav(vm, ToolId::None, "filter"); }});
-    for (const auto* d : model::all_unique_tools()) {
-        if (!filter.empty() && !contains_ci(d->label, filter) && !contains_ci(d->key, filter)) continue;
-        const ToolId tid = d->id;
-        e.push_back({d->label, [&vm, tid]() { vm.open_tool(tid); }});
+    for (const auto& item : model::discovery_entries()) {
+        const ToolId tid = item.id;
+        e.push_back({item.label, [&vm, tid]() { vm.open_tool(tid); }, view::tool_icon(tid)});
     }
-    if (e.size() == 1) e.push_back({"(no matches)", [&vm]() { vm.go_back(); }});
+    if (e.empty()) e.push_back({"(no discovery tools)", [&vm]() { vm.go_back(); }});
     return make_options(vm, assets, "Discovery", std::move(e));
 }
 
@@ -4880,7 +4877,7 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::OpenNetworks: return make_open_networks(vm, assets, st);
     case ToolId::ApDetail: return make_ap_detail(vm, assets, st);
     case ToolId::FileShare:
-        return make_run(vm, assets, "File Share", http_share_worker(home_dir(), false, "File Share"));
+        return std::make_unique<screen::FileShareScreen>(vm, assets);
     case ToolId::DeadDrop:
         return make_run(vm, assets, "WiFi Dead Drop", http_share_worker(ensure_subdir("dead-drop"), true, "Dead Drop"));
     case ToolId::Roku: return make_roku(vm, assets, st);
@@ -4929,7 +4926,7 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::IButtonHint: return make_info(vm, assets, "iButton", "Needs a 1-Wire accessory.");
     case ToolId::FilesBrowser: return make_files_browser(vm, assets, st);
     case ToolId::FilesShareHint:
-        return make_run(vm, assets, "File Share", http_share_worker(home_dir(), false, "File Share"));
+        return std::make_unique<screen::FileShareScreen>(vm, assets);
     case ToolId::IrUse: return make_ir_use(vm, assets);
     case ToolId::IrLearn: return make_ir_learn(vm, assets, st);
     case ToolId::IrBrowse: return make_ir_browse(vm, assets, st);

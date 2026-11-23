@@ -26,16 +26,21 @@ public:
 
     void flush_pending();
 
+    void on_shown() override;
+
 protected:
     void build() override;
     bool handle_key(uint32_t key) override;
     std::array<view::widgets::ActionSlot, 5> nav_actions() override;
 
 private:
+    void start_worker();
     void stop_worker();
     void move_selection(int delta);
     void accept_line();
     void refresh_list();
+
+    bool worker_started_{false};
 
     std::string title_;
     WorkerFn worker_;

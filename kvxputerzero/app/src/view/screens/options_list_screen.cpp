@@ -2,6 +2,7 @@
 
 #include "asset_manager.h"
 #include "kvx_style.h"
+#include "menu_icons.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -23,10 +24,12 @@ void OptionsListScreen::build() {
 
     auto* font = assets().load_standard_font(14);
     auto* icon_font = assets().load_font("Phosphor-Fill.ttf", 14);
+    const char* fallback = view::channel_icon(view_model().current_channel().id);
     for (size_t i = 0; i < entries_.size(); ++i) {
+        const char* icon = entries_[i].icon ? entries_[i].icon : fallback;
         auto* row = view::make_list_row(list_,
                                         entries_[i].label.c_str(),
-                                        entries_[i].icon,
+                                        icon,
                                         font ? font : &lv_font_montserrat_14,
                                         icon_font,
                                         tok,

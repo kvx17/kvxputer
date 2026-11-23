@@ -346,7 +346,7 @@ void DesktopVirtualKeypad::handle_key(uint8_t key_index) {
             clear_one_shot_modifiers();
             return;
         case KeyKind::Tab:
-            emit_recognized(mode_ == Mode::Shift ? LV_KEY_PREV : LV_KEY_NEXT);
+            emit_recognized(mode_ == Mode::Shift ? LV_KEY_PREV : platform::kKeyTab);
             clear_one_shot_modifiers();
             return;
         case KeyKind::Character:

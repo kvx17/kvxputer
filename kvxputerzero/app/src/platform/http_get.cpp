@@ -87,7 +87,8 @@ HttpResult http_request(const std::string& method, const std::string& url, const
 
     std::ostringstream req;
     req << method << " " << path << " HTTP/1.1\r\nHost: " << host << "\r\nConnection: close\r\n";
-    if (!body.empty()) {
+    // Roku ECP (and similar) reject empty POSTs that omit Content-Length.
+    if (method == "POST" || method == "PUT" || !body.empty()) {
         req << "Content-Length: " << body.size() << "\r\n";
     }
     req << "\r\n";

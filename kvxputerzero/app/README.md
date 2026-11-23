@@ -1,6 +1,6 @@
 # kvxputerzero — user guide
 
-**kvxputerzero** is a Cardputer Zero app: a Wii-style channel home (like Cardputer kvxputer) with Tools, Config, and placeholders for later channels.
+**kvxputerzero** is a Cardputer Zero app: a Wii-style channel home (like Cardputer kvxputer). The channel and tool catalog is in [`../README.md`](../README.md). This file is the keyboard, emulator, and install reference.
 
 On launch it plays a live matrix rain with the **KVXPUTER** wordmark for 5 seconds. **Press any key to skip.** The same animation is in **Tools → Matrix**.
 
@@ -25,9 +25,13 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row. The green number is the 
 | **4 / 8** on the channel home | Previous / next page |
 | **5 / 7 / 6** on the channel home | Up / down / open |
 | **4 / 5 / 6 / 7 / 8** on a menu | Back / up / select / down / home |
-| **Enter** or **Space** | Open or activate |
-| **Esc** | Go back one screen |
-| **Hold Esc** (on home) | Quit the app |
+| **Enter** | Open or activate |
+| **Space** on the channel home | Search menus and the items inside them. Recent searches stay on screen |
+| **Space** in a menu | Activate |
+| **Esc** | Go back one screen. A short tap on the channel home stays there |
+| **Hold Esc** for 3 seconds | After 1 second a progress bar appears, then the app quits |
+| **Hold Tab** for 3 seconds | After 1 second a progress bar appears, then the session locks |
+| **Hold F / X / Z / C** or an arrow | Keep moving in that direction |
 | **Fn+H** | Keyboard help overlay |
 | **Fn+J** | Screenshot |
 
@@ -38,8 +42,8 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 | Channel | What you get |
 | --- | --- |
 | **Tools** | **Calculator** (scientific), Calculators (engineering), Codec / Hash, Passgen, TOTP, Combo, QR / Barcode, **PDA**, Media Player, Timer, **Matrix**, DTMF, Morse, Microphone, MQTT, LLM Chat, Drone ID (BLE), iButton hint |
-| **WiFi / NetOps** | **WiFi Analyzer** (Adv-style channel bars + SSIDs; onboard scan, optional USB monitor), Monitor adapter, Connect, Disconnect, AP info, Net Toolkit, Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, Roku, WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
-| **BLE** | Scan, Hunter, Sniffer UI, Wall Of Flipper / Airtag, Skimmer Detector, Disconnect; Ninebot / Amiibolink / PN532 / Chameleon status (connect/read only) |
+| **WiFi / NetOps** | **WiFi Analyzer** (Adv-style channel bars + SSIDs; onboard scan, optional USB monitor), Monitor adapter, Connect, Disconnect, AP info, Net Toolkit, Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, **Roku Remote** (device grid → D-pad: F/X/Z/C arrows, Enter Select, Bksp Back; 4 Vol− / 5 Rew / 6 Play / 7 FF / 8 Vol+; Esc tap Remote↔Keyboard, hold Esc exit; S Search; Q Home; M Mute; I Info; G Replay; A Apps; B audio status; P Power; R FindRemote; D devices; H help), WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
+| **BLE** | Scan, Hunter, Sniffer UI, Wall Of Flipper / Airtag (raw AD via `kvxputerzero-blescan`, same matchers as Cardputer), Skimmer Detector, Disconnect; Ninebot / Amiibolink / PN532 / Chameleon status (connect/read only) |
 | **Ethernet** | Link status, Scan Hosts (onboard NIC) |
 | **Infrared** | Use, Learn, Browse (Flipper `.ir` library), Read, Favorites, Config (library folder, onboard TX GPIO12 / RX GPIO13 test); TV-B-Gone, TagTinker ESL, IR Carrier; Roku Remote |
 | **Files** | Browse home / mounts, text preview, confirmed delete; File Share stays under Wi-Fi |
@@ -55,10 +59,10 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 | **RFID** | Cap ST25 / PN532 status, read/scan UID, load/save dumps |
 | **NFC** | ADV menu parity: Read/Scan/Load/Erase; Classic (dict/magic/dump editor; Detect Reader/MFKey stubs); Tags (ISO15693/DESFire/FeliCa/forced type; UL-C stub); NDEF write/emulate/records/save-as/memory/chip/lock/password/format/APDU; Lab (APDU script, compare, field poll); Parsers; Companions (EMV on PN532, SRIX gate, BLE/UART status links); Config (Auto/ST25/PN532, wiring, MIF keys). Dumps under `~/.config/kvxputerzero/nfc/` (`.nfc` / `.rfid`) |
 | **FM** | Si4713 status, broadcast, stop, spectrum (no TA hijack) |
-| **Discovery** | Filterable index of every registered tool |
+| **Discovery** | Discovery tools (BLE scan, walls, spectrum, wardrive), same set as ADV |
 | **Clock** | Live face (digital / charge-style); Enter → Timer |
 | **Charge** | Charge-style face, color cycle, backlight steps |
-| **Config** | Colors, brightness, dim time, sound, power (reboot / off), About |
+| **Config** | Colors, brightness, dim time, sound, power (reboot / off), shortcuts, About. Shortcuts bind a free letter to an app: tap, or hold for 3 seconds. 4–8, F/X/Z/C, Ok, Esc, Space, and Tab cannot be bound |
 | **USB** | Placeholder (ESP HID / gadget unavailable) |
 
 Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI (mode 1, 5 MHz) with soft-CS **GPIO22** / IRQ **GPIO23** on Zero (Cap docs Adv map is G6/G4). Card Emulation is NFC-A Passive Target on the Cap PCB coil (not the RP-SMA). Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
@@ -67,11 +71,9 @@ Meshtastic serial prefs (under `~/.config/kvxputerzero/lora/`): `mesh_port.txt` 
 
 Theme colors, PDA prefs, and tool data live under `~/.config/kvxputerzero/` (on device or desktop). Network / BLE / audio helpers need the matching host tools (`nmcli`, `bluetoothctl`, `aplay`/`arecord`, …); desktop builds show a clear error instead of hanging.
 
-**WiFi Analyzer** (`WiFi → WiFi Analyzer`) always opens: channel bars + SSID list using the **onboard** radio via `nmcli` scan by default. Optional **WiFi → Monitor adapter**: pick a USB stick with monitor mode for real airtime hopping (Host switch toward the hub; drivers already installed). Saved as `~/.config/kvxputerzero/wifi_monitor_iface` (`onboard` or iface name). USB capture uses `/usr/lib/kvxputerzero/kvxputerzero-wifimon` (`postinst` runs `setcap`; re-grant with):
+**WiFi Analyzer** (`WiFi → WiFi Analyzer`) always opens: channel bars + SSID list using the **onboard** radio via `nmcli` scan by default. Optional **WiFi → Monitor adapter**: pick a USB stick with monitor mode for real airtime hopping (Host switch toward the hub; drivers already installed). Saved as `~/.config/kvxputerzero/wifi_monitor_iface` (`onboard` or iface name). USB capture uses `/usr/lib/kvxputerzero/kvxputerzero-wifimon`.
 
-```bash
-sudo setcap cap_net_admin,cap_net_raw+ep /usr/lib/kvxputerzero/kvxputerzero-wifimon
-```
+**Wall Of Flipper / AirTag** use `/usr/lib/kvxputerzero/kvxputerzero-blescan` for raw LE adverts (same matchers as Cardputer). Privileges for both helpers are applied **automatically** by the `.deb` `postinst` on install (App Store / `apt install`) — no user configuration.
 
 Keys: **F/X** select channel, **Z/C** dwell, **Enter** AP list for channel, **L** all APs, **K** lock/hop (monitor), **E** export CSV, **Esc** back.
 
@@ -218,6 +220,20 @@ kvxputerzero
 
 Keyboard input uses the device keypad (evdev). Hold **Esc** on the channel home to quit.
 
+### SSH / remote CLI
+
+The graphical app needs the framebuffer. Over SSH, quit **kvxputerzero** first (hold Esc on the channel home), then run the TTY front-end:
+
+```bash
+kvxputerzero-cli                 # interactive channel → tool menu
+kvxputerzero-cli list            # channels
+kvxputerzero-cli list wifi       # tools in a channel
+kvxputerzero-cli run tools codec b64e hello
+kvxputerzero-cli run --yes rf rf_send_test   # confirm destructive / TX actions
+```
+
+`kvxputerzero-cli` uses the same `~/.config/kvxputerzero/` tree as the GUI. Keys are a normal terminal (arrows / j/k, Enter, Esc or q, Ctrl-C cancels a live tool). Do not run radio / SPI / BlueZ tools while the graphical app is still open.
+
 ### Update / remove
 
 After a Tools feature drop, rebuild the arm64 package and reinstall on device (same package name):
@@ -251,10 +267,12 @@ Publishing to the Cardputer Zero Store is separate from installing on your own d
 | `src/model/channel_registry.h` | Channel IDs / labels / kinds |
 | `src/model/tool_registry.h` | Shared tool ids across channels |
 | `src/app/tool_screens.*` | Channel tool menus + every ToolId screen |
+| `src/runners/` | Shared tool runners (GUI + `kvxputerzero-cli`) |
+| `src/cli/` | SSH/TTY interactive CLI |
 | `src/platform/` | net / wifi / ble / tcp / dns / http / audio / i2c / uart helpers |
 | `src/view/screens/channel_grid_screen.*` | 3×2 home |
 | `src/tools/` | Codec / EngCalc / PDA / … logic |
 | `app-builder.json` | Store listing |
 | `deploy.sh` | Cross package + `scp` to device |
 
-Audit / wave planning for more channels: [`../README.md`](../README.md), [`../AUDIT.md`](../AUDIT.md), [`../WAVES.md`](../WAVES.md).
+Channel and tool guide: [`../README.md`](../README.md).

@@ -1115,7 +1115,7 @@ Screen make_live(VM& vm, AssetManager& assets, const std::string& mode) {
 
             while (!cancel) {
                 if (ctrls->show_help.exchange(false)) {
-                    status("H help  P pause  X wifi  F flag  S mute  B blank  Esc exit");
+                    status("H help  P pause  X wifi  F flag  S mute  B blank  hold Tab 3s blanks  Esc");
                 }
                 const auto st = session.state();
                 LogFix fix = resolve_log_fix(st, cfg, ever_fix, last_lat, last_lon);

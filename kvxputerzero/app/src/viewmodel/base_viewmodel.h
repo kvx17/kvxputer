@@ -51,6 +51,15 @@ public:
     void open_tool_menu();
     void open_tool(model::ToolId id, std::string param = {});
     void open_discovery();
+    void open_search();
+    void open_shortcut_menu();
+    void begin_shortcut_bind(bool hold);
+    void choose_shortcut_target(std::string id);
+    bool commit_shortcut(uint32_t key);
+    void remove_shortcut(uint32_t key, bool hold);
+    void clear_shortcuts();
+    bool launch_target_id(const std::string& id);
+    void remember_search(const std::string& id);
     model::ToolId active_tool_id() const;
     const std::string& tool_param() const;
     const std::string& discovery_filter() const;
@@ -64,6 +73,7 @@ public:
     void open_codec_op(int op);
     void open_eng_calc_menu();
     void open_eng_calc_op(int op);
+    void open_life_counter(int game);
     void open_timer();
     void open_matrix();
     void open_config_menu();

@@ -29,6 +29,9 @@ public:
     lv_obj_t* root() const;
     // True when this screen takes bare letters, including F/X/Z/C.
     bool accepts_text() const;
+    // Called after ScreenManager replaces the previous screen. Start listeners here so
+    // the prior screen's destructor can close its socket first.
+    virtual void on_shown() {}
 
 protected:
     virtual void build() = 0;
@@ -44,6 +47,8 @@ protected:
     virtual std::array<view::widgets::ActionSlot, 5> nav_actions();
     // Shown instead of the 4-8 icons when every slot is empty (text entry).
     virtual const char* typing_hint() const;
+    // Rebuild the bottom ActionBar after nav_actions() change (e.g. picker → remote).
+    void rebuild_action_bar();
 
     // Return true if handled. Esc is always handled by base unless overridden returns and calls go_back.
     virtual bool handle_key(uint32_t key);

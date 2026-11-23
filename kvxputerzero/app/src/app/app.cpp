@@ -7,16 +7,20 @@
 #include "app.h"
 
 #include "application_config.h"
+#include "audio.h"
 #include "asset_manager.h"
 #include "backlight.h"
 #include "boot_splash.h"
 #include "help_popup.h"
 #include "logger.h"
+#include "launch_catalog.h"
 #include "linux_input.h"
 #include "pda_lib.h"
+#include "session_lock.h"
 #include "screenshot_service.h"
 #include "screen_manager.h"
 #include "base_viewmodel.h"
+#include "kvx_style.h"
 #include "theme.h"
 #include "toast.h"
 #include "tool_registry.h"
@@ -216,20 +220,118 @@ private:
     size_t pending_index_{0};
 };
 
+class HoldMeter {
+public:
+    HoldMeter(viewmodel::BaseViewModel& view_model, AssetManager& assets)
+        : view_model_(view_model), assets_(assets) {}
+
+    ~HoldMeter() { hide(); }
+
+    void show(const std::string& label) {
+        ensure();
+        if (!root_ || !label_ || !fill_) return;
+        lv_label_set_text(label_, label.c_str());
+        apply_theme();
+        set_ratio(0.f);
+        lv_obj_remove_flag(root_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(root_);
+    }
+
+    void set_ratio(float ratio) {
+        if (!fill_) return;
+        if (ratio < 0.f) ratio = 0.f;
+        if (ratio > 1.f) ratio = 1.f;
+        lv_obj_set_width(fill_, static_cast<int>(kTrackW * ratio));
+    }
+
+    void hide() {
+        if (root_ && lv_obj_is_valid(root_)) lv_obj_add_flag(root_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+private:
+    static constexpr int kTrackW = 200;
+
+    void ensure() {
+        if (root_ && lv_obj_is_valid(root_)) return;
+        root_ = nullptr;
+        auto* parent = lv_layer_top();
+        if (!parent) return;
+        const auto tok = view::make_tokens(view_model_.pri_color(), view_model_.sec_color(), view_model_.bg_color());
+        root_ = lv_obj_create(parent);
+        lv_obj_remove_style_all(root_);
+        lv_obj_set_size(root_, 240, 44);
+        lv_obj_align(root_, LV_ALIGN_CENTER, 0, 8);
+        lv_obj_set_style_radius(root_, 8, 0);
+        lv_obj_set_style_bg_color(root_, tok.surface, 0);
+        lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(root_, 1, 0);
+        lv_obj_set_style_border_color(root_, tok.main, 0);
+        lv_obj_set_style_border_opa(root_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(root_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(root_, LV_OBJ_FLAG_CLICKABLE);
+
+        label_ = lv_label_create(root_);
+        auto* font = assets_.load_standard_font(12);
+        lv_obj_set_style_text_font(label_, font ? font : &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(label_, tok.ink, 0);
+        lv_obj_align(label_, LV_ALIGN_TOP_MID, 0, 4);
+
+        auto* track = lv_obj_create(root_);
+        lv_obj_remove_style_all(track);
+        lv_obj_set_size(track, kTrackW, 8);
+        lv_obj_align(track, LV_ALIGN_BOTTOM_MID, 0, -8);
+        lv_obj_set_style_radius(track, 3, 0);
+        lv_obj_set_style_bg_color(track, tok.rule, 0);
+        lv_obj_set_style_bg_opa(track, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(track, LV_OBJ_FLAG_SCROLLABLE);
+
+        fill_ = lv_obj_create(track);
+        lv_obj_remove_style_all(fill_);
+        lv_obj_set_size(fill_, 0, 8);
+        lv_obj_align(fill_, LV_ALIGN_LEFT_MID, 0, 0);
+        lv_obj_set_style_radius(fill_, 3, 0);
+        lv_obj_set_style_bg_color(fill_, tok.accent, 0);
+        lv_obj_set_style_bg_opa(fill_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(fill_, LV_OBJ_FLAG_SCROLLABLE);
+    }
+
+    void apply_theme() {
+        if (!root_) return;
+        const auto tok = view::make_tokens(view_model_.pri_color(), view_model_.sec_color(), view_model_.bg_color());
+        lv_obj_set_style_bg_color(root_, tok.surface, 0);
+        lv_obj_set_style_border_color(root_, tok.main, 0);
+        if (label_) lv_obj_set_style_text_color(label_, tok.ink, 0);
+        if (fill_) lv_obj_set_style_bg_color(fill_, tok.accent, 0);
+    }
+
+    viewmodel::BaseViewModel& view_model_;
+    AssetManager& assets_;
+    lv_obj_t* root_{nullptr};
+    lv_obj_t* label_{nullptr};
+    lv_obj_t* fill_{nullptr};
+};
+
 class ShortcutController {
 public:
     ShortcutController(viewmodel::BaseViewModel& view_model, AssetManager& assets, AlarmWatcher& alarms)
         : view_model_(view_model),
           alarms_(alarms),
           toast_(std::make_unique<view::widgets::Toast>(lv_layer_top(), view_model, assets)),
-          help_popup_(std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)) {
+          help_popup_(std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)),
+          meter_(view_model, assets) {
         toast_->build();
         help_popup_->build();
+        hold_timer_ = lv_timer_create(hold_timer_cb, 40, this);
+        if (hold_timer_) lv_timer_pause(hold_timer_);
         platform::set_global_key_listener(global_key_listener, this);
         platform::set_key_release_listener(key_release_listener, this);
     }
 
     ~ShortcutController() {
+        if (hold_timer_) {
+            lv_timer_delete(hold_timer_);
+            hold_timer_ = nullptr;
+        }
         platform::clear_key_release_listener(key_release_listener, this);
         platform::clear_global_key_listener(global_key_listener, this);
     }
@@ -240,7 +342,9 @@ private:
             return alarms_.handle_key(key);
         }
         // The matrix rain exits on any key, including help and screenshot.
-        if (view_model_.current_page() == model::AppPage::Matrix) {
+        // Esc and Tab still arm the hold meter so a 3s hold can leave or lock.
+        if (view_model_.current_page() == model::AppPage::Matrix && key != LV_KEY_ESC &&
+            key != platform::kKeyTab) {
             return false;
         }
         if (key == platform::kKeyPrintScreen) {
@@ -289,30 +393,44 @@ private:
             return true;
         }
 
-        // Long-hold Esc on the channel home quits; short Esc is handled by screens.
-        if (key != LV_KEY_ESC) {
-            return false;
-        }
-
+        // The 700ms long-press event must not restart a 3s hold or launch twice.
         if (long_pressed) {
-            if (exit_key_pressed_ == key && exit_armed_) {
-                toast_->hide();
-                view_model_.request_quit();
+            if (key == hold_key_ || !view_model_.model().shortcut_target(key, false).empty() ||
+                !view_model_.model().shortcut_target(key, true).empty()) {
                 return true;
             }
             return false;
         }
 
-        exit_key_pressed_ = key;
-        exit_armed_ = view_model_.current_page() == model::AppPage::ChannelGrid;
-        if (exit_armed_) {
-            toast_->show_persistent_highlighted("Hold ",
-                                                "ESC",
-                                                " to exit",
-                                                view::widgets::ToastTone::Warning);
-            return true; // suppress short Esc quit on home; hold required
+        if (key == LV_KEY_ESC) {
+            begin_hold(key, HoldKind::Exit, {}, {});
+            return true;
+        }
+        if (key == platform::kKeyTab) {
+            begin_hold(key, HoldKind::Lock, {}, {});
+            return true;
+        }
+
+        if (view_model_.current_page() == model::AppPage::ChannelGrid) {
+            const auto hold_id = view_model_.model().shortcut_target(key, true);
+            const auto tap_id = view_model_.model().shortcut_target(key, false);
+            if (!hold_id.empty()) {
+                begin_hold(key, HoldKind::Launch, hold_id, tap_id);
+                return true;
+            }
+            if (!tap_id.empty()) {
+                view_model_.launch_target_id(tap_id);
+                return true;
+            }
         }
         return false;
+    }
+
+    void remember_output(const platform::OutputLevel& level) {
+        auto& model = view_model_.model();
+        model.set_sound_volume(level.percent);
+        model.set_sound_enabled(!level.muted && level.percent > 0);
+        model.save_user_config();
     }
 
     bool handle_fn_action(uint32_t key) {
@@ -330,8 +448,19 @@ private:
             return true;
         }
         if (key == platform::kKeyVolumeDown || key == platform::kKeyVolumeUp) {
-            auto& model = view_model_.model();
             const int step = key == platform::kKeyVolumeUp ? 10 : -10;
+            platform::OutputLevel level;
+            if (platform::adjust_output_volume(step, level)) {
+                if (level.percent >= 0) remember_output(level);
+                const std::string label = level.percent < 0
+                                              ? std::string("Volume")
+                                              : level.muted
+                                                    ? "Volume " + std::to_string(level.percent) + "% muted"
+                                                    : "Volume " + std::to_string(level.percent) + "%";
+                toast_->show(label, view::widgets::ToastTone::Default, 1200);
+                return true;
+            }
+            auto& model = view_model_.model();
             const int vol = std::clamp(model.sound_volume() + step, 0, 100);
             model.set_sound_volume(vol);
             model.set_sound_enabled(vol > 0);
@@ -342,6 +471,14 @@ private:
             return true;
         }
         if (key == platform::kKeyMute) {
+            platform::OutputLevel level;
+            if (platform::toggle_output_mute(level)) {
+                if (level.percent >= 0) remember_output(level);
+                toast_->show(level.muted ? "Muted" : "Sound on",
+                             view::widgets::ToastTone::Default,
+                             1200);
+                return true;
+            }
             auto& model = view_model_.model();
             const bool on = !model.sound_enabled();
             model.set_sound_enabled(on);
@@ -349,19 +486,132 @@ private:
             toast_->show(on ? "Sound on" : "Muted", view::widgets::ToastTone::Default, 1200);
             return true;
         }
+        if (key == platform::kKeyMediaPlay || key == platform::kKeyMediaPrev ||
+            key == platform::kKeyMediaNext) {
+            const char* action = "play-pause";
+            const char* label = "Play / Pause";
+            if (key == platform::kKeyMediaNext) {
+                action = "next";
+                label = "Next track";
+            } else if (key == platform::kKeyMediaPrev) {
+                action = "previous";
+                label = "Previous track";
+            }
+            std::string error;
+            if (platform::media_transport(action, error)) {
+                toast_->show(label, view::widgets::ToastTone::Default, 1200);
+            } else {
+                toast_->show("No media player", view::widgets::ToastTone::Warning, 1400);
+            }
+            return true;
+        }
         return false;
     }
 
-    void handle_release(uint32_t key) {
-        if (key != exit_key_pressed_) {
+    enum class HoldKind { None, Exit, Lock, Launch };
+
+    static constexpr uint32_t kHoldMs = 3000;
+    static constexpr uint32_t kHoldShowMs = 1000;
+
+    void begin_hold(uint32_t key, HoldKind kind, std::string launch_id, std::string tap_id) {
+        hold_key_ = key;
+        hold_kind_ = kind;
+        hold_launch_id_ = std::move(launch_id);
+        pending_tap_id_ = std::move(tap_id);
+        hold_started_ = lv_tick_get();
+        hold_done_ = false;
+        std::string label = "Exit";
+        if (kind == HoldKind::Lock) {
+            label = "Lock";
+        } else if (kind == HoldKind::Launch) {
+            if (const auto* target = model::find_launch_target(hold_launch_id_)) label = target->label;
+            else label = "Open";
+        }
+        hold_label_ = std::move(label);
+        meter_.hide();
+        meter_visible_ = false;
+        if (hold_timer_) {
+            lv_timer_resume(hold_timer_);
+            lv_timer_reset(hold_timer_);
+        }
+    }
+
+    void tick_hold() {
+        if (hold_kind_ == HoldKind::None || hold_done_) return;
+        const uint32_t elapsed = lv_tick_elaps(hold_started_);
+        if (elapsed >= kHoldMs) {
+            reveal_meter();
+            meter_.set_ratio(1.f);
+            complete_hold();
             return;
         }
+        // A tap must not flash the bar. It appears once the hold passes one second,
+        // then fills across the remaining time until the action fires.
+        if (elapsed < kHoldShowMs) return;
+        reveal_meter();
+        const uint32_t span = kHoldMs - kHoldShowMs;
+        meter_.set_ratio(span == 0 ? 1.f
+                                    : static_cast<float>(elapsed - kHoldShowMs) / static_cast<float>(span));
+    }
 
-        if (exit_armed_) {
-            toast_->hide();
+    void reveal_meter() {
+        if (meter_visible_) return;
+        meter_.show(hold_label_);
+        meter_visible_ = true;
+    }
+
+    void complete_hold() {
+        const auto kind = hold_kind_;
+        const auto id = hold_launch_id_;
+        hold_done_ = true;
+        meter_.hide();
+        if (hold_timer_) lv_timer_pause(hold_timer_);
+        if (kind == HoldKind::Exit) {
+            view_model_.request_quit();
+        } else if (kind == HoldKind::Lock) {
+            lock_session();
+        } else if (kind == HoldKind::Launch) {
+            view_model_.launch_target_id(id);
         }
-        exit_key_pressed_ = 0;
-        exit_armed_ = false;
+    }
+
+    void lock_session() {
+        std::string detail;
+        if (!platform::request_session_lock(detail)) {
+            toast_->show(detail.empty() ? "Could not lock the session" : detail,
+                         view::widgets::ToastTone::Warning,
+                         1800);
+        }
+    }
+
+    void handle_release(uint32_t key) {
+        if (key != hold_key_ || hold_kind_ == HoldKind::None) return;
+        const bool done = hold_done_;
+        const auto kind = hold_kind_;
+        const auto tap = pending_tap_id_;
+        hold_kind_ = HoldKind::None;
+        hold_key_ = 0;
+        hold_done_ = false;
+        pending_tap_id_.clear();
+        hold_launch_id_.clear();
+        meter_.hide();
+        meter_visible_ = false;
+        if (hold_timer_) lv_timer_pause(hold_timer_);
+        if (done) return;
+        if (kind == HoldKind::Exit) {
+            if (view_model_.current_page() != model::AppPage::ChannelGrid) {
+                platform::deliver_screen_key(LV_KEY_ESC);
+            }
+        } else if (kind == HoldKind::Lock) {
+            platform::deliver_screen_key(platform::kKeyTab);
+        } else if (kind == HoldKind::Launch && !tap.empty()) {
+            view_model_.launch_target_id(tap);
+        }
+    }
+
+    static void hold_timer_cb(lv_timer_t* timer) {
+        auto* self = static_cast<ShortcutController*>(lv_timer_get_user_data(timer));
+        if (self) self->tick_hold();
     }
 
     static bool global_key_listener(uint32_t key,
@@ -383,8 +633,16 @@ private:
     AlarmWatcher& alarms_;
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;
-    uint32_t exit_key_pressed_{0};
-    bool exit_armed_{false};
+    HoldMeter meter_;
+    lv_timer_t* hold_timer_{nullptr};
+    HoldKind hold_kind_{HoldKind::None};
+    uint32_t hold_key_{0};
+    uint32_t hold_started_{0};
+    bool hold_done_{false};
+    bool meter_visible_{false};
+    std::string hold_label_;
+    std::string hold_launch_id_;
+    std::string pending_tap_id_;
 };
 
 #if USE_DESKTOP
@@ -447,6 +705,15 @@ public:
                 LOG_WARN("ui script key failed: {}", name);
             }
             // Let LVGL process the key before the next command.
+            wait_until_ = now + std::chrono::milliseconds(40);
+            return;
+        }
+        if (cmd == "down" || cmd == "up") {
+            std::string name;
+            iss >> name;
+            if (!frame_.inject_named_key_state(name, cmd == "down")) {
+                LOG_WARN("ui script {} failed: {}", cmd, name);
+            }
             wait_until_ = now + std::chrono::milliseconds(40);
             return;
         }
@@ -533,6 +800,12 @@ private:
             vm_.show_page(model::AppPage::ChargeFace);
         } else if (lower == "config") {
             vm_.open_config_menu();
+        } else if (lower == "discovery") {
+            vm_.open_discovery();
+        } else if (lower == "search") {
+            vm_.open_search();
+        } else if (lower == "shortcuts") {
+            vm_.open_shortcut_menu();
         } else if (lower == "about") {
             vm_.open_about();
         } else if (lower == "brightness") {

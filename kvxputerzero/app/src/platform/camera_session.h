@@ -43,8 +43,13 @@ public:
 
     bool copy_preview(CameraFrame& out) const;
 
-    // Save filtered still under ~/Pictures/DCIM/Camera. Returns path or empty + error.
-    bool capture_still(std::string& out_path, std::string& error);
+    // Save a full-resolution filtered still under ~/Pictures/DCIM/Camera.
+    // When the footer is on, the file is stamped with device, time, and kvxputer.
+    bool capture_still(std::string& out_path, std::string& error, int* saved_w = nullptr,
+                       int* saved_h = nullptr);
+
+    void set_details_footer(bool enabled);
+    bool details_footer() const { return details_footer_.load(); }
 
     bool start_recording(std::string& out_path, std::string& error);
     void stop_recording();
@@ -62,7 +67,7 @@ private:
     void close_v4l2();
     bool grab_v4l2(std::vector<uint16_t>& out, int& w, int& h);
     bool encode_jpeg_rgb888(const std::vector<uint8_t>& rgb, int w, int h, const std::string& path,
-                            std::string& error);
+                            std::string& error, int quality);
     void rgb565_to_rgb888(const std::vector<uint16_t>& src, std::vector<uint8_t>& dst);
     bool append_avi_frame(const std::vector<uint8_t>& jpeg);
     bool finish_avi();
@@ -78,6 +83,7 @@ private:
 
     std::atomic<int> filter_{static_cast<int>(tools::camfilter::Filter::Original)};
     std::atomic<float> brightness_{1.0f};
+    std::atomic<bool> details_footer_{false};
 
     LibcameraPreview libcamera_;
 

@@ -277,11 +277,11 @@ Re-ran `./scripts/ui_sweep.sh` against `build/linux-x86-64/Debug/kvxputerzero` (
 
 #### File Share hint / run
 - Screenshot: ![files_share](../app/screenshot/audit/files_share_hint.png)
-- Current type: RunScreen pills for status lines
-- Target type: Info card
+- Current type: FileShareScreen (QR + credentials)
+- Target type: FileShareScreen
 - QoL:
-  - [high] “File Share on :8080” / root / flags look like menu items
-  - Fix: InfoScreen KV + status chip
+  - [high] “File Share on :8080” / root / flags look like menu items — **[status: Fixed]** QR + URL/user/pwd (Space reveals password)
+  - Fix: dedicated FileShareScreen; authenticated home share with upload
 
 #### Scripts runner
 - Screenshot: ![scripts](../app/screenshot/audit/scripts_runner.png)

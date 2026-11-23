@@ -1,5 +1,7 @@
 #include "base_viewmodel.h"
 
+#include "launch_catalog.h"
+
 #include <cstdio>
 #include <ctime>
 
@@ -126,6 +128,7 @@ void BaseViewModel::go_back() {
         show_page(model::AppPage::CodecMenu);
         break;
     case model::AppPage::EngCalcWork:
+    case model::AppPage::LifeCounter:
         show_page(model::AppPage::EngCalcMenu);
         break;
     case model::AppPage::ColorHex:
@@ -228,7 +231,15 @@ void BaseViewModel::go_back() {
     }
     case model::AppPage::ToolMenu:
     case model::AppPage::Discovery:
+    case model::AppPage::Search:
         show_page(model::AppPage::ChannelGrid);
+        break;
+    case model::AppPage::ShortcutCapture:
+    case model::AppPage::ShortcutPick:
+        show_page(model::AppPage::ShortcutMenu);
+        break;
+    case model::AppPage::ShortcutMenu:
+        show_page(model::AppPage::ConfigMenu);
         break;
     case model::AppPage::CodecMenu:
     case model::AppPage::EngCalcMenu:
@@ -331,6 +342,81 @@ void BaseViewModel::open_discovery() {
     show_page(model::AppPage::Discovery);
 }
 
+void BaseViewModel::open_search() {
+    show_page(model::AppPage::Search);
+}
+
+void BaseViewModel::open_shortcut_menu() {
+    show_page(model::AppPage::ShortcutMenu);
+}
+
+void BaseViewModel::begin_shortcut_bind(bool hold) {
+    model_.set_shortcut_bind_hold(hold);
+    model_.set_shortcut_bind_target("");
+    show_page(model::AppPage::ShortcutPick);
+}
+
+void BaseViewModel::choose_shortcut_target(std::string id) {
+    model_.set_shortcut_bind_target(std::move(id));
+    show_page(model::AppPage::ShortcutCapture);
+}
+
+bool BaseViewModel::commit_shortcut(uint32_t key) {
+    if (model_.shortcut_bind_target().empty()) return false;
+    model_.set_shortcut(key, model_.shortcut_bind_hold(), model_.shortcut_bind_target());
+    model_.save_user_config();
+    show_page(model::AppPage::ShortcutMenu);
+    return true;
+}
+
+void BaseViewModel::remove_shortcut(uint32_t key, bool hold) {
+    model_.set_shortcut(key, hold, "");
+    model_.save_user_config();
+    show_page(model::AppPage::ConfigMenu);
+    show_page(model::AppPage::ShortcutMenu);
+}
+
+void BaseViewModel::clear_shortcuts() {
+    model_.clear_shortcuts();
+    model_.save_user_config();
+    show_page(model::AppPage::ConfigMenu);
+    show_page(model::AppPage::ShortcutMenu);
+}
+
+bool BaseViewModel::launch_target_id(const std::string& id) {
+    const auto* target = model::find_launch_target(id);
+    if (!target) return false;
+    if (target->channel_index >= 0) set_channel_index(target->channel_index);
+    switch (target->kind) {
+    case model::LaunchKind::Channel:
+        open_selected_channel();
+        break;
+    case model::LaunchKind::Tool:
+        open_tool(target->tool);
+        break;
+    case model::LaunchKind::Page:
+        if (target->page == model::AppPage::ColorPicker) {
+            auto which = model::ColorTarget::Primary;
+            if (target->aux == 1) which = model::ColorTarget::Accent;
+            else if (target->aux == 2) which = model::ColorTarget::Background;
+            open_color_picker(which);
+        } else if (target->page == model::AppPage::Calculator) {
+            open_calculator();
+        } else if (target->page == model::AppPage::PdaHub) {
+            open_pda_hub();
+        } else {
+            show_page(target->page);
+        }
+        break;
+    }
+    return true;
+}
+
+void BaseViewModel::remember_search(const std::string& id) {
+    model_.push_recent_search(id);
+    model_.save_user_config();
+}
+
 model::ToolId BaseViewModel::active_tool_id() const {
     return model_.active_tool_id();
 }
@@ -380,6 +466,11 @@ void BaseViewModel::open_eng_calc_op(int op) {
     model_.set_work_input("");
     model_.set_work_output("");
     show_page(model::AppPage::EngCalcWork);
+}
+
+void BaseViewModel::open_life_counter(int game) {
+    model_.set_eng_calc_op(game);
+    show_page(model::AppPage::LifeCounter);
 }
 
 void BaseViewModel::open_timer() {

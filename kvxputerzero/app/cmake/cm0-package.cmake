@@ -7,7 +7,7 @@
 include(GNUInstallDirs)
 
 set(APP_DISPLAY_NAME "kvxputerzero")
-set(APP_DEBIAN_REVISION "rev9" CACHE STRING "Debian package revision/vendor suffix")
+set(APP_DEBIAN_REVISION "rev10" CACHE STRING "Debian package revision/vendor suffix")
 set(APP_DEBIAN_ARCHITECTURE "arm64" CACHE STRING "Debian package architecture")
 # Deliberately a placeholder: the store rejects packages whose Maintainer is
 # still a template/M5Stack identity, so set your own name and email here.
@@ -30,11 +30,18 @@ if(APP_INSTALL_SYSTEMD_SERVICE)
     )
 endif()
 
-install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}-nfctest
+set(_cm0_runtime_targets ${PROJECT_NAME} ${PROJECT_NAME}-nfctest)
+if(TARGET ${PROJECT_NAME}-cli)
+    list(APPEND _cm0_runtime_targets ${PROJECT_NAME}-cli)
+endif()
+install(TARGETS ${_cm0_runtime_targets}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
 install(TARGETS ${PROJECT_NAME}-wifimon
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/kvxputerzero
+)
+install(TARGETS ${PROJECT_NAME}-blescan
     RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/kvxputerzero
 )
 
@@ -106,7 +113,7 @@ set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 # Same model as FXCam App Center packages: soft OR-chain so apt accepts the
 # libcamera already on the Cardputer (do not force a mismatched IPA). Stock
 # images already ship libcamera0.x + libcamera-ipa — no extra user installs.
-set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16, libjpeg62-turbo, zlib1g, iw, iproute2, libcap2-bin, libcamera0.8 | libcamera0.7 | libcamera0.6 | libcamera0.5 | libcamera0.4 | libcamera0.3 | libcamera0.2 | libcamera0, libcamera-ipa")
+set(APP_DEBIAN_DEPENDS "libc6, libstdc++6, libgcc-s1, libfreetype6, libpng16-16, libjpeg62-turbo, zlib1g, iw, iproute2, libcap2-bin, libbluetooth3, libcamera0.8 | libcamera0.7 | libcamera0.6 | libcamera0.5 | libcamera0.4 | libcamera0.3 | libcamera0.2 | libcamera0, libcamera-ipa")
 if(FMT_INCLUDE_DIR AND FMT_LIBRARY)
     string(APPEND APP_DEBIAN_DEPENDS ", libfmt10")
 endif()

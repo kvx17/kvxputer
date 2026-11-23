@@ -25,6 +25,7 @@ private:
     void draw_preview();
     void update_hud();
     void rebuild_guides();
+    void update_fit(int frame_w, int frame_h);
     void cycle_guide();
     void adjust_brightness(float delta);
     void take_photo();
@@ -41,6 +42,14 @@ private:
     int stride_{0};
     int plot_w_{320};
     int plot_h_{134};
+    int fit_x_{0};
+    int fit_y_{0};
+    int fit_w_{320};
+    int fit_h_{134};
+    int preview_w_{0};
+    int preview_h_{0};
+    int fit_view_h_{0};
+    int fitted_plot_h_{0};
 
     lv_obj_t* hud_{nullptr};
     lv_obj_t* status_lbl_{nullptr};

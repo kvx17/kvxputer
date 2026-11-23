@@ -1,5 +1,7 @@
 #include "base_model.h"
 
+#include "launch_catalog.h"
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -453,6 +455,26 @@ void BaseModel::load_user_config() {
                 }
             }
         }
+        if (section == "shortcuts") {
+            const bool hold = key.rfind("hold.", 0) == 0;
+            const bool tap = key.rfind("tap.", 0) == 0;
+            const bool sized = (tap && key.size() == 5) || (hold && key.size() == 6);
+            if (sized && !val.empty()) {
+                const auto code = static_cast<uint32_t>(static_cast<unsigned char>(key.back()));
+                if (find_launch_target(val)) set_shortcut(code, hold, val);
+            }
+        }
+        if (section == "search" && key == "recent") {
+            recent_searches_.clear();
+            std::stringstream ss(val);
+            std::string part;
+            while (std::getline(ss, part, ',')) {
+                trim_inplace(part);
+                if (part.empty() || !find_launch_target(part)) continue;
+                recent_searches_.push_back(part);
+                if (recent_searches_.size() >= 5) break;
+            }
+        }
         if (section == "pda" || section.empty()) {
             if (key == "tmz") {
                 try {
@@ -515,6 +537,77 @@ void BaseModel::save_user_config() const {
         out << static_cast<int>(pda_key_bind_[static_cast<size_t>(i)]);
     }
     out << "\n";
+    out << "[shortcuts]\n";
+    for (const auto& s : shortcuts_) {
+        if (s.target_id.empty() || s.key < 32 || s.key >= 127) continue;
+        out << (s.hold ? "hold." : "tap.") << static_cast<char>(s.key) << '=' << s.target_id << "\n";
+    }
+    out << "[search]\n";
+    out << "recent=";
+    for (size_t i = 0; i < recent_searches_.size(); ++i) {
+        if (i) out << ',';
+        out << recent_searches_[i];
+    }
+    out << "\n";
+}
+
+const std::vector<BaseModel::KeyShortcut>& BaseModel::shortcuts() const {
+    return shortcuts_;
+}
+
+std::string BaseModel::shortcut_target(uint32_t key, bool hold) const {
+    for (const auto& s : shortcuts_) {
+        if (s.key == key && s.hold == hold) return s.target_id;
+    }
+    return {};
+}
+
+void BaseModel::set_shortcut(uint32_t key, bool hold, std::string target_id) {
+    for (auto it = shortcuts_.begin(); it != shortcuts_.end(); ++it) {
+        if (it->key == key && it->hold == hold) {
+            if (target_id.empty()) shortcuts_.erase(it);
+            else it->target_id = std::move(target_id);
+            return;
+        }
+    }
+    if (!target_id.empty()) shortcuts_.push_back(KeyShortcut{key, hold, std::move(target_id)});
+}
+
+void BaseModel::clear_shortcuts() {
+    shortcuts_.clear();
+}
+
+const std::vector<std::string>& BaseModel::recent_searches() const {
+    return recent_searches_;
+}
+
+void BaseModel::push_recent_search(std::string id) {
+    if (id.empty()) return;
+    for (auto it = recent_searches_.begin(); it != recent_searches_.end(); ++it) {
+        if (*it == id) {
+            recent_searches_.erase(it);
+            break;
+        }
+    }
+    recent_searches_.insert(recent_searches_.begin(), std::move(id));
+    constexpr size_t kMaxRecent = 5;
+    if (recent_searches_.size() > kMaxRecent) recent_searches_.resize(kMaxRecent);
+}
+
+bool BaseModel::shortcut_bind_hold() const {
+    return shortcut_bind_hold_;
+}
+
+void BaseModel::set_shortcut_bind_hold(bool hold) {
+    shortcut_bind_hold_ = hold;
+}
+
+const std::string& BaseModel::shortcut_bind_target() const {
+    return shortcut_bind_target_;
+}
+
+void BaseModel::set_shortcut_bind_target(std::string id) {
+    shortcut_bind_target_ = std::move(id);
 }
 
 ToolId BaseModel::active_tool_id() const {

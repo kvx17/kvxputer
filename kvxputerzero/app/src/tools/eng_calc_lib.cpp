@@ -2047,6 +2047,705 @@ std::string run_flow(Tokens t, bool& ok) {
     return o.str();
 }
 
+// ---------------------------------------------------------------------------
+// Parallel resistors, RC, battery, frequency, PWM, percent, dates, tip, distance
+// ---------------------------------------------------------------------------
+
+std::string fmt_span(double sec) {
+    const double a = std::fabs(sec);
+    const char* sign = sec < 0 ? "-" : "";
+    if (a >= 3600.0) return std::string(sign) + sig(a / 3600.0) + " h";
+    if (a >= 60.0) return std::string(sign) + sig(a / 60.0) + " min";
+    if (a >= 1.0) return std::string(sign) + sig(a) + " s";
+    if (a >= 1e-3) return std::string(sign) + sig(a * 1e3) + " ms";
+    if (a >= 1e-6) return std::string(sign) + sig(a * 1e6) + " us";
+    if (a >= 1e-9) return std::string(sign) + sig(a * 1e9) + " ns";
+    return std::string(sign) + sig(a * 1e12) + " ps";
+}
+
+std::string fmt_len(double m) {
+    const double a = std::fabs(m);
+    if (a >= 1000.0) return sig(m / 1000.0) + " km";
+    if (a >= 1.0) return sig(m) + " m";
+    if (a >= 0.01) return sig(m * 100.0) + " cm";
+    return sig(m * 1000.0) + " mm";
+}
+
+// "100n", "4n7", "10uF", "1e-6" -> farads. Bare number is farads.
+bool parse_farads(const std::string& in, double& out) {
+    std::string t = trim(in);
+    if (t.empty()) return false;
+    if (t.back() == 'f' || t.back() == 'F') t.pop_back();
+    for (size_t i = 1; i < t.size(); ++i) {
+        const char c = t[i];
+        double mult = 0;
+        if (c == 'p' || c == 'P') mult = 1e-12;
+        else if (c == 'n' || c == 'N') mult = 1e-9;
+        else if (c == 'u' || c == 'U') mult = 1e-6;
+        else if (c == 'm') mult = 1e-3;
+        else continue;
+        double whole = 0;
+        if (!parse_double(t.substr(0, i), whole)) continue;
+        const std::string right = t.substr(i + 1);
+        double frac = 0;
+        if (!right.empty()) {
+            bool digits = true;
+            for (char d : right) {
+                if (!std::isdigit(static_cast<unsigned char>(d))) digits = false;
+            }
+            if (!digits) continue;
+            frac = std::strtod(right.c_str(), nullptr) /
+                   std::pow(10.0, static_cast<double>(right.size()));
+        }
+        out = (whole + frac) * mult;
+        return std::isfinite(out);
+    }
+    return parse_double(t, out);
+}
+
+// "433M", "2.4GHz", "1000", "1k" -> hertz. A bare trailing m means megahertz.
+bool parse_hertz(const std::string& in, double& hz) {
+    double v = 0;
+    std::string u;
+    if (!split_suffix(in, v, u)) return false;
+    if (u.size() >= 2 && u.compare(u.size() - 2, 2, "hz") == 0) u.resize(u.size() - 2);
+    if (u.empty()) hz = v;
+    else if (u == "k") hz = v * 1e3;
+    else if (u == "m") hz = v * 1e6;
+    else if (u == "g") hz = v * 1e9;
+    else return false;
+    return std::isfinite(hz);
+}
+
+// Time suffixes only. A bare number is not a duration.
+bool parse_seconds(const std::string& in, double& sec) {
+    double v = 0;
+    std::string u;
+    if (!split_suffix(in, v, u) || u.empty()) return false;
+    if (u == "s" || u == "sec") sec = v;
+    else if (u == "ms") sec = v * 1e-3;
+    else if (u == "us") sec = v * 1e-6;
+    else if (u == "ns") sec = v * 1e-9;
+    else return false;
+    return std::isfinite(sec);
+}
+
+std::string run_parallel(Tokens t, bool& ok) {
+    skip_mode(t, {"par", "parallel", "p"});
+    if (t.size() < 2 || t.size() > 6) return fail(ok, "need 2 to 6 resistors, e.g. 10k 10k");
+    std::vector<double> r;
+    r.reserve(t.size());
+    double conductance = 0;
+    for (const auto& tok : t) {
+        double ohms = 0;
+        if (!parse_ohms(tok, ohms) || !(ohms > 0)) return fail(ok, "resistor must be > 0 (e.g. 10k, 4k7)");
+        r.push_back(ohms);
+        conductance += 1.0 / ohms;
+    }
+    const double req = 1.0 / conductance;
+    Out o;
+    o.add("Req", fmt_ohms(req) + " ohm");
+    for (size_t i = 0; i < r.size(); ++i) {
+        const double share = (1.0 / r[i]) / conductance * 100.0;
+        o.add("R" + std::to_string(i + 1), fmt_ohms(r[i]) + " ohm  " + sig(share) + "% I");
+    }
+    o.add("E24", fmt_ohms(nearest_e24(req)) + " ohm");
+    return o.str();
+}
+
+std::string run_rc(Tokens t, bool& ok) {
+    skip_mode(t, {"rc"});
+    if (t.size() < 2 || t.size() > 3) return fail(ok, "need: R C [charge%]   e.g. 10k 100n 90");
+    double r = 0, c = 0;
+    if (!parse_ohms(t[0], r) || !(r > 0)) return fail(ok, "R must be > 0 (e.g. 10k)");
+    if (!parse_farads(t[1], c) || !(c > 0)) return fail(ok, "C must be > 0 (e.g. 100n, 10u)");
+    const double tau = r * c;
+    Out o;
+    o.add("tau", fmt_span(tau) + " (63%)");
+    o.add("fc", sig(1.0 / (2.0 * kPi * tau)) + " Hz");
+    o.add("99%", fmt_span(-tau * std::log(0.01)));
+    o.add("5 tau", fmt_span(5.0 * tau));
+    if (t.size() == 3) {
+        double pct = 0;
+        std::string p = t[2];
+        if (!p.empty() && p.back() == '%') p.pop_back();
+        if (!parse_double(p, pct) || !(pct > 0) || !(pct < 100))
+            return fail(ok, "charge % must be between 0 and 100");
+        o.add(sig(pct) + "%", fmt_span(-tau * std::log(1.0 - pct / 100.0)));
+    }
+    return o.str();
+}
+
+enum class BatQty { Bare, Mah, Ma, Hours };
+
+bool parse_bat_tok(const std::string& tok, BatQty& kind, double& v) {
+    double n = 0;
+    std::string u;
+    if (!split_suffix(tok, n, u)) return false;
+    if (u == "mah") {
+        kind = BatQty::Mah;
+        v = n;
+    } else if (u == "ah") {
+        kind = BatQty::Mah;
+        v = n * 1000.0;
+    } else if (u == "ma") {
+        kind = BatQty::Ma;
+        v = n;
+    } else if (u == "a" || u == "amp" || u == "amps") {
+        kind = BatQty::Ma;
+        v = n * 1000.0;
+    } else if (u == "h" || u == "hr" || u == "hrs") {
+        kind = BatQty::Hours;
+        v = n;
+    } else if (u == "min" || u == "mins") {
+        kind = BatQty::Hours;
+        v = n / 60.0;
+    } else if (u.empty()) {
+        kind = BatQty::Bare;
+        v = n;
+    } else {
+        return false;
+    }
+    return std::isfinite(v);
+}
+
+std::string fmt_clock(double hours) {
+    long long total_min = std::llround(hours * 60.0);
+    if (total_min < 0) total_min = 0;
+    return std::to_string(total_min / 60) + "h " + std::to_string(total_min % 60) + "m";
+}
+
+std::string run_battery(Tokens t, bool& ok) {
+    enum { Runtime, Capacity, Load };
+    int mode = pick_mode(t, {{"runtime", Runtime}, {"life", Runtime}, {"time", Runtime},
+                             {"mah", Capacity}, {"cap", Capacity}, {"capacity", Capacity},
+                             {"ma", Load}, {"load", Load}, {"current", Load}});
+    if (mode < 0) mode = Runtime;
+    if (t.size() != 2) return fail(ok, "need two of mAh, mA, hours   e.g. 2000 100");
+
+    bool has_mah = false, has_ma = false, has_h = false;
+    double mah = 0, ma = 0, hours = 0;
+    double bare[2] = {};
+    int n_bare = 0;
+    for (const auto& tok : t) {
+        BatQty kind = BatQty::Bare;
+        double v = 0;
+        if (!parse_bat_tok(tok, kind, v)) return fail(ok, "bad value (mAh, mA, h, min)");
+        if (kind == BatQty::Bare) {
+            bare[n_bare++] = v;
+            continue;
+        }
+        if ((kind == BatQty::Mah && has_mah) || (kind == BatQty::Ma && has_ma) ||
+            (kind == BatQty::Hours && has_h))
+            return fail(ok, "repeated unit");
+        if (kind == BatQty::Mah) {
+            mah = v;
+            has_mah = true;
+        } else if (kind == BatQty::Ma) {
+            ma = v;
+            has_ma = true;
+        } else {
+            hours = v;
+            has_h = true;
+        }
+    }
+
+    const int known = (has_mah ? 1 : 0) + (has_ma ? 1 : 0) + (has_h ? 1 : 0);
+    if (known + n_bare != 2) return fail(ok, "need two of mAh, mA, hours");
+
+    auto assign_bare = [&](int which, double v) {
+        if (which == 0) {
+            mah = v;
+            has_mah = true;
+        } else if (which == 1) {
+            ma = v;
+            has_ma = true;
+        } else {
+            hours = v;
+            has_h = true;
+        }
+    };
+
+    if (n_bare == 2) {
+        if (mode == Capacity) {
+            assign_bare(2, bare[0]);
+            assign_bare(1, bare[1]);
+        } else if (mode == Load) {
+            assign_bare(0, bare[0]);
+            assign_bare(2, bare[1]);
+        } else {
+            assign_bare(0, bare[0]);
+            assign_bare(1, bare[1]);
+        }
+    } else if (n_bare == 1) {
+        const int answer = mode == Capacity ? 0 : mode == Load ? 1 : 2;
+        const bool filled[3] = {has_mah, has_ma, has_h};
+        if (filled[answer]) return fail(ok, "add a unit so the bare number is clear");
+        int other = -1;
+        for (int i = 0; i < 3; ++i) {
+            if (i != answer && !filled[i]) other = i;
+        }
+        assign_bare(other, bare[0]);
+    }
+
+    if ((has_mah && !(mah > 0)) || (has_ma && !(ma > 0)) || (has_h && !(hours > 0)))
+        return fail(ok, "mAh, mA and hours must be > 0");
+    if (!has_mah) mah = ma * hours;
+    else if (!has_ma) ma = mah / hours;
+    else hours = mah / ma;
+
+    Out o;
+    o.add("mAh", sig(mah));
+    o.add("mA", sig(ma));
+    o.add("hours", sig(hours));
+    o.add("clock", fmt_clock(hours));
+    if (hours >= 24.0) o.add("days", sig(hours / 24.0));
+    return o.str();
+}
+
+constexpr double kC = 299792458.0;
+
+std::string emit_wave(double hz, double vf) {
+    const double wl = kC / hz;
+    Out o;
+    o.add("1/4 wave", fmt_len(wl / 4.0 * vf));
+    o.add("wavelength", fmt_len(wl));
+    o.add("period", fmt_span(1.0 / hz));
+    o.add("f", eng(hz) + "Hz");
+    o.add("1/2 wave", fmt_len(wl / 2.0 * vf));
+    if (vf != 1.0) o.add("vf", sig(vf));
+    return o.str();
+}
+
+std::string run_frequency(Tokens t, bool& ok) {
+    enum { Hz, Period, Wave };
+    int mode = pick_mode(t, {{"hz", Hz}, {"f", Hz}, {"freq", Hz},
+                             {"t", Period}, {"period", Period}, {"time", Period},
+                             {"wave", Wave}, {"wl", Wave}, {"lambda", Wave}, {"len", Wave}});
+    if (t.empty() || t.size() > 2) return fail(ok, "need: 433M | t 1us | wave 70cm [vf]");
+    double vf = 1.0;
+    if (t.size() == 2) {
+        if (!parse_double(t[1], vf) || !(vf > 0) || vf > 1.0)
+            return fail(ok, "velocity factor must be > 0 and <= 1");
+    }
+    if (mode < 0) {
+        double sec = 0;
+        mode = parse_seconds(t[0], sec) ? Period : Hz;
+    }
+    double hz = 0;
+    if (mode == Period) {
+        double sec = 0;
+        if (!parse_seconds(t[0], sec) || !(sec > 0)) return fail(ok, "period must be > 0 (e.g. 1us)");
+        hz = 1.0 / sec;
+    } else if (mode == Wave) {
+        double m = 0;
+        if (!parse_length_m(t[0], "m", m) || !(m > 0)) return fail(ok, "wavelength must be > 0 (e.g. 70cm)");
+        hz = kC / m;
+    } else {
+        if (!parse_hertz(t[0], hz) || !(hz > 0)) return fail(ok, "frequency must be > 0 (e.g. 433M, 2.4G)");
+    }
+    return emit_wave(hz, vf);
+}
+
+std::string run_pwm(Tokens t, bool& ok) {
+    skip_mode(t, {"pwm"});
+    if (t.size() != 2) return fail(ok, "need: freq duty%   e.g. 1k 25  or  1k 250us");
+    double hz = 0;
+    if (!parse_hertz(t[0], hz) || !(hz > 0)) return fail(ok, "frequency must be > 0 (e.g. 1k)");
+    const double period = 1.0 / hz;
+    double high = 0;
+    double duty = 0;
+    if (parse_seconds(t[1], high)) {
+        if (!(high >= 0) || high > period + period * 1e-9) return fail(ok, "high time must fit in one period");
+        if (high > period) high = period;
+        duty = high / period * 100.0;
+    } else {
+        std::string d = t[1];
+        if (!d.empty() && d.back() == '%') d.pop_back();
+        if (!parse_double(d, duty) || duty < 0 || duty > 100) return fail(ok, "duty must be 0..100 %");
+        high = period * duty / 100.0;
+    }
+    Out o;
+    o.add("high", fmt_span(high));
+    o.add("low", fmt_span(period - high));
+    o.add("duty", sig(duty) + "%");
+    o.add("period", fmt_span(period));
+    o.add("freq", eng(hz) + "Hz");
+    return o.str();
+}
+
+std::string run_percentage(Tokens t, bool& ok) {
+    enum { Of, Change, Ratio };
+    int mode = pick_mode(t, {{"of", Of}, {"pct", Of}, {"percent", Of},
+                             {"change", Change}, {"delta", Change}, {"chg", Change},
+                             {"ratio", Ratio}, {"part", Ratio}, {"what", Ratio}});
+    if (!t.empty() && t[0].back() == '%') {
+        t[0].pop_back();
+        if (mode < 0) mode = Of;
+    }
+    if (mode < 0 || t.size() != 2) return fail(ok, "need: 15% 200 | change 80 100 | ratio 1 4");
+    double a = 0, b = 0;
+    if (!parse_double(t[0], a) || !parse_double(t[1], b)) return fail(ok, "need two numbers");
+    Out o;
+    if (mode == Of) {
+        o.add("result", sig(b * a / 100.0));
+        o.add("of", sig(a) + "% of " + sig(b));
+    } else if (mode == Change) {
+        if (a == 0) return fail(ok, "old value must not be 0");
+        const double pct = (b - a) / a * 100.0;
+        o.add("change", (pct > 0 ? "+" : "") + sig(pct) + "%");
+        o.add("delta", sig(b - a));
+        o.add("from", sig(a) + " to " + sig(b));
+    } else {
+        if (b == 0) return fail(ok, "whole must not be 0");
+        o.add("percent", sig(a / b * 100.0) + "%");
+        o.add("ratio", sig(a) + " / " + sig(b));
+    }
+    return o.str();
+}
+
+bool parse_ymd(const std::string& s, int& y, int& m, int& d) {
+    int yy = 0, mm = 0, dd = 0;
+    char extra = 0;
+    if (std::sscanf(s.c_str(), "%d-%d-%d%c", &yy, &mm, &dd, &extra) != 3) return false;
+    if (yy < 1 || yy > 9999 || mm < 1 || mm > 12 || dd < 1 || dd > days_in_month(yy, mm)) return false;
+    y = yy;
+    m = mm;
+    d = dd;
+    return true;
+}
+
+const char* weekday_of(int64_t days) {
+    static const char* wd[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    const int dow = static_cast<int>(((days % 7) + 11) % 7);
+    return wd[dow];
+}
+
+std::string run_date_diff(Tokens t, bool& ok) {
+    enum { Diff, Add };
+    int mode = pick_mode(t, {{"diff", Diff}, {"between", Diff}, {"days", Diff},
+                             {"add", Add}, {"plus", Add}, {"sub", Add}});
+    if (t.size() != 2) return fail(ok, "need: YYYY-MM-DD YYYY-MM-DD | add YYYY-MM-DD days");
+    int y1 = 0, m1 = 0, d1 = 0;
+    if (!parse_ymd(t[0], y1, m1, d1)) return fail(ok, "bad date (YYYY-MM-DD)");
+    const int64_t day1 = days_from_civil(y1, m1, d1);
+    int y2 = 0, m2 = 0, d2 = 0;
+    const bool second_is_date = parse_ymd(t[1], y2, m2, d2);
+    if (mode < 0) mode = second_is_date ? Diff : Add;
+    Out o;
+    if (mode == Diff) {
+        if (!second_is_date) return fail(ok, "need two dates");
+        const int64_t day2 = days_from_civil(y2, m2, d2);
+        const int64_t delta = day2 - day1;
+        const int64_t abs_d = delta < 0 ? -delta : delta;
+        o.add("days", std::to_string(static_cast<long long>(delta)));
+        o.add("weeks", std::to_string(static_cast<long long>(abs_d / 7)) + "w " +
+                           std::to_string(static_cast<long long>(abs_d % 7)) + "d");
+        o.add("when", std::string(weekday_of(day1)) + " to " + weekday_of(day2));
+        return o.str();
+    }
+    long long n = 0;
+    if (!parse_int_range(t[1], n, -3650000, 3650000)) return fail(ok, "days must be a whole number");
+    const int64_t day2 = day1 + n;
+    int y = 0, m = 0, d = 0;
+    civil_from_days(day2, y, m, d);
+    if (y < 1 || y > 9999) return fail(ok, "result is outside year 1..9999");
+    o.add("date", fmt("%04d-%02d-%02d", y, m, d));
+    o.add("weekday", weekday_of(day2));
+    o.add("days", std::to_string(n));
+    return o.str();
+}
+
+// HH:MM or HH:MM:SS. Seconds are optional. Hours stay inside one day.
+bool parse_clock(const std::string& s, int& sec_out, bool& has_seconds) {
+    int h = 0, m = 0, sec = 0;
+    char extra = 0;
+    has_seconds = false;
+    const int n3 = std::sscanf(s.c_str(), "%d:%d:%d%c", &h, &m, &sec, &extra);
+    if (n3 == 3) {
+        has_seconds = true;
+    } else {
+        const int n2 = std::sscanf(s.c_str(), "%d:%d%c", &h, &m, &extra);
+        if (n2 != 2) return false;
+        sec = 0;
+    }
+    if (h < 0 || h > 23 || m < 0 || m > 59 || sec < 0 || sec > 59) return false;
+    sec_out = h * 3600 + m * 60 + sec;
+    return true;
+}
+
+std::string fmt_clock(int sec, bool with_seconds) {
+    const int h = sec / 3600;
+    const int m = (sec % 3600) / 60;
+    const int s = sec % 60;
+    if (with_seconds || s != 0) return fmt("%02d:%02d:%02d", h, m, s);
+    return fmt("%02d:%02d", h, m);
+}
+
+// 2h30, 90m, 45s, 1:30, -15m. A bare number is minutes. H:MM is a duration, so hours may pass 23.
+bool parse_duration_sec(const std::string& in, long long& out) {
+    std::string s = lower(trim(in));
+    if (s.empty()) return false;
+    int sign = 1;
+    if (s[0] == '+') s.erase(s.begin());
+    else if (s[0] == '-') {
+        sign = -1;
+        s.erase(s.begin());
+    }
+    if (s.empty()) return false;
+
+    if (s.find(':') != std::string::npos) {
+        int h = 0, m = 0, sec = 0;
+        char extra = 0;
+        const int n3 = std::sscanf(s.c_str(), "%d:%d:%d%c", &h, &m, &sec, &extra);
+        if (n3 != 3) {
+            const int n2 = std::sscanf(s.c_str(), "%d:%d%c", &h, &m, &extra);
+            if (n2 != 2) return false;
+            sec = 0;
+        }
+        if (h < 0 || m < 0 || m > 59 || sec < 0 || sec > 59) return false;
+        out = sign * (static_cast<long long>(h) * 3600 + m * 60 + sec);
+        return true;
+    }
+
+    long long total = 0;
+    bool any = false;
+    char prev = 0;
+    size_t i = 0;
+    while (i < s.size()) {
+        if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+        long long n = 0;
+        while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
+            n = n * 10 + (s[i] - '0');
+            ++i;
+        }
+        char unit = 0;
+        if (i < s.size() && (s[i] == 'h' || s[i] == 'm' || s[i] == 's')) {
+            unit = s[i++];
+        } else if (prev == 'h') {
+            unit = 'm';
+        } else if (!any && i == s.size()) {
+            unit = 'm';
+        } else {
+            return false;
+        }
+        if (unit == 'h') total += n * 3600;
+        else if (unit == 'm') total += n * 60;
+        else total += n;
+        prev = unit;
+        any = true;
+    }
+    out = sign * total;
+    return any;
+}
+
+std::string fmt_hms_span(long long sec) {
+    const char* sign = sec < 0 ? "-" : "";
+    long long a = sec < 0 ? -sec : sec;
+    const long long d = a / 86400;
+    a %= 86400;
+    const long long h = a / 3600;
+    a %= 3600;
+    const long long m = a / 60;
+    const long long s = a % 60;
+    std::string out = sign;
+    bool wrote = false;
+    if (d != 0) {
+        out += std::to_string(d) + "d";
+        wrote = true;
+    }
+    if (h != 0) {
+        if (wrote) out += " ";
+        out += std::to_string(h) + "h";
+        wrote = true;
+    }
+    if (m != 0) {
+        if (wrote) out += " ";
+        out += std::to_string(m) + "m";
+        wrote = true;
+    }
+    if (s != 0 || !wrote) {
+        if (wrote) out += " ";
+        out += std::to_string(s) + "s";
+    }
+    return out;
+}
+
+std::string run_time_diff(Tokens t, bool& ok) {
+    enum { Auto, Diff, Add };
+    int mode = Auto;
+    bool negate = false;
+    if (!t.empty()) {
+        const std::string word = lower(t[0]);
+        if (word == "diff" || word == "between") {
+            mode = Diff;
+            t.erase(t.begin());
+        } else if (word == "add" || word == "plus") {
+            mode = Add;
+            t.erase(t.begin());
+        } else if (word == "sub") {
+            mode = Add;
+            negate = true;
+            t.erase(t.begin());
+        }
+    }
+    if (t.size() >= 3 && (t[1] == "+" || t[1] == "-")) {
+        mode = Add;
+        if (t[1] == "-") negate = !negate;
+        t.erase(t.begin() + 1);
+    }
+
+    if (t.size() == 4) {
+        if (mode == Add) return fail(ok, "add a duration: add YYYY-MM-DD HH:MM 2h30");
+        int s1 = 0, s2 = 0;
+        bool sec1 = false, sec2 = false;
+        int y1 = 0, mo1 = 0, d1 = 0, y2 = 0, mo2 = 0, d2 = 0;
+        if (!parse_ymd(t[0], y1, mo1, d1) || !parse_clock(t[1], s1, sec1) || !parse_ymd(t[2], y2, mo2, d2) ||
+            !parse_clock(t[3], s2, sec2))
+            return fail(ok, "need: YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM");
+        const long long a = days_from_civil(y1, mo1, d1) * 86400LL + s1;
+        const long long b = days_from_civil(y2, mo2, d2) * 86400LL + s2;
+        const long long delta = b - a;
+        Out o;
+        o.add("span", delta == 0 ? "0m" : fmt_hms_span(delta));
+        o.add("hours", sig(static_cast<double>(delta) / 3600.0));
+        o.add("seconds", std::to_string(static_cast<long long>(delta)));
+        return o.str();
+    }
+
+    if (t.size() == 3) {
+        int y = 0, mo = 0, d = 0, clock = 0;
+        bool has_sec = false;
+        long long dur = 0;
+        if (!parse_ymd(t[0], y, mo, d) || !parse_clock(t[1], clock, has_sec) || !parse_duration_sec(t[2], dur))
+            return fail(ok, "need: add YYYY-MM-DD HH:MM 2h30");
+        if (negate) dur = -dur;
+        const long long instant = days_from_civil(y, mo, d) * 86400LL + clock + dur;
+        const long long day = floor_div(instant, 86400);
+        const int sec = static_cast<int>(instant - day * 86400);
+        int yy = 0, mm = 0, dd = 0;
+        civil_from_days(day, yy, mm, dd);
+        if (yy < 1 || yy > 9999) return fail(ok, "result is outside year 1..9999");
+        Out o;
+        o.add("date", fmt("%04d-%02d-%02d", yy, mm, dd));
+        o.add("time", fmt_clock(sec, has_sec || (dur % 60) != 0));
+        o.add("weekday", weekday_of(day));
+        return o.str();
+    }
+
+    if (t.size() != 2) return fail(ok, "need: HH:MM HH:MM | add HH:MM 2h30");
+
+    int start = 0, end = 0;
+    bool start_sec = false, end_sec = false;
+    long long dur = 0;
+    if (!parse_clock(t[0], start, start_sec)) return fail(ok, "bad time (HH:MM or HH:MM:SS)");
+    const bool end_is_clock = parse_clock(t[1], end, end_sec);
+    const bool end_is_dur = parse_duration_sec(t[1], dur);
+    // A second clock time is a difference. Add only when the user asked, or the
+    // second token is a duration such as 2h30 or 90m and not a clock time.
+    if (mode == Auto) mode = end_is_clock ? Diff : Add;
+    if (mode == Diff && !end_is_clock) return fail(ok, "need two times (HH:MM)");
+    if (mode == Add && !end_is_dur) return fail(ok, "need a duration (2h30, 90m, 45s)");
+
+    Out o;
+    if (mode == Diff) {
+        int delta = end - start;
+        const bool next = delta < 0;
+        if (next) delta += 86400;
+        o.add("span", delta == 0 ? "0m" : fmt_hms_span(delta));
+        if (next) o.add("when", "next day");
+        if (start_sec || end_sec) o.add("sec", std::to_string(delta));
+        else o.add("min", std::to_string(delta / 60));
+        return o.str();
+    }
+
+    if (negate) dur = -dur;
+    const long long total = static_cast<long long>(start) + dur;
+    const long long day = floor_div(total, 86400);
+    const int sec = static_cast<int>(total - day * 86400);
+    o.add("time", fmt_clock(sec, start_sec || (dur % 60) != 0));
+    if (day != 0) o.add("day", (day > 0 ? "+" : "") + std::to_string(static_cast<long long>(day)));
+    o.add("moved", fmt_hms_span(dur));
+    return o.str();
+}
+
+std::string run_tip(Tokens t, bool& ok) {
+    skip_mode(t, {"tip", "split"});
+    if (t.size() < 2 || t.size() > 3) return fail(ok, "need: bill tip% [people]   e.g. 50 15 3");
+    double bill = 0, pct = 0, people = 1;
+    if (!parse_double(t[0], bill) || bill < 0) return fail(ok, "bill must be >= 0");
+    std::string tip = t[1];
+    if (!tip.empty() && tip.back() == '%') tip.pop_back();
+    if (!parse_double(tip, pct) || pct < 0) return fail(ok, "tip % must be >= 0");
+    if (t.size() == 3) {
+        if (!parse_double(t[2], people) || people < 1 || people != std::floor(people))
+            return fail(ok, "people must be a whole number >= 1");
+    }
+    const double tip_amt = bill * pct / 100.0;
+    const double total = bill + tip_amt;
+    Out o;
+    o.add("each", fmt("%.2f", total / people));
+    o.add("total", fmt("%.2f", total));
+    o.add("tip", fmt("%.2f", tip_amt) + " (" + sig(pct) + "%)");
+    o.add("tip each", fmt("%.2f", tip_amt / people));
+    o.add("people", std::to_string(static_cast<long long>(people)));
+    return o.str();
+}
+
+Tokens split_commas(const Tokens& in) {
+    Tokens out;
+    for (const auto& s : in) {
+        std::string cur;
+        for (char c : s) {
+            if (c == ',') {
+                if (!cur.empty()) out.push_back(cur);
+                cur.clear();
+            } else {
+                cur.push_back(c);
+            }
+        }
+        if (!cur.empty()) out.push_back(cur);
+    }
+    return out;
+}
+
+std::string run_distance(Tokens in, bool& ok) {
+    skip_mode(in, {"dist", "distance", "gps"});
+    Tokens t = split_commas(in);
+    if (t.size() != 4) return fail(ok, "need: lat1 lon1 lat2 lon2");
+    double lat1 = 0, lon1 = 0, lat2 = 0, lon2 = 0;
+    if (!parse_double(t[0], lat1) || !parse_double(t[1], lon1) || !parse_double(t[2], lat2) ||
+        !parse_double(t[3], lon2))
+        return fail(ok, "lat/lon must be numbers");
+    if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) return fail(ok, "latitude must be -90..90");
+    if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) return fail(ok, "longitude must be -180..180");
+
+    constexpr double kEarth = 6371000.0;
+    const double p1 = lat1 * kPi / 180.0;
+    const double p2 = lat2 * kPi / 180.0;
+    const double dp = (lat2 - lat1) * kPi / 180.0;
+    const double dl = (lon2 - lon1) * kPi / 180.0;
+    const double sdp = std::sin(dp / 2.0);
+    const double sdl = std::sin(dl / 2.0);
+    const double a = sdp * sdp + std::cos(p1) * std::cos(p2) * sdl * sdl;
+    const double under = 1.0 - a;
+    const double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(under > 0 ? under : 0));
+    const double meters = kEarth * c;
+
+    Out o;
+    o.add("km", sig(meters / 1000.0));
+    o.add("meters", sig(meters));
+    if (meters > 0.5) {
+        const double y = std::sin(dl) * std::cos(p2);
+        const double x = std::cos(p1) * std::sin(p2) - std::sin(p1) * std::cos(p2) * std::cos(dl);
+        double deg = std::atan2(y, x) * 180.0 / kPi;
+        if (deg < 0) deg += 360.0;
+        o.add("bearing", sig(deg) + " deg");
+    }
+    o.add("miles", sig(meters / 1609.344));
+    return o.str();
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -2073,6 +2772,16 @@ const char* op_label(Op op) {
     case Op::Motor: return "Motor";
     case Op::Gas: return "Gas law";
     case Op::Flow: return "Flow and pipe";
+    case Op::Parallel: return "Parallel resistors";
+    case Op::RcTimer: return "RC timer";
+    case Op::Battery: return "Battery life";
+    case Op::Frequency: return "Frequency";
+    case Op::Pwm: return "PWM";
+    case Op::Percentage: return "Percentage";
+    case Op::DateDiff: return "Date difference";
+    case Op::TimeDiff: return "Time difference";
+    case Op::TipSplit: return "Tip split";
+    case Op::Distance: return "Distance";
     case Op::Count: break;
     }
     return "Calc";
@@ -2105,6 +2814,17 @@ const char* input_hint(Op op) {
         return "boyle P1 V1 P2 V2 | boyle P1 V1 T1 P2 V2 T2 | ideal|mass [gauge|abs] P T V | air t";
     case Op::Flow:
         return "q ID vel | dv Q ID vel | vol ID len | darcy ID len Q [rough]   (mm, m/s, L/min)";
+    case Op::Parallel: return "R1 R2 [R3..]   e.g. 10k 10k or 10k 4.7k 1k";
+    case Op::RcTimer: return "R C [charge%]   e.g. 10k 100n or 10k 100n 90";
+    case Op::Battery: return "mAh mA | mah hours mA | ma mAh hours   e.g. 2000 100 or 2000mah 8h";
+    case Op::Frequency: return "Hz | t period | wave length [vf]   e.g. 433M or 2.4G 0.95 or wave 70cm";
+    case Op::Pwm: return "freq duty% | freq high-time   e.g. 1k 25 or 1k 250us";
+    case Op::Percentage: return "X% of Y | change old new | ratio part whole   e.g. 15% 200";
+    case Op::DateDiff: return "YYYY-MM-DD YYYY-MM-DD | add YYYY-MM-DD days";
+    case Op::TimeDiff:
+        return "HH:MM HH:MM | add HH:MM 2h30 | YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM";
+    case Op::TipSplit: return "bill tip% [people=1]   e.g. 50 15 3";
+    case Op::Distance: return "lat1 lon1 lat2 lon2   e.g. 40.7 -74 34.05 -118.2";
     case Op::Count: break;
     }
     return "";
@@ -2130,6 +2850,16 @@ const char* input_example(Op op) {
     case Op::Motor: return "e.g.  1 - 1800 85";
     case Op::Gas: return "e.g.  boyle 1 2 2 -";
     case Op::Flow: return "e.g.  q 20 1.5";
+    case Op::Parallel: return "e.g.  10k 10k   or   10k 4.7k 1k";
+    case Op::RcTimer: return "e.g.  10k 100n   or   10k 100n 90";
+    case Op::Battery: return "e.g.  2000 100   or   mah 8 50";
+    case Op::Frequency: return "e.g.  433M   or   2.4G 0.95";
+    case Op::Pwm: return "e.g.  1k 25   or   1k 250us";
+    case Op::Percentage: return "e.g.  15% 200   or   change 80 100";
+    case Op::DateDiff: return "e.g.  2024-01-01 2024-06-01";
+    case Op::TimeDiff: return "e.g.  14:30 18:45   or   23:10 01:40";
+    case Op::TipSplit: return "e.g.  50 15 3";
+    case Op::Distance: return "e.g.  40.7 -74 34.05 -118.2";
     case Op::Count: break;
     }
     return "Enter values, then Enter";
@@ -2163,6 +2893,16 @@ std::string run(Op op, const std::string& input, bool& ok) {
     case Op::Motor: return run_motor(t, ok);
     case Op::Gas: return run_gas(t, ok);
     case Op::Flow: return run_flow(t, ok);
+    case Op::Parallel: return run_parallel(t, ok);
+    case Op::RcTimer: return run_rc(t, ok);
+    case Op::Battery: return run_battery(t, ok);
+    case Op::Frequency: return run_frequency(t, ok);
+    case Op::Pwm: return run_pwm(t, ok);
+    case Op::Percentage: return run_percentage(t, ok);
+    case Op::DateDiff: return run_date_diff(t, ok);
+    case Op::TimeDiff: return run_time_diff(t, ok);
+    case Op::TipSplit: return run_tip(t, ok);
+    case Op::Distance: return run_distance(t, ok);
     case Op::Count: break;
     }
     ok = false;

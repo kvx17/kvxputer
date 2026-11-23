@@ -68,6 +68,19 @@ const char* KvxScreen::typing_hint() const {
     return nullptr;
 }
 
+void KvxScreen::rebuild_action_bar() {
+    if (!root_) return;
+    action_bar_.reset();
+    action_bar_ = std::make_unique<view::widgets::ActionBar>(root_,
+                                                            assets_,
+                                                            tokens(),
+                                                            nav_actions(),
+                                                            typing_hint());
+    if (!chrome_visible_ && action_bar_ && action_bar_->root()) {
+        lv_obj_add_flag(action_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 lv_obj_t* KvxScreen::root() const {
     return root_;
 }
@@ -176,7 +189,10 @@ void KvxScreen::set_chrome_visible(bool visible) {
 bool KvxScreen::on_global_key(uint32_t key, const char* /*key_name*/, bool /*long_pressed*/, void* user_data) {
     auto* self = static_cast<KvxScreen*>(user_data);
     if (!self) return false;
-    return self->handle_key(key);
+    if (self->handle_key(key)) return true;
+    // Tab is its own key so a screen can hold it. Everyone else still treats it as Next.
+    if (key == platform::kKeyTab) return self->handle_key(LV_KEY_NEXT);
+    return false;
 }
 
 lv_color_t KvxScreen::pri_color() const {

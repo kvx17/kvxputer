@@ -1,8 +1,11 @@
 #include "audio.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <fstream>
+#include <string>
 #include <vector>
 
 namespace platform {
@@ -83,6 +86,158 @@ bool play_dual_tone(float f1, float f2, int duration_ms, std::string& error) {
 
 bool beep(std::string& error) {
     return play_tone(880.0f, 80, error);
+}
+
+enum class MixerKind { Unknown, None, Wpctl, Pactl, Amixer };
+
+bool have_cmd(const char* name) {
+    const std::string out = run_cmd(std::string("command -v ") + name + " 2>/dev/null");
+    return out.find('/') != std::string::npos;
+}
+
+bool command_ok(const std::string& cmd) {
+    const int rc = std::system(cmd.c_str());
+    return rc == 0;
+}
+
+bool parse_wpctl(const std::string& text, OutputLevel& level) {
+    const auto pos = text.find("Volume:");
+    if (pos == std::string::npos) return false;
+    const char* p = text.c_str() + pos + 7;
+    while (*p == ' ' || *p == '\t') ++p;
+    char* end = nullptr;
+    const float value = std::strtof(p, &end);
+    if (end == p) return false;
+    level.percent = std::clamp(static_cast<int>(std::lround(value * 100.0)), 0, 100);
+    level.muted = text.find("[MUTED]") != std::string::npos;
+    return true;
+}
+
+bool parse_percent_token(const std::string& text, OutputLevel& level) {
+    const auto mark = text.find('%');
+    if (mark == std::string::npos || mark == 0) return false;
+    size_t start = mark;
+    while (start > 0 && text[start - 1] >= '0' && text[start - 1] <= '9') --start;
+    if (start == mark) return false;
+    level.percent = std::clamp(std::atoi(text.c_str() + start), 0, 100);
+    level.muted = text.find("[off]") != std::string::npos || text.find("Mute: yes") != std::string::npos;
+    return true;
+}
+
+std::string volume_step(int delta_percent) {
+    const int mag = std::abs(delta_percent);
+    return std::to_string(mag) + (delta_percent >= 0 ? "%+" : "%-");
+}
+
+bool read_wpctl(OutputLevel& level) {
+    return parse_wpctl(run_cmd("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null"), level);
+}
+
+bool read_pactl(OutputLevel& level) {
+    const std::string volume = run_cmd("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null");
+    const std::string mute = run_cmd("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null");
+    if (!parse_percent_token(volume, level)) return false;
+    level.muted = mute.find("yes") != std::string::npos;
+    return true;
+}
+
+bool read_amixer(OutputLevel& level) {
+    const std::string text = run_cmd("amixer sget Master 2>/dev/null");
+    if (parse_percent_token(text, level)) return true;
+    return parse_percent_token(run_cmd("amixer sget Speaker 2>/dev/null"), level);
+}
+
+MixerKind detect_mixer() {
+    static MixerKind cached = MixerKind::Unknown;
+    if (cached != MixerKind::Unknown) return cached;
+    if (have_cmd("wpctl")) cached = MixerKind::Wpctl;
+    else if (have_cmd("pactl")) cached = MixerKind::Pactl;
+    else if (have_cmd("amixer")) cached = MixerKind::Amixer;
+    else cached = MixerKind::None;
+    return cached;
+}
+
+bool mixer_read(MixerKind kind, OutputLevel& level) {
+    switch (kind) {
+        case MixerKind::Wpctl: return read_wpctl(level);
+        case MixerKind::Pactl: return read_pactl(level);
+        case MixerKind::Amixer: return read_amixer(level);
+        default: return false;
+    }
+}
+
+bool mixer_write_volume(MixerKind kind, int delta_percent) {
+    const std::string step = volume_step(delta_percent);
+    switch (kind) {
+        case MixerKind::Wpctl:
+            return command_ok("wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ '" + step +
+                              "' >/dev/null 2>&1");
+        case MixerKind::Pactl:
+            return command_ok(std::string("pactl set-sink-volume @DEFAULT_SINK@ '") +
+                              (delta_percent >= 0 ? "+" : "-") + std::to_string(std::abs(delta_percent)) +
+                              "%' >/dev/null 2>&1");
+        case MixerKind::Amixer:
+            if (command_ok("amixer -q sset Master '" + step + "' >/dev/null 2>&1")) return true;
+            return command_ok("amixer -q sset Speaker '" + step + "' >/dev/null 2>&1");
+        default:
+            return false;
+    }
+}
+
+bool mixer_toggle_mute(MixerKind kind) {
+    switch (kind) {
+        case MixerKind::Wpctl:
+            return command_ok("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle >/dev/null 2>&1");
+        case MixerKind::Pactl:
+            return command_ok("pactl set-sink-mute @DEFAULT_SINK@ toggle >/dev/null 2>&1");
+        case MixerKind::Amixer:
+            if (command_ok("amixer -q sset Master toggle >/dev/null 2>&1")) return true;
+            return command_ok("amixer -q sset Speaker toggle >/dev/null 2>&1");
+        default:
+            return false;
+    }
+}
+
+bool with_mixer(bool toggle, int delta_percent, OutputLevel& level) {
+    if (detect_mixer() == MixerKind::None) return false;
+    const MixerKind order[] = {detect_mixer(), MixerKind::Wpctl, MixerKind::Pactl, MixerKind::Amixer};
+    MixerKind tried = MixerKind::Unknown;
+    for (MixerKind kind : order) {
+        if (kind == MixerKind::Unknown || kind == MixerKind::None || kind == tried) continue;
+        tried = kind;
+        const bool wrote = toggle ? mixer_toggle_mute(kind) : mixer_write_volume(kind, delta_percent);
+        if (!wrote) continue;
+        if (!mixer_read(kind, level)) level.percent = -1;
+        return true;
+    }
+    return false;
+}
+
+bool adjust_output_volume(int delta_percent, OutputLevel& level) {
+    if (delta_percent == 0) return false;
+    return with_mixer(false, delta_percent, level);
+}
+
+bool toggle_output_mute(OutputLevel& level) {
+    return with_mixer(true, 0, level);
+}
+
+bool media_transport(const char* action, std::string& error) {
+    error.clear();
+    if (!action || (std::string(action) != "play-pause" && std::string(action) != "next" &&
+                    std::string(action) != "previous")) {
+        error = "unsupported media key";
+        return false;
+    }
+    if (!have_cmd("playerctl")) {
+        error = "playerctl not installed";
+        return false;
+    }
+    if (!command_ok(std::string("playerctl ") + action + " >/dev/null 2>&1")) {
+        error = "no media player";
+        return false;
+    }
+    return true;
 }
 
 bool capture_pcm(std::vector<int16_t>& samples, int sample_rate, int duration_ms, std::string& error,

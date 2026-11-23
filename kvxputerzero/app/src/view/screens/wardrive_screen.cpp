@@ -1,7 +1,9 @@
 #include "wardrive_screen.h"
 
 #include "asset_manager.h"
+#include "backlight.h"
 #include "kvx_style.h"
+#include "linux_input.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -35,6 +37,10 @@ WardriveScreen::WardriveScreen(viewmodel::BaseViewModel& view_model, app::AssetM
 }
 
 WardriveScreen::~WardriveScreen() {
+    cancel_display_blank();
+    wake_display();
+    platform::clear_early_key_listener(on_early_key, this);
+    platform::clear_screen_key_release_listener(on_key_up, this);
     if (poll_timer_) {
         lv_timer_delete(poll_timer_);
         poll_timer_ = nullptr;
@@ -127,8 +133,23 @@ void WardriveScreen::build() {
     lv_obj_set_style_pad_row(detail_, 1, 0);
     lv_obj_add_flag(detail_, LV_OBJ_FLAG_HIDDEN);
 
+    blank_cover_ = lv_obj_create(root());
+    lv_obj_remove_style_all(blank_cover_);
+    lv_obj_set_size(blank_cover_, view::kScreenWidth, view::kScreenHeight);
+    lv_obj_set_pos(blank_cover_, 0, 0);
+    lv_obj_set_style_bg_color(blank_cover_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(blank_cover_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(blank_cover_, LV_OBJ_FLAG_HIDDEN);
+    auto* blank_label = lv_label_create(blank_cover_);
+    lv_label_set_text(blank_label, "Display off    any key");
+    lv_obj_set_style_text_font(blank_label, font_, 0);
+    lv_obj_set_style_text_color(blank_label, tok.ink_dim, 0);
+    lv_obj_align(blank_label, LV_ALIGN_CENTER, 0, 0);
+
     refresh_table();
     poll_timer_ = lv_timer_create(poll_cb, 100, this);
+    platform::set_early_key_listener(on_early_key, this);
+    platform::set_screen_key_release_listener(on_key_up, this);
 
     cancel_ = false;
     worker_done_ = false;
@@ -347,7 +368,77 @@ void WardriveScreen::stop_worker() {
     if (worker_thread_.joinable()) worker_thread_.join();
 }
 
+void WardriveScreen::arm_display_blank() {
+    if (display_off_ || blank_timer_) return;
+    blank_timer_ = lv_timer_create(blank_timer_cb, 3000, this);
+    if (blank_timer_) lv_timer_set_repeat_count(blank_timer_, 1);
+}
+
+void WardriveScreen::cancel_display_blank() {
+    if (!blank_timer_) return;
+    lv_timer_delete(blank_timer_);
+    blank_timer_ = nullptr;
+}
+
+void WardriveScreen::blank_timer_cb(lv_timer_t* timer) {
+    auto* self = static_cast<WardriveScreen*>(lv_timer_get_user_data(timer));
+    if (!self) return;
+    // LVGL deletes a one-shot timer after this callback returns.
+    self->blank_timer_ = nullptr;
+    self->blank_display();
+}
+
+void WardriveScreen::blank_display() {
+    if (display_off_) return;
+    int32_t current = 0;
+    if (platform::read_brightness_percent(current) && current > 0) {
+        saved_brightness_ = current;
+        saved_brightness_valid_ = true;
+    }
+    platform::write_brightness_percent(0);
+    display_off_ = true;
+    if (blank_cover_) {
+        lv_obj_remove_flag(blank_cover_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(blank_cover_);
+    }
+}
+
+void WardriveScreen::wake_display() {
+    if (!display_off_) return;
+    display_off_ = false;
+    if (saved_brightness_valid_) platform::write_brightness_percent(saved_brightness_);
+    else platform::write_brightness_percent(70);
+    if (blank_cover_) lv_obj_add_flag(blank_cover_, LV_OBJ_FLAG_HIDDEN);
+}
+
+bool WardriveScreen::on_early_key(uint32_t key, const char*, bool long_pressed, void* user_data) {
+    auto* self = static_cast<WardriveScreen*>(user_data);
+    if (!self) return false;
+    if (self->display_off_) {
+        if (!long_pressed) {
+            self->wake_display();
+            // The key that woke the screen must not also leave or toggle a control.
+            self->swallow_long_ = key;
+        }
+        return true;
+    }
+    if (long_pressed && key == self->swallow_long_) {
+        self->swallow_long_ = 0;
+        return true;
+    }
+    if (!long_pressed) self->swallow_long_ = 0;
+    return false;
+}
+
+void WardriveScreen::on_key_up(uint32_t key, const char*, void* user_data) {
+    auto* self = static_cast<WardriveScreen*>(user_data);
+    if (!self) return;
+    if (key == platform::kKeyTab) self->cancel_display_blank();
+}
+
 void WardriveScreen::leave() {
+    cancel_display_blank();
+    wake_display();
     stop_worker();
     if (on_done_ && !done_fired_) {
         done_fired_ = true;
@@ -358,6 +449,8 @@ void WardriveScreen::leave() {
 }
 
 void WardriveScreen::go_home() {
+    cancel_display_blank();
+    wake_display();
     stop_worker();
     if (on_done_ && !done_fired_) {
         done_fired_ = true;
@@ -368,6 +461,10 @@ void WardriveScreen::go_home() {
 }
 
 bool WardriveScreen::handle_key(uint32_t key) {
+    if (key == platform::kKeyTab) {
+        arm_display_blank();
+        return true;
+    }
     if (key == LV_KEY_ESC) {
         if (expanded_) {
             collapse();

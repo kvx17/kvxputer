@@ -13,7 +13,7 @@ enum class ChannelKind {
     CameraFill,     // live camera preview
     GalleryFill,    // Pictures browser
     ChannelFill,    // tool_registry menu for this channel id
-    DiscoveryFill,  // flat index of all tools
+    DiscoveryFill,  // discovery tools (BLE scan, walls, spectrum, wardrive)
     ComingSoon,     // later wave
     UseStock,       // OS already covers
 };

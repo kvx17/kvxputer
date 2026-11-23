@@ -17,11 +17,16 @@ enum class AppPage {
     ToolRun,
     ToolPrompt,
     Discovery,
+    Search,
+    ShortcutMenu,
+    ShortcutPick,
+    ShortcutCapture,
     Placeholder,
     CodecMenu,
     CodecWork,
     EngCalcMenu,
     EngCalcWork,
+    LifeCounter,
     Timer,
     Matrix,
     ConfigMenu,
@@ -214,6 +219,25 @@ public:
     const std::string& discovery_filter() const;
     void set_discovery_filter(std::string value);
 
+    struct KeyShortcut {
+        uint32_t key = 0;
+        bool hold = false;
+        std::string target_id;
+    };
+
+    const std::vector<KeyShortcut>& shortcuts() const;
+    std::string shortcut_target(uint32_t key, bool hold) const;
+    void set_shortcut(uint32_t key, bool hold, std::string target_id);
+    void clear_shortcuts();
+
+    const std::vector<std::string>& recent_searches() const;
+    void push_recent_search(std::string id);
+
+    bool shortcut_bind_hold() const;
+    void set_shortcut_bind_hold(bool hold);
+    const std::string& shortcut_bind_target() const;
+    void set_shortcut_bind_target(std::string id);
+
     void load_user_config();
     void save_user_config() const;
 
@@ -265,6 +289,11 @@ private:
     ToolId active_tool_id_ = ToolId::None;
     std::string tool_param_;
     std::string discovery_filter_;
+
+    std::vector<KeyShortcut> shortcuts_;
+    std::vector<std::string> recent_searches_;
+    bool shortcut_bind_hold_ = false;
+    std::string shortcut_bind_target_;
 };
 
 } // namespace model
