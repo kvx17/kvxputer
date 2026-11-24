@@ -37,6 +37,8 @@ enum class ToolId {
     SmbStatus,
     SipOptions,
     LdapRead,
+    WebCrawler,
+    Cctv,
     // BLE
     BleScan,
     BleHunter,
@@ -250,6 +252,8 @@ inline constexpr ToolDesc kTools[] = {
     {ToolId::SmbStatus, "smb_status", "SMB Status", "netops"},
     {ToolId::SipOptions, "sip_options", "SIP OPTIONS", "netops"},
     {ToolId::LdapRead, "ldap_read", "LDAP Read", "netops"},
+    {ToolId::WebCrawler, "web_crawler", "Web Crawler", "netops"},
+    {ToolId::Cctv, "cctv", "CCTV Scan", "netops"},
 
     {ToolId::BleScan, "ble_scan", "BLE Scan", "ble"},
     {ToolId::BleHunter, "ble_hunter", "BLE Hunter", "ble"},

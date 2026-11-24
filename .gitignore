@@ -1,10 +1,18 @@
-# kvxputer / Cursor
+# kvxputer / Cursor / local agent tooling
 .cursor/
 .idea/
 .ai/
+.agents/
 tmp/
 .codex_tmp
 .claude
+.DS_Store
+
+# Build caches and packaged releases (local only)
+.cache/
+releases/
+dist/
+*.deb
 
 # PlatformIO / IDE
 .pio/
@@ -39,6 +47,13 @@ PCConnect/logs/*
 
 # Reference / inspiration (local only — not part of firmware)
 resources/
+
+# Local UI audit captures (not part of the app)
+kvxputerzero/docs/ui_audit.md
+kvxputerzero/app/scripts/ui_audit/
+kvxputerzero/app/screenshot/*
+!kvxputerzero/app/screenshot/app-simulator-dark-darwin.png
+!kvxputerzero/app/screenshot/app-simulator-light-darwin.png
 
 # Legacy / misc
 _*.sh

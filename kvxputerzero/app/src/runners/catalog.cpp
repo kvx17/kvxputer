@@ -146,6 +146,10 @@ std::vector<Entry> build() {
                        false, {{"host", "host", true}}));
     out.push_back(make("netops", "ldap_read", "LDAP Read", Tid::LdapRead, Kind::Log, net_ldap_read(), false, false,
                        {{"host", "host", true}}));
+    out.push_back(make("netops", "web_crawler", "Web Crawler", Tid::WebCrawler, Kind::Log, net_web_crawler(),
+                       false, false, {{"base", "IP/host[:port] or URL", true}}));
+    out.push_back(make("netops", "cctv", "CCTV Scan", Tid::Cctv, Kind::Log, net_cctv(), false, false,
+                       {{"seed", "seed IP (sweeps /24)", false}}));
 
     // BLE
     out.push_back(make("ble", "ble_scan", "BLE Scan", Tid::BleScan, Kind::Log, net_ble_scan(), false, true));

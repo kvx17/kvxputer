@@ -8,6 +8,7 @@
 #include "sip_options.h"
 #include "tcp_probe.h"
 #include "user_paths.h"
+#include "recon_scan.h"
 #include "wifi_scan.h"
 
 #include <chrono>
@@ -271,6 +272,38 @@ RunFn net_ldap_read() {
         }
         if (!r.ok) return emit_error(line, r.error.empty() ? "ldap failed" : r.error);
         return 0;
+    };
+}
+
+RunFn net_web_crawler() {
+    return [](const std::vector<std::string>& args, std::atomic<bool>& cancel, const LineFn& line) {
+        if (args.empty()) return emit_error(line, "need: <host|url>");
+        auto paths = platform::read_path_list(tools::config_file("crawler_wordlist.txt"));
+        if (paths.empty()) paths = platform::default_crawler_paths();
+        const auto r = platform::web_crawl(
+            args[0], paths, [&](const std::string& s) { if (line) line(s); },
+            [&]() { return cancelled(cancel); });
+        if (cancelled(cancel)) return 130;
+        return emit_ok(line, "tried " + std::to_string(r.tried) + "  hits " + std::to_string(r.hits));
+    };
+}
+
+RunFn net_cctv() {
+    return [](const std::vector<std::string>& args, std::atomic<bool>& cancel, const LineFn& line) {
+        std::string seed = args.empty() ? std::string() : args[0];
+        if (seed.empty()) {
+            std::string err;
+            const auto iface = platform::default_route_iface(err);
+            seed = !iface.gateway.empty() ? iface.gateway : iface.ipv4;
+        }
+        if (seed.empty()) return emit_error(line, "need: <seed-ip> (no default route found)");
+        auto paths = platform::read_path_list(tools::config_file("cctv_paths.txt"));
+        if (paths.empty()) paths = platform::default_cctv_paths();
+        const auto r = platform::http_sweep(
+            seed, paths, [&](const std::string& s) { if (line) line(s); },
+            [&]() { return cancelled(cancel); });
+        if (cancelled(cancel)) return 130;
+        return emit_ok(line, "tried " + std::to_string(r.tried) + "  hosts " + std::to_string(r.hits));
     };
 }
 

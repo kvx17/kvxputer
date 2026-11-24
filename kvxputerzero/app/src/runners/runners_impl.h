@@ -42,6 +42,8 @@ RunFn net_ble_status(const char* name_substr, const char* uuid_substr);
 RunFn net_ble_disconnect();
 RunFn net_sip_options();
 RunFn net_ldap_read();
+RunFn net_web_crawler();
+RunFn net_cctv();
 RunFn net_ssh_hint();
 RunFn net_files_share_hint();
 RunFn net_wireguard();

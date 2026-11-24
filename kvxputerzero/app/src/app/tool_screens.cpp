@@ -32,6 +32,7 @@
 #include "ir_lirc.h"
 #include "ldap_read.h"
 #include "net_info.h"
+#include "recon_scan.h"
 #include "doc_screen.h"
 #include "info_screen.h"
 #include "menu_icons.h"
@@ -919,6 +920,55 @@ Screen make_net_toolkit(VM& vm, AssetManager& assets, const Stage& st) {
     if (st.name == "trace") return make_run(vm, assets, "Trace", trace_worker(st.arg));
     if (st.name == "curl") return make_run(vm, assets, "Curl-lite", curl_worker(st.arg));
     return make_info(vm, assets, "Net Toolkit", "Unknown step");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Recon: Web Crawler + CCTV sweep (authorized enumeration)
+// ---------------------------------------------------------------------------------------------
+
+Worker web_crawler_worker(std::string base) {
+    return [base](Cancel& cancel, const Log& log, const Status& status) {
+        auto paths = platform::read_path_list(tools::config_file("crawler_wordlist.txt"));
+        if (paths.empty()) {
+            log("no crawler_wordlist.txt, using built-in list");
+            paths = platform::default_crawler_paths();
+        }
+        status("crawling " + std::to_string(paths.size()) + " path(s)");
+        const auto r = platform::web_crawl(
+            base, paths, [&](const std::string& s) { log(printable(s)); }, [&]() { return cancel.load(); });
+        status(sfmt("tried %d  hits %d", r.tried, r.hits));
+    };
+}
+
+Worker cctv_worker(std::string seed) {
+    return [seed](Cancel& cancel, const Log& log, const Status& status) {
+        auto paths = platform::read_path_list(tools::config_file("cctv_paths.txt"));
+        if (paths.empty()) paths = platform::default_cctv_paths();
+        status("sweeping " + seed + "/24");
+        const auto r = platform::http_sweep(
+            seed, paths, [&](const std::string& s) { log(printable(s)); }, [&]() { return cancel.load(); });
+        status(sfmt("tried %d  hosts %d", r.tried, r.hits));
+    };
+}
+
+Screen make_web_crawler(VM& vm, AssetManager& assets, const Stage& st) {
+    const ToolId id = ToolId::WebCrawler;
+    if (st.name.empty())
+        return ask_then(vm, assets, id, "Web Crawler", "IP/host[:port] or URL", "http://", "run");
+    if (st.name == "run") return make_run(vm, assets, "Web Crawler", web_crawler_worker(st.arg));
+    return make_info(vm, assets, "Web Crawler", "Unknown step");
+}
+
+Screen make_cctv(VM& vm, AssetManager& assets, const Stage& st) {
+    const ToolId id = ToolId::Cctv;
+    if (st.name.empty()) {
+        std::string err;
+        const auto iface = platform::default_route_iface(err);
+        const std::string seed = !iface.gateway.empty() ? iface.gateway : iface.ipv4;
+        return ask_then(vm, assets, id, "CCTV Scan", "seed IP (sweeps its /24)", seed, "run");
+    }
+    if (st.name == "run") return make_run(vm, assets, "CCTV Scan", cctv_worker(st.arg));
+    return make_info(vm, assets, "CCTV Scan", "Unknown step");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -4894,6 +4944,8 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::SmbStatus: return make_smb_status(vm, assets, st);
     case ToolId::SipOptions: return make_sip_options(vm, assets, st);
     case ToolId::LdapRead: return make_ldap_read(vm, assets, st);
+    case ToolId::WebCrawler: return make_web_crawler(vm, assets, st);
+    case ToolId::Cctv: return make_cctv(vm, assets, st);
 
     // --- BLE -----------------------------------------------------------------------------
     case ToolId::BleScan: return make_run(vm, assets, "BLE Scan", ble_worker(BleMode::Scan, ""));
