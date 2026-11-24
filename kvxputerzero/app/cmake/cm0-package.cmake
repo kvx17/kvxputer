@@ -44,6 +44,9 @@ install(TARGETS ${PROJECT_NAME}-wifimon
 install(TARGETS ${PROJECT_NAME}-blescan
     RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/kvxputerzero
 )
+install(TARGETS ${PROJECT_NAME}-hidgadget
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBDIR}/kvxputerzero
+)
 
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config/kvxputerzero.conf"
     DESTINATION "/etc"

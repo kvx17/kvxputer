@@ -309,6 +309,14 @@ void DesktopVirtualKeypad::handle_key(uint8_t key_index) {
                  alt_active_,
                  output_name,
                  output);
+        platform::KeyMods mods;
+        mods.ctrl = ctrl_active_;
+        mods.alt = alt_active_;
+        mods.shift = mode_ == Mode::Shift || host_shift_;
+        mods.fn = fn_active_;
+        mods.sym = mode_ == Mode::Sym || host_fn_;
+        mods.base = key.kind == KeyKind::Character ? key.base : 0;
+        platform::note_key_mods(mods);
         emit_key(output);
     };
 
@@ -407,6 +415,14 @@ uint32_t DesktopVirtualKeypad::host_key_event(char base, bool pressed) {
     }
     host_held_base_ = base;
     host_held_key_ = output;
+    platform::KeyMods mods;
+    mods.ctrl = ctrl_active_;
+    mods.alt = alt_active_;
+    mods.shift = mode_ == Mode::Shift || host_shift_;
+    mods.fn = fn_active_;
+    mods.sym = mode_ == Mode::Sym || host_fn_;
+    mods.base = base;
+    platform::note_key_mods(mods);
     emit_key_state(output, true);
     if (!host_fn_) {
         clear_one_shot_modifiers();

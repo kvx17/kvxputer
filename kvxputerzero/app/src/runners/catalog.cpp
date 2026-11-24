@@ -382,7 +382,8 @@ std::vector<Entry> build() {
     out.push_back(make("camera", "camera", "Camera", Tid::None, Kind::StandIn, standin_camera()));
     out.push_back(make("gallery", "gallery", "Gallery", Tid::None, Kind::StandIn, standin_gallery()));
     out.push_back(make("usb", "usb", "USB", Tid::None, Kind::Info,
-                       tools_info("USB HID, BadUSB, and mass storage are not available on this device")));
+                       tools_info("kvxkeyboard HID (USB / BLE keyboard, mouse, presenter) runs in the screen app: "
+                                  "USB channel. BadUSB and mass storage are not available.")));
     out.push_back(make("config", "main_color", "Main color", Tid::None, Kind::Log, config_tool("main_color"), false,
                        false, {{"hex", "RRGGBB", true}}));
     out.push_back(make("config", "accent_color", "Accent color", Tid::None, Kind::Log, config_tool("accent_color"),

@@ -484,6 +484,9 @@ target_compile_definitions(${PROJECT_NAME}_platform
         # This library owns camera_libcamera.cpp. The flag on lvgl does not
         # reach it, and without the flag the camera opens the unlinked stub.
         KVX_HAVE_LIBCAMERA=${KVX_HAVE_LIBCAMERA}
+        # USE_DESKTOP (set on lvgl) does not reach this library either. New code
+        # here uses this flag; existing `#if USE_DESKTOP` blocks are unchanged.
+        KVX_DESKTOP_BUILD=$<BOOL:${USE_DESKTOP}>
 )
 
 # ====================================================
@@ -611,10 +614,25 @@ if(NOT BLUEZ_INCLUDE_DIR)
     )
 endif()
 
+# libsystemd (sd-bus): kvxkeyboard HID registers a BLE HID-over-GATT service
+# with bluetoothd over D-Bus. Headers ship in the CM0 BSP sysroot.
+if(USE_DESKTOP)
+    find_library(SYSTEMD_LIBRARY NAMES systemd)
+else()
+    cm0_find_library(SYSTEMD_LIBRARY systemd libsystemd.so.0)
+endif()
+if(NOT SYSTEMD_LIBRARY)
+    message(FATAL_ERROR
+        "libsystemd not found (needed for kvxkeyboard HID over BLE).\n"
+        "Desktop: install systemd-libs / libsystemd-dev. CM0: ensure libsystemd.so.0 is in ${CM0_SYSROOT}."
+    )
+endif()
+
 target_link_libraries(${PROJECT_NAME}_platform
     PUBLIC
         ${PROJECT_NAME}_tools
         ${BLUEZ_LIBRARY}
+        ${SYSTEMD_LIBRARY}
 )
 target_include_directories(${PROJECT_NAME}_platform
     PUBLIC
@@ -873,6 +891,15 @@ add_executable(${PROJECT_NAME}-blescan
 )
 target_include_directories(${PROJECT_NAME}-blescan PRIVATE "${BLUEZ_INCLUDE_DIR}")
 target_link_libraries(${PROJECT_NAME}-blescan PRIVATE ${BLUEZ_LIBRARY})
+
+# Privileged USB HID gadget helper for kvxkeyboard HID (configfs; setuid root
+# via postinst). Shares the report descriptor with the app and BLE service.
+add_executable(${PROJECT_NAME}-hidgadget
+    src/helpers/hidgadget_main.cpp
+    src/tools/hid_lib.cpp
+    src/tools/user_paths.cpp
+)
+target_include_directories(${PROJECT_NAME}-hidgadget PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/tools")
 
 # SSH / TTY CLI — no LVGL, SDL, view, or core.
 file(GLOB_RECURSE CLI_SOURCES CONFIGURE_DEPENDS

@@ -16,7 +16,6 @@
 #include "launch_catalog.h"
 #include "linux_input.h"
 #include "pda_lib.h"
-#include "session_lock.h"
 #include "screenshot_service.h"
 #include "screen_manager.h"
 #include "base_viewmodel.h"
@@ -311,6 +310,124 @@ private:
     lv_obj_t* fill_{nullptr};
 };
 
+// Full-screen blackout plus the "Hold Enter to unlock" panel. The progress bar
+// lives on that panel and is hidden until Enter has been held for a second.
+class PocketLockUi {
+public:
+    PocketLockUi(viewmodel::BaseViewModel& view_model, AssetManager& assets)
+        : view_model_(view_model), assets_(assets) {}
+
+    void blank() {
+        ensure();
+        if (!cover_) return;
+        lv_obj_remove_flag(cover_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(cover_);
+        if (prompt_) lv_obj_add_flag(prompt_, LV_OBJ_FLAG_HIDDEN);
+        set_bar_visible(false);
+    }
+
+    void show_prompt() {
+        ensure();
+        if (cover_) lv_obj_add_flag(cover_, LV_OBJ_FLAG_HIDDEN);
+        if (!prompt_) return;
+        lv_obj_remove_flag(prompt_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(prompt_);
+        set_bar_visible(false);
+    }
+
+    void hide() {
+        if (cover_ && lv_obj_is_valid(cover_)) lv_obj_add_flag(cover_, LV_OBJ_FLAG_HIDDEN);
+        if (prompt_ && lv_obj_is_valid(prompt_)) lv_obj_add_flag(prompt_, LV_OBJ_FLAG_HIDDEN);
+        set_bar_visible(false);
+    }
+
+    void set_bar_visible(bool visible) {
+        if (!track_ || !lv_obj_is_valid(track_)) return;
+        if (visible) lv_obj_remove_flag(track_, LV_OBJ_FLAG_HIDDEN);
+        else {
+            lv_obj_add_flag(track_, LV_OBJ_FLAG_HIDDEN);
+            set_ratio(0.f);
+        }
+    }
+
+    void set_ratio(float ratio) {
+        if (!fill_ || !lv_obj_is_valid(fill_)) return;
+        if (ratio < 0.f) ratio = 0.f;
+        if (ratio > 1.f) ratio = 1.f;
+        lv_obj_set_width(fill_, static_cast<int>(kTrackW * ratio));
+    }
+
+private:
+    static constexpr int kTrackW = 200;
+
+    void ensure() {
+        if (cover_ && lv_obj_is_valid(cover_)) return;
+        cover_ = nullptr;
+        prompt_ = nullptr;
+        track_ = nullptr;
+        fill_ = nullptr;
+        auto* parent = lv_layer_top();
+        if (!parent) return;
+        const auto tok = view::make_tokens(view_model_.pri_color(), view_model_.sec_color(), view_model_.bg_color());
+
+        cover_ = lv_obj_create(parent);
+        lv_obj_remove_style_all(cover_);
+        lv_obj_set_size(cover_, LV_PCT(100), LV_PCT(100));
+        lv_obj_set_style_bg_color(cover_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(cover_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(cover_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(cover_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(cover_, LV_OBJ_FLAG_HIDDEN);
+
+        prompt_ = lv_obj_create(parent);
+        lv_obj_remove_style_all(prompt_);
+        lv_obj_set_size(prompt_, 248, 62);
+        lv_obj_align(prompt_, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_set_style_radius(prompt_, 8, 0);
+        lv_obj_set_style_bg_color(prompt_, tok.surface, 0);
+        lv_obj_set_style_bg_opa(prompt_, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(prompt_, 1, 0);
+        lv_obj_set_style_border_color(prompt_, tok.main, 0);
+        lv_obj_set_style_border_opa(prompt_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(prompt_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(prompt_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(prompt_, LV_OBJ_FLAG_HIDDEN);
+
+        auto* label = lv_label_create(prompt_);
+        auto* font = assets_.load_standard_font(12);
+        lv_obj_set_style_text_font(label, font ? font : &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(label, tok.ink, 0);
+        lv_label_set_text(label, "Hold Enter to unlock");
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 8);
+
+        track_ = lv_obj_create(prompt_);
+        lv_obj_remove_style_all(track_);
+        lv_obj_set_size(track_, kTrackW, 8);
+        lv_obj_align(track_, LV_ALIGN_BOTTOM_MID, 0, -10);
+        lv_obj_set_style_radius(track_, 3, 0);
+        lv_obj_set_style_bg_color(track_, tok.rule, 0);
+        lv_obj_set_style_bg_opa(track_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(track_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(track_, LV_OBJ_FLAG_HIDDEN);
+
+        fill_ = lv_obj_create(track_);
+        lv_obj_remove_style_all(fill_);
+        lv_obj_set_size(fill_, 0, 8);
+        lv_obj_align(fill_, LV_ALIGN_LEFT_MID, 0, 0);
+        lv_obj_set_style_radius(fill_, 3, 0);
+        lv_obj_set_style_bg_color(fill_, tok.accent, 0);
+        lv_obj_set_style_bg_opa(fill_, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(fill_, LV_OBJ_FLAG_SCROLLABLE);
+    }
+
+    viewmodel::BaseViewModel& view_model_;
+    AssetManager& assets_;
+    lv_obj_t* cover_{nullptr};
+    lv_obj_t* prompt_{nullptr};
+    lv_obj_t* track_{nullptr};
+    lv_obj_t* fill_{nullptr};
+};
+
 class ShortcutController {
 public:
     ShortcutController(viewmodel::BaseViewModel& view_model, AssetManager& assets, AlarmWatcher& alarms)
@@ -318,7 +435,8 @@ public:
           alarms_(alarms),
           toast_(std::make_unique<view::widgets::Toast>(lv_layer_top(), view_model, assets)),
           help_popup_(std::make_unique<view::widgets::HelpPopup>(lv_layer_top(), view_model, assets)),
-          meter_(view_model, assets) {
+          meter_(view_model, assets),
+          pocket_ui_(view_model, assets) {
         toast_->build();
         help_popup_->build();
         hold_timer_ = lv_timer_create(hold_timer_cb, 40, this);
@@ -328,6 +446,10 @@ public:
     }
 
     ~ShortcutController() {
+        if (pocket_ != Pocket::Off || clear_capture_on_release_) {
+            platform::write_brightness_percent(saved_brightness_);
+            platform::set_key_captured(false);
+        }
         if (hold_timer_) {
             lv_timer_delete(hold_timer_);
             hold_timer_ = nullptr;
@@ -338,6 +460,10 @@ public:
 
 private:
     bool handle_key(uint32_t key, bool long_pressed) {
+        // The unlocking Enter is still down after the hold completes. Swallow it
+        // until release so it cannot activate whatever is on screen.
+        if (clear_capture_on_release_) return true;
+        if (pocket_ != Pocket::Off) return handle_pocket_key(key, long_pressed);
         if (alarms_.consuming_keys()) {
             return alarms_.handle_key(key);
         }
@@ -508,10 +634,34 @@ private:
         return false;
     }
 
-    enum class HoldKind { None, Exit, Lock, Launch };
+    enum class HoldKind { None, Exit, Lock, Launch, Unlock };
+    enum class Pocket { Off, Dark, Prompt };
 
     static constexpr uint32_t kHoldMs = 3000;
     static constexpr uint32_t kHoldShowMs = 1000;
+
+    bool handle_pocket_key(uint32_t key, bool long_pressed) {
+        if (pocket_ != Pocket::Prompt || long_pressed) return true;
+        const bool enter = key == LV_KEY_ENTER || key == '\r';
+        if (enter) {
+            begin_hold(key, HoldKind::Unlock, {}, {});
+            return true;
+        }
+        if (hold_kind_ == HoldKind::Unlock) cancel_hold();
+        return true;
+    }
+
+    void cancel_hold() {
+        hold_kind_ = HoldKind::None;
+        hold_key_ = 0;
+        hold_done_ = false;
+        pending_tap_id_.clear();
+        hold_launch_id_.clear();
+        meter_.hide();
+        meter_visible_ = false;
+        pocket_ui_.set_bar_visible(false);
+        if (hold_timer_) lv_timer_pause(hold_timer_);
+    }
 
     void begin_hold(uint32_t key, HoldKind kind, std::string launch_id, std::string tap_id) {
         hold_key_ = key;
@@ -523,6 +673,8 @@ private:
         std::string label = "Exit";
         if (kind == HoldKind::Lock) {
             label = "Lock";
+        } else if (kind == HoldKind::Unlock) {
+            label = "Unlock";
         } else if (kind == HoldKind::Launch) {
             if (const auto* target = model::find_launch_target(hold_launch_id_)) label = target->label;
             else label = "Open";
@@ -539,19 +691,31 @@ private:
     void tick_hold() {
         if (hold_kind_ == HoldKind::None || hold_done_) return;
         const uint32_t elapsed = lv_tick_elaps(hold_started_);
+        const bool unlock = hold_kind_ == HoldKind::Unlock;
         if (elapsed >= kHoldMs) {
-            reveal_meter();
-            meter_.set_ratio(1.f);
+            if (unlock) {
+                pocket_ui_.set_bar_visible(true);
+                pocket_ui_.set_ratio(1.f);
+            } else {
+                reveal_meter();
+                meter_.set_ratio(1.f);
+            }
             complete_hold();
             return;
         }
         // A tap must not flash the bar. It appears once the hold passes one second,
         // then fills across the remaining time until the action fires.
         if (elapsed < kHoldShowMs) return;
-        reveal_meter();
         const uint32_t span = kHoldMs - kHoldShowMs;
-        meter_.set_ratio(span == 0 ? 1.f
-                                    : static_cast<float>(elapsed - kHoldShowMs) / static_cast<float>(span));
+        const float ratio = span == 0 ? 1.f
+                                       : static_cast<float>(elapsed - kHoldShowMs) / static_cast<float>(span);
+        if (unlock) {
+            pocket_ui_.set_bar_visible(true);
+            pocket_ui_.set_ratio(ratio);
+            return;
+        }
+        reveal_meter();
+        meter_.set_ratio(ratio);
     }
 
     void reveal_meter() {
@@ -569,22 +733,71 @@ private:
         if (kind == HoldKind::Exit) {
             view_model_.request_quit();
         } else if (kind == HoldKind::Lock) {
-            lock_session();
+            engage_pocket();
+        } else if (kind == HoldKind::Unlock) {
+            release_pocket();
         } else if (kind == HoldKind::Launch) {
             view_model_.launch_target_id(id);
         }
     }
 
-    void lock_session() {
-        std::string detail;
-        if (!platform::request_session_lock(detail)) {
-            toast_->show(detail.empty() ? "Could not lock the session" : detail,
-                         view::widgets::ToastTone::Warning,
-                         1800);
-        }
+    void engage_pocket() {
+        int32_t current = 0;
+        if (platform::read_brightness_percent(current) && current > 0) saved_brightness_ = current;
+        else saved_brightness_ = 70;
+        platform::write_brightness_percent(0);
+        if (help_popup_) help_popup_->hide();
+        if (toast_) toast_->hide();
+        meter_.hide();
+        meter_visible_ = false;
+        pocket_ui_.blank();
+        pocket_ = Pocket::Dark;
+        wake_keys_ = 0;
+        pocket_armed_ = false;
+        platform::set_key_captured(true);
+    }
+
+    void show_unlock_prompt() {
+        platform::write_brightness_percent(saved_brightness_);
+        pocket_ui_.show_prompt();
+        pocket_ = Pocket::Prompt;
+    }
+
+    void release_pocket() {
+        pocket_ = Pocket::Off;
+        wake_keys_ = 0;
+        pocket_armed_ = false;
+        // Stay captured until the key that finished the hold is released.
+        clear_capture_on_release_ = true;
+        pocket_ui_.hide();
+        meter_.hide();
+        meter_visible_ = false;
     }
 
     void handle_release(uint32_t key) {
+        if (pocket_ == Pocket::Dark) {
+            if (hold_kind_ != HoldKind::None && key == hold_key_) cancel_hold();
+            // The Tab that engaged the lock is still down. Its release must not
+            // count as one of the two wake keys.
+            if (!pocket_armed_) {
+                pocket_armed_ = true;
+                return;
+            }
+            if (++wake_keys_ >= 2) show_unlock_prompt();
+            return;
+        }
+        if (pocket_ == Pocket::Prompt) {
+            if (hold_kind_ == HoldKind::Unlock && key == hold_key_) {
+                const bool done = hold_done_;
+                cancel_hold();
+                if (done) release_pocket();
+            }
+            return;
+        }
+        if (clear_capture_on_release_) {
+            clear_capture_on_release_ = false;
+            platform::set_key_captured(false);
+        }
         if (key != hold_key_ || hold_kind_ == HoldKind::None) return;
         const bool done = hold_done_;
         const auto kind = hold_kind_;
@@ -634,7 +847,13 @@ private:
     std::unique_ptr<view::widgets::Toast> toast_;
     std::unique_ptr<view::widgets::HelpPopup> help_popup_;
     HoldMeter meter_;
+    PocketLockUi pocket_ui_;
     lv_timer_t* hold_timer_{nullptr};
+    Pocket pocket_{Pocket::Off};
+    int wake_keys_{0};
+    bool pocket_armed_{false};
+    bool clear_capture_on_release_{false};
+    int32_t saved_brightness_{70};
     HoldKind hold_kind_{HoldKind::None};
     uint32_t hold_key_{0};
     uint32_t hold_started_{0};

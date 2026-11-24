@@ -46,6 +46,27 @@ uint32_t fn_legend(char base);
 uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool symbol_mode);
 void set_text_entry(bool enabled);
 
+// Modifier layers that were active for the most recent key press, captured before
+// one-shot layers are consumed. `base` is the physical keycap (a-z / 0-9) or 0.
+// Ctrl / Alt are reported but never change the resolved key (screens that care,
+// such as the HID keyboard, read them here). `seq` increments on every press.
+struct KeyMods {
+    bool ctrl{false};
+    bool alt{false};
+    bool shift{false};
+    bool fn{false};
+    bool sym{false};
+    char base{0};
+    uint32_t seq{0};
+};
+KeyMods last_key_mods();
+// Desktop keypad reports its virtual Ctrl/Alt here before emitting a key.
+void note_key_mods(const KeyMods& mods);
+// Device keymaps disagree on which code the Sym key sends; Alt codes count as Sym
+// by default. A screen that forwards a real Alt (HID keyboard) may opt in while it
+// is open. Always reset to false when that screen closes.
+void set_alt_is_modifier(bool enabled);
+
 using KeyReleaseListener = void (*)(uint32_t key, const char* key_name, void* user_data);
 using GlobalKeyListener = bool (*)(uint32_t key,
                                    const char* key_name,
@@ -73,6 +94,11 @@ void clear_screen_key_release_listener(KeyReleaseListener listener, void* user_d
 const char* describe_key(uint32_t key);
 // Deliver a key to the active screen only. Does not re-enter shortcut handling.
 void deliver_screen_key(uint32_t key);
+
+// Pocket lock. Presses reach only the global listener, which swallows them.
+// Screen handlers, the early listener, and the nav bar do not see the keys.
+// Releases still reach the global release listener.
+void set_key_captured(bool captured);
 
 // Letters the user may bind. Movement, the 4–8 bar, Ok, Esc, Space, Tab, and
 // the Fn system keys are rejected.

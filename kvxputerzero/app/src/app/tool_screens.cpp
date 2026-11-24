@@ -51,6 +51,7 @@
 #include "file_share_screen.h"
 #include "file_share_server.h"
 #include "roku_screen.h"
+#include "hid_remote_screen.h"
 #include "wifi_analyzer_screen.h"
 #include "wifi_monitor.h"
 #include "wifi_scan.h"
@@ -4881,6 +4882,7 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::DeadDrop:
         return make_run(vm, assets, "WiFi Dead Drop", http_share_worker(ensure_subdir("dead-drop"), true, "Dead Drop"));
     case ToolId::Roku: return make_roku(vm, assets, st);
+    case ToolId::HidRemote: return std::make_unique<screen::HidRemoteScreen>(vm, assets);
     case ToolId::WireGuard: return make_wireguard(vm, assets, st);
     case ToolId::Printer: return make_printer(vm, assets, st);
     case ToolId::UpnpList: return make_run(vm, assets, "UPnP list", upnp_worker());

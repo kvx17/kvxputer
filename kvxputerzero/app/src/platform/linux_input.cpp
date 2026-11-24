@@ -27,6 +27,9 @@ bool text_entry_mode = false;
 
 namespace {
 
+KeyMods last_mods{};
+bool alt_is_modifier = false;
+
 std::array<lv_obj_t*, kNavKeyCount> nav_buttons{};
 uint32_t last_key = 0;
 bool last_key_pressed = false;
@@ -49,6 +52,7 @@ GlobalKeyListener early_key_listener = nullptr;
 void* early_key_listener_user_data = nullptr;
 KeyReleaseListener screen_key_release_listener = nullptr;
 void* screen_key_release_listener_user_data = nullptr;
+bool key_captured = false;
 uint32_t system_repeat_at = 0;
 
 constexpr uint32_t kLongPressMs = 700;
@@ -128,6 +132,12 @@ void dispatch_nav_key(uint32_t key) {
 
 bool emit_global_key(uint32_t key, bool long_pressed) {
     const char* name = describe_key(key);
+    if (key_captured) {
+        if (global_key_listener) {
+            global_key_listener(key, name, long_pressed, global_key_listener_user_data);
+        }
+        return true;
+    }
     if (early_key_listener &&
         early_key_listener(key, name, long_pressed, early_key_listener_user_data)) {
         return true;
@@ -203,10 +213,11 @@ void route_key_state(uint32_t key, bool pressed) {
         }
     }
     else if (!pressed && last_key_pressed && pressed_key == key) {
+        const bool captured = key_captured;
         if (key_release_listener) {
             key_release_listener(key, describe_key(key), key_release_listener_user_data);
         }
-        if (screen_key_release_listener) {
+        if (!captured && screen_key_release_listener) {
             screen_key_release_listener(key, describe_key(key), screen_key_release_listener_user_data);
         }
         pressed_key = 0;
@@ -496,6 +507,8 @@ struct LayerMod {
 LayerMod fn_mod;
 LayerMod sym_mod;
 LayerMod shift_mod;
+LayerMod ctrl_mod;
+LayerMod alt_mod;
 uint32_t pending_scan{0};
 bool have_scan{false};
 std::unordered_map<uint32_t, char> scan_base;
@@ -621,6 +634,23 @@ bool is_fn_key(uint16_t code) {
     return code == KEY_FN;
 }
 
+bool is_ctrl_key(uint16_t code) {
+    return code == KEY_LEFTCTRL || code == KEY_RIGHTCTRL;
+}
+
+bool is_alt_key(uint16_t code) {
+    return code == KEY_LEFTALT || code == KEY_RIGHTALT;
+}
+
+// Physical keycap for a press: the kernel code's letter/digit, or the one this
+// scan code produced before the kernel rewrote it for a Sym/Fn chord.
+char physical_base(uint16_t code) {
+    const char from_code = base_from_code(code);
+    if (from_code != 0 || !have_scan) return from_code;
+    const auto it = scan_base.find(pending_scan);
+    return it != scan_base.end() ? it->second : 0;
+}
+
 uint32_t resolve_evdev_key(uint16_t code) {
     if (code == KEY_BACKSPACE) {
         return fn_held ? LV_KEY_DEL : LV_KEY_BACKSPACE;
@@ -724,6 +754,25 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
             sync_layer_flags();
             continue;
         }
+        // Ctrl never changes the resolved key; it is only reported in KeyMods.
+        if (is_ctrl_key(input.code)) {
+            if (input.value == 1) {
+                layer_down(ctrl_mod);
+            }
+            else if (input.value == 0) {
+                layer_up(ctrl_mod);
+            }
+            continue;
+        }
+        if (alt_is_modifier && is_alt_key(input.code)) {
+            if (input.value == 1) {
+                layer_down(alt_mod);
+            }
+            else if (input.value == 0) {
+                layer_up(alt_mod);
+            }
+            continue;
+        }
         // Sym is Compose/Meta/Alt/Caps on the tca8418 keymap, not a letter key.
         if (is_sym_key(input.code)) {
             if (input.value == 1) {
@@ -741,11 +790,23 @@ void evdev_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 
         uint32_t key = 0;
         if (input.value) {
+            const char base = physical_base(input.code);
             key = resolve_physical_key(input.code);
             if (!key) {
                 have_scan = false;
                 continue;
             }
+            KeyMods snap;
+            snap.ctrl = layer_on(ctrl_mod);
+            snap.alt = layer_on(alt_mod);
+            snap.shift = shift_held;
+            snap.fn = fn_held || is_fn_keycode(input.code);
+            snap.sym = sym_held;
+            snap.base = base;
+            snap.seq = last_mods.seq + 1;
+            last_mods = snap;
+            consume_layer(ctrl_mod);
+            consume_layer(alt_mod);
             if (fn_held) {
                 consume_layer(fn_mod);
             }
@@ -1000,6 +1061,10 @@ void clear_screen_key_release_listener(KeyReleaseListener listener, void* user_d
         screen_key_release_listener = nullptr;
         screen_key_release_listener_user_data = nullptr;
     }
+}
+
+void set_key_captured(bool captured) {
+    key_captured = captured;
 }
 
 const char* describe_key(uint32_t key) {
@@ -1365,6 +1430,28 @@ uint32_t resolve_printed_key(char base, char sym, bool fn_held, bool shift, bool
 
 void set_text_entry(bool enabled) {
     text_entry_mode = enabled;
+}
+
+KeyMods last_key_mods() {
+    return last_mods;
+}
+
+void note_key_mods(const KeyMods& mods) {
+    const uint32_t seq = last_mods.seq + 1;
+    last_mods = mods;
+    last_mods.seq = seq;
+}
+
+void set_alt_is_modifier(bool enabled) {
+#if !USE_DESKTOP
+    if (alt_is_modifier != enabled) {
+        // Do not leave a half-applied Alt/Sym layer behind when switching roles.
+        alt_mod = {};
+        sym_mod = {};
+        sync_layer_flags();
+    }
+#endif
+    alt_is_modifier = enabled;
 }
 
 } // namespace platform

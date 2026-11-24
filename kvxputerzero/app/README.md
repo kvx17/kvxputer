@@ -30,7 +30,7 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row. The green number is the 
 | **Space** in a menu | Activate |
 | **Esc** | Go back one screen. A short tap on the channel home stays there |
 | **Hold Esc** for 3 seconds | After 1 second a progress bar appears, then the app quits |
-| **Hold Tab** for 3 seconds | After 1 second a progress bar appears, then the session locks |
+| **Hold Tab** for 3 seconds | After 1 second a progress bar appears, then the display turns off and the keypad locks. Apps keep running. Press any two keys to wake the display, then hold Enter. That unlock bar appears only on the prompt, after 1 second |
 | **Hold F / X / Z / C** or an arrow | Keep moving in that direction |
 | **Fn+H** | Keyboard help overlay |
 | **Fn+J** | Screenshot |
@@ -63,7 +63,7 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 | **Clock** | Live face (digital / charge-style); Enter → Timer |
 | **Charge** | Charge-style face, color cycle, backlight steps |
 | **Config** | Colors, brightness, dim time, sound, power (reboot / off), shortcuts, About. Shortcuts bind a free letter to an app: tap, or hold for 3 seconds. 4–8, F/X/Z/C, Ok, Esc, Space, and Tab cannot be bound |
-| **USB** | Placeholder (ESP HID / gadget unavailable) |
+| **USB** | **kvxkeyboard HID**: keyboard, mouse, presenter, media remote, clicker, jigglers, push-to-talk and system shortcuts over USB (Host/Slave switch on Slave, USB-C2) or Bluetooth LE (6 host slots). Also under BLE. Desktop emulator adds a **Simulator** transport that logs reports to stderr. Keys: see the USB section of [`../README.md`](../README.md) |
 
 Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI (mode 1, 5 MHz) with soft-CS **GPIO22** / IRQ **GPIO23** on Zero (Cap docs Adv map is G6/G4). Card Emulation is NFC-A Passive Target on the Cap PCB coil (not the RP-SMA). Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
 

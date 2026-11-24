@@ -26,7 +26,7 @@ constexpr std::array<HelpRow, 5> kGridRows = {{
     {"SPACE", "Search menus"},
     {"4 / 8", "Previous / next page"},
     {"HOLD ESC", "Exit (3s)"},
-    {"HOLD TAB", "Lock (3s)"},
+    {"HOLD TAB", "Screen off"},
 }};
 
 constexpr std::array<HelpRow, 5> kMenuRows = {{

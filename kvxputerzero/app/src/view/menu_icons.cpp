@@ -101,6 +101,8 @@ const char* tool_icon(model::ToolId id) {
     case model::ToolId::GpsCaptures:
     case model::ToolId::GpsFolder:
         return ICON_CH_FILES;
+    case model::ToolId::HidRemote:
+        return ICON_CH_USB;
     case model::ToolId::Roku:
     case model::ToolId::TvBGone:
     case model::ToolId::IrUse:

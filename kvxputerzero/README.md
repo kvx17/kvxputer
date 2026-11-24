@@ -39,7 +39,7 @@ The bottom bar is the Cardputer Zero **4 5 6 7 8** row.
 | **Space** | Search menus and tools | Activate |
 | **Esc** | — | Back one screen |
 | **Hold Esc** for 3 seconds | Quit the app. The bar appears after 1 second | Quit the app. The bar appears after 1 second |
-| **Hold Tab** for 3 seconds | Lock the screen. The bar appears after 1 second | Lock the screen. The bar appears after 1 second |
+| **Hold Tab** for 3 seconds | Blank the display and lock the keys. The device stays on. Press any two keys, then hold Enter. The bar appears after 1 second | Same |
 | **Fn+H** | Keyboard help | Keyboard help |
 | **Fn+J** | Screenshot | Screenshot |
 
@@ -130,6 +130,7 @@ Scan and identify nearby advertisers. Raw advertisements come from `/usr/lib/kvx
 | **Skimmer Detector** | Heuristics for BLE skimmer modules. |
 | **Drone ID (BLE)** | OpenDroneID-style advertisements. |
 | **Disconnect** | Drop the current BLE session. |
+| **kvxkeyboard HID** | The Zero as a Bluetooth LE keyboard, mouse, presenter and media remote. Same app as under **USB**. |
 | **Ninebot / Amiibolink / PN532-BLE / Chameleon Status** | Companion status: connect and read. They do not clone those devices. |
 
 ### RF (Cap CC1101)
@@ -340,7 +341,34 @@ Grove and Cap bring-up. PORT-style modules share the Grove connector; do not put
 
 ### USB
 
-USB HID, BadUSB, and mass storage are not available in this app. The tile explains that and returns you home. File copy uses the Zero’s own Linux tools (SSH, `scp`).
+**kvxkeyboard HID** turns the Zero into a keyboard, mouse, presenter and media remote for a computer or phone, over a **USB cable** or **Bluetooth LE**. It is the Cardputer ADV app of the same name. BadUSB and mass storage are not available. File copy uses the Zero’s own Linux tools (SSH, `scp`).
+
+**Connect**
+
+| Transport | How |
+| --- | --- |
+| **USB cable** | Set the Host/Slave switch to **Slave** and plug **USB-C2** into the computer. The host sees a generic USB keyboard + mouse. While it runs, any other USB gadget (ADB, serial) is paused and comes back when you leave. Slave mode also turns off the Zero’s USB-A ports and Ethernet. |
+| **Bluetooth LE** | Six host slots. Press **1–6**: an empty slot opens pairing for one new host (pair **kvxKeyboard** from the host’s Bluetooth menu); a filled slot reconnects that host and turns away any other. **Hold** a filled slot for Connect / Rename / Disconnect / Forget. **Enter** continues; **S** opens settings. |
+
+**Modes** (Esc returns to the list; the 4–8 bar has each mode’s main keys)
+
+| Mode | Keys |
+| --- | --- |
+| **Presenter** | **F/X/Z/C** arrows, **Enter** next, **Bksp** previous, **Space**, **B/N** PgUp/PgDn, **H/E** Home/End, **P** play/pause, **5** F5. Bar: ← F5 Space Esc →. |
+| **Presenter Vertical** | Same, with the arrows turned for holding the Zero upright (rotated clockwise). |
+| **Keyboard** | Everything you type goes to the host, with Shift, Sym punctuation and the Fn layer (Fn+1…0 = F1–F10, Fn+O/P = F11/F12, Fn+F/X/Z/C arrows, Fn+K/N Home/End, Fn+L/M PgUp/PgDn, Fn+B Insert, Fn+Bksp Delete, Fn media keys). **Ctrl**+key sends Ctrl chords. **Tap Esc / Tab** sends them; **Fn+Esc** or **hold Esc** goes back, **hold Tab** opens System Shortcuts. Fn+H (help) and Fn+J (screenshot) stay on the Zero. |
+| **Media / Apple Music / Movie** | **Space** play, **F/X** volume, **Z/C** prev/next, **M** mute, **S** stop, **K** mic (Ctrl+Shift+M), **V** Win+Ctrl+V, **A** Win+A, **D** Win+P, **W** Win+D, **B/N** ±5 s, **O** F11. Fn media keys also go to the host. |
+| **Mouse** | **F/X/Z/C** move (hold to accelerate), **Enter/Space/L** left click, **R** right, **M** middle, **W/S** wheel, **1/2** slower/faster. |
+| **Shorts** | Up / Down / Space for vertical video feeds. **Enter** remaps the up and down keys. |
+| **Mouse Clicker** | **Space** start/stop, **Z/C** delay ±50 ms, **B** button. |
+| **Mouse Jiggler** | **Space** start/stop, **Z/C** interval, **F/X** amount, **D** direction. Moves out and back. |
+| **Stealth Jiggler** | Random moves at random times: **Z/C** min, **U/I** max, **F/X** amount, **D** direction. |
+| **Push-to-Talk** | **Hold Space** to talk, **Enter** latches, **P** picks the key (Teams Ctrl+Shift+M, Zoom Space, Meet Ctrl+D, F13, Zoom Mac Cmd+Shift+A). |
+| **System Shortcuts** | 38 common shortcuts (Alt+Tab, Ctrl+Alt+Del, copy/paste, Win/Cmd combos, Print Screen, Lock keys …). |
+
+**Settings** hold the BLE name, mouse speed, jiggler / clicker / push-to-talk values, Shorts keys, and **Alt key**. The Zero keymap may report its **Sym** key as Alt, so by default Alt stays the Sym layer. Turn **Alt key: sends Alt to host** on if your Alt key is separate; switch it back if Sym punctuation starts arriving as Alt chords. Settings and host slots are saved in `~/.config/kvxputerzero/hid_remote.txt`.
+
+No setup is needed. The Host/Slave switch is physical, so the app cannot flip it: when USB is picked it shows a checklist (switch on Slave, cable in the right USB-C port, computer connected), detects the switch position, and keeps retrying until the computer sees the keyboard. When Bluetooth is picked it unblocks the radio, starts the Bluetooth service and lets your user reach BlueZ (it writes `/etc/dbus-1/system.d/kvxputerzero-hid.conf` once). Both go through `/usr/lib/kvxputerzero/kvxputerzero-hidgadget`, set up by the package install. While the app runs the Bluetooth adapter is renamed to the BLE name and only accepts new pairings while a slot is pairing; name, pairable and discoverable are restored when you leave.
 
 ---
 

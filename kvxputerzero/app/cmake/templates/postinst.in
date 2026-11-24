@@ -27,6 +27,13 @@ grant_net_caps() {
 grant_net_caps "/usr/lib/kvxputerzero/kvxputerzero-wifimon"
 grant_net_caps "/usr/lib/kvxputerzero/kvxputerzero-blescan"
 
+# kvxkeyboard HID USB gadget: configfs is root-only, so the helper is setuid
+# root. It accepts only up/down/status and never runs a shell.
+if [ -f /usr/lib/kvxputerzero/kvxputerzero-hidgadget ]; then
+    chown root:root /usr/lib/kvxputerzero/kvxputerzero-hidgadget 2>/dev/null || true
+    chmod 4755 /usr/lib/kvxputerzero/kvxputerzero-hidgadget 2>/dev/null || true
+fi
+
 # Optional Cap LED helper (older builds).
 if [ -f /usr/lib/kvxputerzero/sysfs-led ]; then
     chown root:root /usr/lib/kvxputerzero/sysfs-led 2>/dev/null || true

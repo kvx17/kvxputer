@@ -45,6 +45,7 @@ enum class ToolId {
     WallOfAirtag,
     SkimmerDetector,
     BleDisconnect,
+    HidRemote,
     NinebotStatus,
     AmiiboStatus,
     Pn532Status,
@@ -257,6 +258,7 @@ inline constexpr ToolDesc kTools[] = {
     {ToolId::WallOfAirtag, "wall_of_airtag", "Wall Of Airtag", "ble"},
     {ToolId::SkimmerDetector, "skimmer", "Skimmer Detector", "ble"},
     {ToolId::BleDisconnect, "ble_disconnect", "Disconnect", "ble"},
+    {ToolId::HidRemote, "hid_remote", "kvxkeyboard HID", "ble"},
     {ToolId::DroneId, "drone_id", "Drone ID (BLE)", "ble"},
     {ToolId::NinebotStatus, "ninebot_status", "Ninebot Status", "ble"},
     {ToolId::AmiiboStatus, "amiibo_status", "Amiibolink Status", "ble"},
@@ -264,6 +266,8 @@ inline constexpr ToolDesc kTools[] = {
     {ToolId::ChameleonStatus, "chameleon_status", "Chameleon Status", "ble"},
 
     {ToolId::ScanHosts, "scan_hosts", "Scan Hosts", "ethernet"},
+
+    {ToolId::HidRemote, "hid_remote", "kvxkeyboard HID", "usb"},
 
     {ToolId::GpsWardrivingMenu, "gps_wardriving", "Wardriving", "gps"},
     {ToolId::GpsSiteSurvey, "gps_site_survey", "Site Survey", "gps"},
