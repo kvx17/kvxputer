@@ -108,7 +108,7 @@ private:
 
     // --- text entry ---
     void begin_edit(const std::string& title, const std::string& initial, size_t max_len,
-                    std::function<void(const std::string&)> done, Phase back);
+                    std::function<void(const std::string&)> done, Phase back, bool secret = false);
     bool handle_edit_key(uint32_t key);
     void refresh_edit();
 
@@ -191,6 +191,7 @@ private:
     size_t edit_max_{24};
     std::function<void(const std::string&)> edit_done_;
     Phase edit_back_{Phase::Menu};
+    bool edit_secret_{false};
     lv_obj_t* edit_lbl_{nullptr};
 
     // Mode widgets / state

@@ -11,6 +11,7 @@
 #include "nrf24_radio.h"
 #include "pahub.h"
 #include "power_ctrl.h"
+#include "preset_links.h"
 #include "shell_util.h"
 #include "si4713.h"
 #include "sx1262.h"
@@ -523,7 +524,17 @@ RunFn standin_gallery() {
 RunFn config_tool(const char* key) {
     std::string k = key ? key : "";
     return [k](const std::vector<std::string>& args, std::atomic<bool>&, const LineFn& line) {
-        if (k == "about") return emit_ok(line, "kvxputerzero CLI — same config tree as the GUI");
+        if (k == "about") {
+            return emit_lines(line,
+                              {"kvxputerzero " KVX_APP_VERSION " " KVX_APP_REVISION,
+                               "Cardputer Zero toolkit: Wii-style channel home with Wi-Fi, NetOps, BLE, "
+                               "radio, infrared, GPS, RFID, NFC, files, and everyday tools.",
+                               "Use only on networks and devices you own or have permission to test.",
+                               "One-person project, made in personal time for education. No profit.",
+                               std::string("repo: ") + tools::links::kRepoUrl,
+                               std::string("github: ") + tools::links::kGithubUrl,
+                               std::string("coffee: ") + tools::links::kCoffeeUrl});
+        }
         if (k == "brightness") {
             if (args.empty()) {
                 int32_t pct = 0;

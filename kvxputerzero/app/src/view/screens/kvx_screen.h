@@ -47,6 +47,8 @@ protected:
     virtual std::array<view::widgets::ActionSlot, 5> nav_actions();
     // Shown instead of the 4-8 icons when every slot is empty (text entry).
     virtual const char* typing_hint() const;
+    // Click-only icons on the hint bar (no 4–8 capture). Default: none.
+    virtual std::array<view::widgets::HintIcon, 2> hint_icons();
     // Rebuild the bottom ActionBar after nav_actions() change (e.g. picker → remote).
     void rebuild_action_bar();
 

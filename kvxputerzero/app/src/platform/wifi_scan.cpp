@@ -1,5 +1,6 @@
 #include "wifi_scan.h"
 
+#include <chrono>
 #include <cstdio>
 #include <sstream>
 
@@ -26,6 +27,26 @@ std::string shell_quote(const std::string& s) {
     return out;
 }
 
+int freq_to_channel(int mhz) {
+    if (mhz == 2484) return 14;
+    if (mhz >= 2412 && mhz <= 2472) return (mhz - 2407) / 5;
+    if (mhz >= 5160 && mhz <= 5885) return (mhz - 5000) / 5;
+    return -1;
+}
+
+int channel_from_fields(const std::string& chan, const std::string& freq) {
+    try {
+        const int ch = std::stoi(chan);
+        if (ch >= 1 && ch <= 196) return ch;
+    } catch (...) {
+    }
+    try {
+        return freq_to_channel(std::stoi(freq));
+    } catch (...) {
+        return -1;
+    }
+}
+
 bool nmcli_ok(const std::string& cmd, std::string& error) {
     FILE* fp = popen(cmd.c_str(), "r");
     if (!fp) {
@@ -45,17 +66,44 @@ bool nmcli_ok(const std::string& cmd, std::string& error) {
 
 } // namespace
 
+bool nmcli_error(const std::string& text) {
+    for (size_t i = 0; i < text.size();) {
+        const size_t end = text.find('\n', i);
+        const std::string line = text.substr(i, end == std::string::npos ? std::string::npos : end - i);
+        i = end == std::string::npos ? text.size() : end + 1;
+        if (line.empty()) continue;
+        return line.rfind("Error", 0) == 0;
+    }
+    return false;
+}
+
 std::vector<WifiAp> wifi_scan(std::string& error, bool* cancel) {
     error.clear();
     if (cancel && *cancel) {
         error = "cancelled";
         return {};
     }
-    // nmcli -t -f SSID,BSSID,CHAN,SIGNAL,SECURITY device wifi list
-    const std::string text =
-        run_capture("nmcli -t -f SSID,BSSID,CHAN,SIGNAL,SECURITY device wifi list 2>/dev/null");
+    // `list` alone returns NetworkManager's cache. While associated that cache is
+    // often only the channel of the network we are joined to. --rescan yes asks
+    // the radio to visit the other channels. Don't do it on every poll.
+    using clock = std::chrono::steady_clock;
+    static clock::time_point last_rescan{};
+    const auto now = clock::now();
+    const bool force = last_rescan.time_since_epoch().count() == 0 || now - last_rescan >= std::chrono::seconds(8);
+    // CHAN and FREQ come before BSSID so a colon inside the MAC cannot shift the channel.
+    const char* fields = "nmcli -w 10 -e yes -t -f CHAN,FREQ,SIGNAL,SSID,BSSID,SECURITY device wifi list --rescan ";
+    std::string text;
+    if (force) {
+        last_rescan = now;
+        text = run_capture((std::string(fields) + "yes 2>&1").c_str());
+        if (nmcli_error(text)) text.clear();
+    }
     if (text.empty()) {
-        error = "Wi-Fi scan unavailable (nmcli)";
+        text = run_capture((std::string(fields) + "no 2>&1").c_str());
+    }
+    if (text.empty() || nmcli_error(text)) {
+        error = text.empty() ? "Wi-Fi scan unavailable (nmcli)" : text;
+        while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
         return {};
     }
     std::vector<WifiAp> out;
@@ -64,6 +112,7 @@ std::vector<WifiAp> wifi_scan(std::string& error, bool* cancel) {
     while (std::getline(iss, line)) {
         if (cancel && *cancel) break;
         if (line.empty()) continue;
+        if (line[0] != ':' && (line[0] < '0' || line[0] > '9')) continue;
         WifiAp ap;
         std::vector<std::string> parts;
         std::string cur;
@@ -80,22 +129,18 @@ std::vector<WifiAp> wifi_scan(std::string& error, bool* cancel) {
         }
         parts.push_back(cur);
         if (parts.size() < 5) continue;
-        ap.ssid = parts[0];
-        ap.bssid = parts[1];
-        try {
-            ap.channel = std::stoi(parts[2]);
-        } catch (...) {
-            ap.channel = -1;
-        }
+        ap.channel = channel_from_fields(parts[0], parts[1]);
         try {
             // nmcli SIGNAL is 0-100; approximate RSSI
-            const int pct = std::stoi(parts[3]);
+            const int pct = std::stoi(parts[2]);
             ap.rssi = -100 + pct / 2;
         } catch (...) {
             ap.rssi = -127;
         }
+        ap.ssid = parts[3];
+        ap.bssid = parts[4];
         std::string raw;
-        for (size_t i = 4; i < parts.size(); ++i) {
+        for (size_t i = 5; i < parts.size(); ++i) {
             if (!raw.empty()) raw.push_back(':');
             raw += parts[i];
         }

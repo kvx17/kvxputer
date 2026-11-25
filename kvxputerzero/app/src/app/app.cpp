@@ -529,8 +529,13 @@ private:
         }
 
         if (key == LV_KEY_ESC) {
-            begin_hold(key, HoldKind::Exit, {}, {});
-            return true;
+            // Hold-to-quit only on the home grid. Everywhere else a tap must leave
+            // the current screen immediately (no release-gated back navigation).
+            if (view_model_.current_page() == model::AppPage::ChannelGrid) {
+                begin_hold(key, HoldKind::Exit, {}, {});
+                return true;
+            }
+            return false;
         }
         if (key == platform::kKeyTab) {
             begin_hold(key, HoldKind::Lock, {}, {});
@@ -1066,6 +1071,17 @@ private:
                     break;
                 }
             }
+        } else if (lower == "mac_vendor" || lower == "vendor_mac" || lower == "oui") {
+            vm_.launch_target_id("page:mac_vendor");
+        } else if (lower == "engcalc" || lower == "calculators") {
+            vm_.open_eng_calc_menu();
+        } else if (lower.rfind("engcalc_", 0) == 0) {
+            // engcalc_<op_index> opens a calculator work screen directly.
+            const int op = std::atoi(lower.c_str() + 8);
+            vm_.open_standalone_eng_calc(op);
+        } else if (lower.rfind("life_", 0) == 0) {
+            const int game = std::atoi(lower.c_str() + 5);
+            vm_.open_life_counter(game);
         } else {
             LOG_WARN("ui script page: unknown '{}'", name);
             return;

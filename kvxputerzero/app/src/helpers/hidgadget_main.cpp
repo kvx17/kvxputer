@@ -1,6 +1,7 @@
 // kvxputerzero-hidgadget — configfs USB HID gadget for kvxkeyboard HID.
 //
-// Installed setuid root by the package postinst (configfs is root-only). It
+// Configfs is root-only. The App Store forbids setuid in postinst, so this
+// helper only elevates when the image already runs it as root. It
 // takes one fixed verb and no other input:
 //   up      build the gadget, bind it to the first UDC, give /dev/hidgN to the
 //           invoking user. Any other gadget bound to that UDC (ADB, serial…)

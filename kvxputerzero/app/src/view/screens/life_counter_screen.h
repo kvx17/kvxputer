@@ -1,5 +1,7 @@
 #pragma once
 
+#include "action_bar.h"
+#include "calc_help_modal.h"
 #include "kvx_screen.h"
 
 namespace screen {
@@ -20,12 +22,14 @@ protected:
     bool handle_key(uint32_t key) override;
     const char* typing_hint() const override;
     std::array<view::widgets::ActionSlot, 5> nav_actions() override;
+    std::array<view::widgets::HintIcon, 2> hint_icons() override;
 
 private:
     void reset_scores();
     void add_to_side(int delta);
     void set_step(int step);
     void refresh();
+    void open_help();
     const char* title() const;
     const char* side_name(int index) const;
 
@@ -38,6 +42,7 @@ private:
     int target_{30};
     bool poison_mode_{false};
 
+    view::widgets::CalcHelpModal help_;
     lv_obj_t* name_[2]{nullptr, nullptr};
     lv_obj_t* score_[2]{nullptr, nullptr};
     lv_obj_t* sub_[2]{nullptr, nullptr};

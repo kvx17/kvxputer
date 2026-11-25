@@ -62,6 +62,9 @@ enum class Op {
     Count,
 };
 
+// launch_catalog page:mac_vendor aux must stay equal to Op::Oui.
+static_assert(static_cast<int>(Op::Oui) == 35, "update launch_catalog kOpOui");
+
 // Top-level Calculators groups. kMenuLifeBase + n opens a life-counter game.
 enum class Group {
     Network = 0,

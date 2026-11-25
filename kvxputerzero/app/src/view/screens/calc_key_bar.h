@@ -30,6 +30,7 @@ public:
     void set_mode_label(const char* label);
     void set_focused(bool focused);
     bool focused() const { return focused_; }
+    void set_y(int y);
 
     // Returns true when the key was used for chip navigation / insert / mode.
     bool handle_key(uint32_t key);

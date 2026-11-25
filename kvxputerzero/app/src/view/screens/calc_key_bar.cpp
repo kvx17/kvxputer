@@ -101,6 +101,10 @@ void CalcKeyBar::set_focused(bool focused) {
     refresh_styles();
 }
 
+void CalcKeyBar::set_y(int y) {
+    if (row_) lv_obj_set_y(row_, y);
+}
+
 void CalcKeyBar::refresh_styles() {
     const int total = static_cast<int>(count_) + (has_mode_ ? 1 : 0);
     auto style_one = [&](lv_obj_t* btn, lv_obj_t* lab, int idx) {

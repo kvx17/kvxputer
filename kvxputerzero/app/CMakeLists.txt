@@ -545,15 +545,35 @@ file(GLOB_RECURSE TOOLS_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/*.cpp"
 )
 
+# Compile the MAC vendor CSV into a longest-prefix binary table once at build time.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(OUI_CSV "${CMAKE_CURRENT_SOURCE_DIR}/assets/files/mac-vendors-export.csv")
+set(OUI_TABLE_BIN "${CMAKE_CURRENT_BINARY_DIR}/generated/files/oui_table.bin")
+set(OUI_BUILD_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/scripts/build_oui_table.py")
+add_custom_command(
+    OUTPUT "${OUI_TABLE_BIN}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/generated/files"
+    COMMAND ${Python3_EXECUTABLE} "${OUI_BUILD_SCRIPT}" "${OUI_CSV}" "${OUI_TABLE_BIN}"
+    DEPENDS "${OUI_CSV}" "${OUI_BUILD_SCRIPT}"
+    COMMENT "Building OUI vendor table"
+    VERBATIM
+)
+add_custom_target(oui_table DEPENDS "${OUI_TABLE_BIN}")
+
 add_library(${PROJECT_NAME}_tools
     STATIC
     ${TOOLS_SOURCES}
 )
+add_dependencies(${PROJECT_NAME}_tools oui_table)
 
 target_include_directories(${PROJECT_NAME}_tools
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tools"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/tools/third_party"
+)
+target_compile_definitions(${PROJECT_NAME}_tools
+    PUBLIC
+        OUI_TABLE_BUILD_PATH="${OUI_TABLE_BIN}"
 )
 
 # Camera session encodes JPEG/PNG and applies filters from tools.
@@ -955,6 +975,12 @@ if(USE_DESKTOP)
             ${JPEG_TARGET}
             pthread
     )
+
+    add_executable(oui_lookup_test
+        src/helpers/oui_lookup_test.cpp
+    )
+    target_link_libraries(oui_lookup_test PRIVATE ${PROJECT_NAME}_tools)
+    add_dependencies(oui_lookup_test oui_table)
 endif()
 
 # Package deb

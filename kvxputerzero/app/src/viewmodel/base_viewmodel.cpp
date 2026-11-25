@@ -129,8 +129,13 @@ void BaseViewModel::go_back() {
         break;
     case model::AppPage::EngCalcWork:
     case model::AppPage::LifeCounter:
-        show_page(model_.eng_calc_group() >= 0 ? model::AppPage::EngCalcGroup
-                                                : model::AppPage::EngCalcMenu);
+        // Group set when opened via Calculators → group → op. Tools → Vendor MAC
+        // (and similar) leave group at -1 and should return to the Tools menu.
+        if (model_.eng_calc_group() >= 0) {
+            show_page(model::AppPage::EngCalcGroup);
+        } else {
+            show_page(model::AppPage::ChannelMenu);
+        }
         break;
     case model::AppPage::EngCalcGroup:
         show_page(model::AppPage::EngCalcMenu);
@@ -406,6 +411,8 @@ bool BaseViewModel::launch_target_id(const std::string& id) {
             open_color_picker(which);
         } else if (target->page == model::AppPage::Calculator) {
             open_calculator();
+        } else if (target->page == model::AppPage::EngCalcWork) {
+            open_standalone_eng_calc(target->aux);
         } else if (target->page == model::AppPage::PdaHub) {
             open_pda_hub();
         } else {
@@ -473,9 +480,15 @@ void BaseViewModel::open_eng_calc_group(int group) {
 
 void BaseViewModel::open_eng_calc_op(int op) {
     model_.set_eng_calc_op(op);
+    // EngCalcScreen restores last input from ~/.config/kvxputerzero/calc/.
     model_.set_work_input("");
     model_.set_work_output("");
     show_page(model::AppPage::EngCalcWork);
+}
+
+void BaseViewModel::open_standalone_eng_calc(int op) {
+    model_.set_eng_calc_group(-1);
+    open_eng_calc_op(op);
 }
 
 void BaseViewModel::open_life_counter(int game) {

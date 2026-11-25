@@ -1,5 +1,7 @@
 #include "eng_calc_lib.h"
 
+#include "oui_lib.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cerrno>
@@ -3246,66 +3248,17 @@ std::string run_cidr_agg(Tokens t, bool& ok) {
     return o.str();
 }
 
-const char* lookup_oui(uint32_t oui) {
-    static const char* table[] = {
-        "00000C Cisco",        "000393 Apple",        "000569 VMware",       "00090F Fortinet",
-        "000A95 Apple",        "000B86 Aruba",        "000C29 VMware",       "000C42 MikroTik",
-        "000D88 D-Link",       "000D93 Apple",        "000E0C Intel",        "000F20 HP",
-        "000FB5 Netgear",      "001018 Broadcom",     "001083 HP",           "001143 Dell",
-        "001185 HP",           "00124B Texas Instruments", "00037F Atheros", "001451 Apple",
-        "00155D Microsoft",    "00156D Ubiquiti",     "00166F Intel",        "001676 Intel",
-        "0016CB Apple",        "0016EA Intel",        "0016EB Intel",        "0017A4 HP",
-        "0017AB Nintendo",     "0017F2 Apple",        "001882 Huawei",       "00195B D-Link",
-        "0019E3 Apple",        "001A11 Google",       "001A1E Aruba",        "001A80 Sony",
-        "001A8A Samsung",      "001B11 D-Link",       "001B17 Palo Alto",    "001B21 Intel",
-        "001B2F Netgear",      "001B63 Apple",        "001B77 Intel",        "001B78 HP",
-        "001BEA Nintendo",     "001C23 Dell",         "001CB3 Apple",        "001CF0 D-Link",
-        "001D25 Samsung",      "001D4F Apple",        "001DBA Sony",         "001E0B HP",
-        "001E2A Netgear",      "001E35 Nintendo",     "001E52 Apple",        "001E58 D-Link",
-        "001E64 Intel",        "001E65 Intel",        "001E67 Intel",        "001EC2 Apple",
-        "001EC9 Dell",         "001EE1 Samsung",      "001F32 Nintendo",     "001F33 Netgear",
-        "001F3B Intel",        "001F5B Apple",        "001FF3 Apple",        "002119 Samsung",
-        "00215A HP",           "002170 Dell",         "002191 D-Link",       "0021E9 Apple",
-        "002241 Apple",        "0022AA Nintendo",     "002312 Apple",        "002332 Apple",
-        "002339 Samsung",      "0023DF Apple",        "002436 Apple",        "00246C Aruba",
-        "0024BE Sony",         "0024F3 Nintendo",     "002500 Apple",        "00254B Apple",
-        "00259E Huawei",       "0025B3 HP",           "0025BC Apple",        "002608 Apple",
-        "002637 Samsung",      "00264A Apple",        "0026B0 Apple",        "0026BB Apple",
-        "0026F2 Netgear",      "005056 VMware",       "00E04C Realtek",      "00E0FC Huawei",
-        "0418D6 Ubiquiti",     "045D4B Sony",         "049226 ASUS",         "04D4C4 ASUS",
-        "04F938 Huawei",       "080027 VirtualBox",   "0808C2 Samsung",      "08306B Palo Alto",
-        "0C1DAF Xiaomi",       "10521C Espressif",    "14CC20 TP-Link",      "18742E Amazon",
-        "18E829 Ubiquiti",     "2008ED Huawei",       "204C03 Aruba",        "20E52A Netgear",
-        "240AC4 Espressif",    "246F28 Espressif",    "24A43C Ubiquiti",     "24DEC6 Aruba",
-        "286C07 Xiaomi",       "28CFE9 Apple",        "2C4D54 ASUS",         "2CC81B MikroTik",
-        "2CF432 Espressif",    "30AEA4 Espressif",    "3480B3 Xiaomi",       "3C22FB Apple",
-        "3C5AB4 Google",       "3C6105 Espressif",    "3CFDFE Intel",        "40B4CD Amazon",
-        "40F520 Espressif",    "44D9E7 Ubiquiti",     "483FDA Espressif",    "488F5A MikroTik",
-        "50642B Xiaomi",       "50C7BF TP-Link",      "50DCE7 Amazon",       "525400 QEMU",
-        "546C0E Texas Instruments", "54EE75 Lenovo",  "5C0A5B Samsung",      "640980 Xiaomi",
-        "64B473 Xiaomi",       "6837E9 Amazon",       "6C3B6B MikroTik",     "6CF37F Aruba",
-        "70723C Huawei",       "742344 Xiaomi",       "744D28 MikroTik",     "7483C2 Ubiquiti",
-        "74C246 Amazon",       "74D02B ASUS",         "7811DC Xiaomi",       "788A20 Ubiquiti",
-        "7CBB8A Nintendo",     "7CDFA1 Espressif",    "802AA8 Ubiquiti",     "84CCA8 Espressif",
-        "84D6D0 Amazon",       "84F3EB Espressif",    "8C71F8 Samsung",      "8CAAB5 Espressif",
-        "94B40F Aruba",        "94B97E Espressif",    "98B6E9 Nintendo",     "98DAC4 TP-Link",
-        "98FA9B Lenovo",       "9C99A0 Xiaomi",       "A0F3C1 TP-Link",      "A4CF12 Espressif",
-        "AC67B2 Espressif",    "AC9E17 ASUS",         "ACE215 Huawei",       "B0A737 Roku",
-        "B0B448 Texas Instruments", "B4E62D Espressif", "B4FBE4 Ubiquiti",  "B827EB Raspberry Pi",
-        "B869F4 MikroTik",     "B8CA3A Dell",         "C006C3 TP-Link",      "C03F0E Netgear",
-        "C45BBE Espressif",    "C4AD34 MikroTik",     "C8C9A3 Espressif",    "CC50E3 Espressif",
-        "CC6DA0 Roku",         "D03972 Texas Instruments", "D4CA6D MikroTik", "D83134 Roku",
-        "D83ADD Raspberry Pi", "D8A01D Espressif",    "D8C7C8 Aruba",        "DCA632 Raspberry Pi",
-        "DC9FDB Ubiquiti",     "E00C7F Nintendo",     "E0247F Huawei",               "E063DA Ubiquiti",     "E45F01 Raspberry Pi", "E48D8C MikroTik",     "EC94CB Espressif",
-        "F09FC2 Ubiquiti",     "F4CFA2 Espressif",    "F47B5E Samsung",      "F4F5D8 Google",
-        "F8BC12 Dell",         "FCECDA Ubiquiti",
-    };
-    char key[8];
-    std::snprintf(key, sizeof(key), "%06X", oui & 0xFFFFFFu);
-    for (const char* row : table) {
-        if (std::strncmp(row, key, 6) == 0) return row + 7;
+std::string format_prefix_bits(uint64_t prefix, int bits) {
+    const int nibbles = (bits + 3) / 4;
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%0*llX", nibbles, static_cast<unsigned long long>(prefix));
+    std::string hex = buf;
+    std::string out;
+    for (size_t i = 0; i < hex.size(); ++i) {
+        if (i && (i % 2) == 0) out.push_back(':');
+        out.push_back(hex[i]);
     }
-    return nullptr;
+    return out;
 }
 
 std::string run_oui(const std::string& in, bool& ok) {
@@ -3313,22 +3266,46 @@ std::string run_oui(const std::string& in, bool& ok) {
     for (unsigned char c : in) {
         if (std::isxdigit(c)) hex.push_back(static_cast<char>(std::toupper(c)));
     }
-    if (hex.size() != 6 && hex.size() != 12) return fail(ok, "need a MAC or OUI, e.g. 24:0A:C4:11:22:33");
-    unsigned int oui = 0;
-    if (std::sscanf(hex.c_str(), "%6x", &oui) != 1) return fail(ok, "bad MAC");
-    const unsigned first = (oui >> 16) & 0xFF;
+    if (hex.size() != 6 && hex.size() != 12) {
+        return fail(ok, "need a MAC or OUI — Tab help");
+    }
+    unsigned int first_byte = 0;
+    if (std::sscanf(hex.c_str(), "%2x", &first_byte) != 1) return fail(ok, "bad MAC");
+
     Out o;
-    o.add("oui", fmt("%02X:%02X:%02X", (oui >> 16) & 0xFF, (oui >> 8) & 0xFF, oui & 0xFF));
-    if (const char* vendor = lookup_oui(oui)) {
-        o.add("vendor", vendor);
-    } else if (first & 0x02) {
+    if (hex.size() == 12) {
+        unsigned int b[6] = {};
+        if (std::sscanf(hex.c_str(), "%2x%2x%2x%2x%2x%2x", &b[0], &b[1], &b[2], &b[3], &b[4], &b[5]) !=
+            6) {
+            return fail(ok, "bad MAC");
+        }
+        o.add("mac", fmt("%02X:%02X:%02X:%02X:%02X:%02X", b[0], b[1], b[2], b[3], b[4], b[5]));
+    } else {
+        unsigned int oui = 0;
+        if (std::sscanf(hex.c_str(), "%6x", &oui) != 1) return fail(ok, "bad OUI");
+        o.add("oui", fmt("%02X:%02X:%02X", (oui >> 16) & 0xFF, (oui >> 8) & 0xFF, oui & 0xFF));
+    }
+
+    const bool local = (first_byte & 0x02) != 0;
+    const bool group = (first_byte & 0x01) != 0;
+    if (local) o.add("ul", "locally administered");
+    if (group) o.add("ig", "group address");
+
+    const auto match = tools::oui::lookup(hex);
+    if (match.found) {
+        o.add("prefix", format_prefix_bits(match.prefix, match.bit_length) + "/" +
+                            std::to_string(match.bit_length));
+        if (!match.vendor.empty()) o.add("vendor", match.vendor);
+        if (match.is_private || match.vendor.empty()) o.add("note", "private registration");
+        if (match.block_type && match.block_type[0]) o.add("block", match.block_type);
+    } else if (local) {
         o.add("vendor", "locally administered");
         o.add("note", "not a factory OUI");
-    } else if (first & 0x01) {
+    } else if (group) {
         o.add("vendor", "group address");
     } else {
         o.add("vendor", "unknown");
-        o.add("note", "not in the built-in list");
+        o.add("note", "no match in vendor table");
     }
     return o.str();
 }
@@ -3721,7 +3698,7 @@ std::string run(Op op, const std::string& input, bool& ok) {
     const std::string in = trim(input);
     if (in.empty()) {
         ok = false;
-        return std::string("empty input - ") + input_hint(op);
+        return "fill a field · Tab help";
     }
     Tokens t = split_ws(in);
 

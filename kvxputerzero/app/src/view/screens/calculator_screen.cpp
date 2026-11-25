@@ -1,7 +1,9 @@
 #include "calculator_screen.h"
 
 #include "asset_manager.h"
+#include "eng_calc_help.h"
 #include "kvx_style.h"
+#include "linux_input.h"
 #include "theme.h"
 #include "ui_const.h"
 
@@ -12,6 +14,8 @@ namespace screen {
 CalculatorScreen::CalculatorScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets)
     : KvxScreen(view_model, assets) {
     tools::calc::load_prefs(state_);
+    const auto sci = tools::calcpersist::load_scientific();
+    if (!sci.history.empty()) state_.history = sci.history;
     init();
 }
 
@@ -39,8 +43,13 @@ void CalculatorScreen::build() {
     input_ta_ = view::make_line_input(content(), tok, font, view::kScreenWidth - 8);
     lv_textarea_set_placeholder_text(input_ta_, "expression");
     lv_textarea_set_max_length(input_ta_, 96);
-    lv_textarea_set_text(input_ta_, view_model().work_input().c_str());
+    const auto sci = tools::calcpersist::load_scientific();
+    // Do not reuse eng-calc work_input (e.g. a MAC) as the expression.
+    lv_textarea_set_text(input_ta_, sci.last_expr.c_str());
     lv_obj_align(input_ta_, LV_ALIGN_TOP_MID, 0, 54);
+    lv_obj_set_style_border_color(input_ta_, tok.accent, 0);
+    lv_obj_set_style_border_width(input_ta_, 2, 0);
+    lv_obj_set_style_bg_color(input_ta_, tok.surface_sel, 0);
 
     history_label_ = lv_label_create(content());
     lv_obj_set_pos(history_label_, 4, 76);
@@ -49,6 +58,7 @@ void CalculatorScreen::build() {
     lv_obj_set_style_text_font(history_label_, font10, 0);
     lv_obj_set_style_text_color(history_label_, tok.ink_dim, 0);
 
+    help_.build(root(), assets(), tok);
     refresh_mode();
     refresh_history();
 }
@@ -56,10 +66,8 @@ void CalculatorScreen::build() {
 void CalculatorScreen::refresh_history() {
     if (!history_label_) return;
     if (state_.history.empty()) {
-        lv_label_set_text(history_label_,
-                          "Type digits and letters.\n"
-                          "↑ then ← → Enter inserts . / - + …\n"
-                          "DEG/RAD chip sets angle mode.");
+        // Keep the area empty so the first viewport is not a tip wall.
+        lv_label_set_text(history_label_, "");
         return;
     }
     std::string text;
@@ -111,17 +119,32 @@ bool CalculatorScreen::type_key(uint32_t key) {
     return false;
 }
 
+void CalculatorScreen::persist_state() {
+    tools::calcpersist::SciState sci;
+    if (input_ta_) {
+        const char* t = lv_textarea_get_text(input_ta_);
+        sci.last_expr = t ? t : "";
+    }
+    sci.history = state_.history;
+    tools::calcpersist::save_scientific(sci);
+}
+
 void CalculatorScreen::evaluate_now() {
     if (!input_ta_) return;
     const char* text = lv_textarea_get_text(input_ta_);
     const std::string expr = text ? text : "";
+    if (expr.empty()) {
+        if (history_label_) lv_label_set_text(history_label_, "type an expression | Tab help");
+        return;
+    }
     view_model().set_work_input(expr);
     double result = 0;
     std::string error;
     if (!tools::calc::evaluate(expr, state_, result, error)) {
         if (history_label_) {
             lv_label_set_text(history_label_,
-                              error == "empty" ? "type an expression" : "syntax / math error");
+                              error == "empty" ? "type an expression | Tab help"
+                                               : "syntax / math error");
         }
         return;
     }
@@ -129,27 +152,46 @@ void CalculatorScreen::evaluate_now() {
     lv_textarea_set_text(input_ta_, formatted.c_str());
     view_model().set_work_input(formatted);
     refresh_history();
+    persist_state();
+}
+
+void CalculatorScreen::open_help() {
+    if (help_.visible()) {
+        help_.hide();
+        return;
+    }
+    help_.show("Calculator", tools::engcalc::scientific_help_text());
 }
 
 const char* CalculatorScreen::typing_hint() const {
-    return "Enter run · ↑ ops · Esc back";
+    return "Tab help | Enter run | up ops | Esc";
 }
 
 std::array<view::widgets::ActionSlot, 5> CalculatorScreen::nav_actions() {
     return {};
 }
 
+std::array<view::widgets::HintIcon, 2> CalculatorScreen::hint_icons() {
+    return {{
+        {view::ICON_INFO, [this]() { open_help(); }},
+        {},
+    }};
+}
+
 bool CalculatorScreen::handle_key(uint32_t key) {
+    if (help_.visible()) return help_.handle_key(key);
+    if (key == platform::kKeyTab) {
+        open_help();
+        return true;
+    }
+
     if (key == LV_KEY_ESC) {
-        if (keys_.focused()) {
-            keys_.set_focused(false);
-            return true;
-        }
+        keys_.set_focused(false);
+        persist_state();
         view_model().go_back();
         return true;
     }
 
-    // Ops strip navigation / insert (no letter-key shortcuts).
     if (keys_.handle_key(key)) {
         return true;
     }

@@ -1,6 +1,7 @@
 #include "wifi_analyzer_screen.h"
 
 #include "asset_manager.h"
+#include "elevate.h"
 #include "theme.h"
 #include "ui_const.h"
 #include "wifi_scan.h"
@@ -219,8 +220,11 @@ void WifiAnalyzerScreen::start_worker() {
     worker_ = std::thread([this]() {
         std::string err;
         const std::string saved = platform::load_monitor_iface();
-        const bool want_monitor =
-            !platform::monitor_iface_is_onboard(saved) && platform::monitor_iface_valid(saved, err);
+        // Without the helper's network capabilities, stay on nmcli so every
+        // channel still comes from the scan instead of a stuck monitor radio.
+        const bool want_monitor = platform::net_helpers_ready() &&
+                                  !platform::monitor_iface_is_onboard(saved) &&
+                                  platform::monitor_iface_valid(saved, err);
 
         platform::WifiMonitorSession session;
         bool use_monitor = false;
@@ -250,6 +254,13 @@ void WifiAnalyzerScreen::start_worker() {
         if (!use_monitor) {
             // Default path: repeated nmcli scans → channel bars + AP list.
             while (!cancel_) {
+                {
+                    std::lock_guard<std::mutex> lock(data_mu_);
+                    if (status_msg_.find("APs") == std::string::npos) {
+                        status_msg_ = "scanning all channels";
+                        data_ready_ = true;
+                    }
+                }
                 std::string scan_err;
                 bool cancelled = cancel_.load();
                 auto aps = platform::wifi_scan(scan_err, &cancelled);
@@ -282,7 +293,7 @@ void WifiAnalyzerScreen::start_worker() {
             return;
         }
 
-        uint8_t last_set = 0;
+        uint8_t radio_ch = 0;
         while (!cancel_) {
             platform::WifiAnalyzerState local;
             uint16_t dwell = 350;
@@ -299,9 +310,8 @@ void WifiAnalyzerScreen::start_worker() {
                     local.sweep_ch = kChannels[local.sweep_idx % kNch];
             }
 
-            if (local.sweep_ch != last_set) {
-                session.set_channel(local.sweep_ch);
-                last_set = local.sweep_ch;
+            if (local.sweep_ch != radio_ch && session.set_channel(local.sweep_ch)) {
+                radio_ch = local.sweep_ch;
             }
 
             uint32_t bytes = 0;
@@ -334,7 +344,7 @@ void WifiAnalyzerScreen::start_worker() {
                 if (hdr >= frame.size()) continue;
                 const uint8_t* body = frame.data() + hdr;
                 const size_t blen = frame.size() - hdr;
-                if (!ch) ch = local.sweep_ch;
+                if (!ch) ch = radio_ch ? radio_ch : local.sweep_ch;
 
                 std::lock_guard<std::mutex> lock_g(data_mu_);
                 platform::wifi_analyzer_ingest_frame(state_, body, blen, rssi, ch, bytes, pkts, peak_rssi);
@@ -349,7 +359,7 @@ void WifiAnalyzerScreen::start_worker() {
                 std::lock_guard<std::mutex> lock_g(data_mu_);
                 state_.dwell_ms = dwell;
                 state_.lock_ch = lock;
-                state_.sweep_ch = local.sweep_ch;
+                state_.sweep_ch = radio_ch ? radio_ch : local.sweep_ch;
                 platform::wifi_analyzer_finish_dwell(state_, bytes, pkts, peak_rssi, elapsed_ms);
                 char buf[72];
                 std::snprintf(buf, sizeof(buf), "monitor %s  dwell=%ums  %s", saved.c_str(),

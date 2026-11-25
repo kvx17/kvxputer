@@ -56,7 +56,8 @@ void KvxScreen::init() {
                                                             assets_,
                                                             tok,
                                                             nav_actions(),
-                                                            typing_hint());
+                                                            typing_hint(),
+                                                            hint_icons());
     bind_escape_back();
 }
 
@@ -68,6 +69,10 @@ const char* KvxScreen::typing_hint() const {
     return nullptr;
 }
 
+std::array<view::widgets::HintIcon, 2> KvxScreen::hint_icons() {
+    return {};
+}
+
 void KvxScreen::rebuild_action_bar() {
     if (!root_) return;
     action_bar_.reset();
@@ -75,7 +80,8 @@ void KvxScreen::rebuild_action_bar() {
                                                             assets_,
                                                             tokens(),
                                                             nav_actions(),
-                                                            typing_hint());
+                                                            typing_hint(),
+                                                            hint_icons());
     if (!chrome_visible_ && action_bar_ && action_bar_->root()) {
         lv_obj_add_flag(action_bar_->root(), LV_OBJ_FLAG_HIDDEN);
     }
@@ -145,6 +151,15 @@ lv_obj_t* KvxScreen::make_header(lv_obj_t* parent, const char* title) {
     lv_obj_set_style_border_color(esc, tok.rule, 0);
     lv_obj_set_style_border_opa(esc, LV_OPA_COVER, 0);
     lv_obj_align(esc, LV_ALIGN_RIGHT_MID, -6, -1);
+    lv_obj_add_flag(esc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(
+        esc,
+        [](lv_event_t* e) {
+            auto* self = static_cast<KvxScreen*>(lv_event_get_user_data(e));
+            if (self) self->handle_key(LV_KEY_ESC);
+        },
+        LV_EVENT_CLICKED,
+        this);
     return bar;
 }
 

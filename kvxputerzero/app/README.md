@@ -41,7 +41,7 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 
 | Channel | What you get |
 | --- | --- |
-| **Tools** | **Calculator** (scientific), Calculators (engineering), Codec / Hash, Passgen, TOTP, Combo, QR / Barcode, **PDA**, Media Player, Timer, **Matrix**, DTMF, Morse, Microphone, MQTT, LLM Chat, Drone ID (BLE), iButton hint |
+| **Tools** | **Calculator** (scientific), Calculators (engineering), **Vendor MAC Search**, Codec / Hash, Passgen, TOTP, Combo, QR / Barcode, **PDA**, Media Player, Timer, **Matrix**, DTMF, Morse, Microphone, MQTT, LLM Chat, Drone ID (BLE), iButton hint |
 | **WiFi / NetOps** | **WiFi Analyzer** (Adv-style channel bars + SSIDs; onboard scan, optional USB monitor), Monitor adapter, Connect, Disconnect, **Start WiFi AP**, AP info, **Jam Detect**, **Deauth IDS**, Net Toolkit (Help + port scan/banner/ping/dig/trace/curl), Scan Hosts, Listen/Client TCP, SOCKS4, Telnet, File Share, Dead Drop, LAN Watch, PineAP Hunter, open networks, AP detail, **Roku Remote** (device grid → D-pad: F/X/Z/C arrows, Enter Select, Bksp Back; 4 Vol− / 5 Rew / 6 Play / 7 FF / 8 Vol+; Esc tap Remote↔Keyboard, hold Esc exit; S Search; Q Home; M Mute; I Info; G Replay; A Apps; B audio status; P Power; R FindRemote; D devices; H help), WireGuard, Printer, UPnP list, HoneyPot; Loot Console, Check Handshakes, NTLM Clean; SMB Status, SIP OPTIONS, LDAP Read (shared tools; NetOps also has UART Shell) |
 | **BLE** | Scan, Hunter, Sniffer UI, Wall Of Flipper / Airtag (raw AD via `kvxputerzero-blescan`, same matchers as Cardputer), Skimmer Detector, Disconnect; Ninebot / Amiibolink / PN532 / Chameleon status (connect/read only) |
 | **Ethernet** | Link status, Scan Hosts (onboard NIC) |
@@ -62,7 +62,7 @@ Letters are bare keys. **Shift** is uppercase, **Sym** is the blue symbol, **Fn*
 | **Discovery** | Discovery tools (BLE scan, walls, spectrum, wardrive), same set as ADV |
 | **Clock** | Live face (digital / charge-style); Enter → Timer |
 | **Charge** | Charge-style face, color cycle, backlight steps |
-| **Config** | Colors, brightness, dim time, sound, power (reboot / off), shortcuts, About. Shortcuts bind a free letter to an app: tap, or hold for 3 seconds. 4–8, F/X/Z/C, Ok, Esc, Space, and Tab cannot be bound |
+| **Config** | Colors, brightness, dim time, sound, power (reboot / off), shortcuts, About (intro, repo / GitHub / coffee links with QR codes, then host, OS, CPU, memory, disk, battery, and network). Shortcuts bind a free letter to an app: tap, or hold for 3 seconds. 4–8, F/X/Z/C, Ok, Esc, Space, and Tab cannot be bound |
 | **USB** | **kvxkeyboard HID**: keyboard, mouse, presenter, media remote, clicker, jigglers, push-to-talk and system shortcuts over USB (Host/Slave switch on Slave, USB-C2) or Bluetooth LE (6 host slots). Also under BLE. **BadUSB Hunter**: host-side USB device list with HID keyboard flags. Desktop emulator adds a **Simulator** transport that logs reports to stderr. Keys: see the USB section of [`../README.md`](../README.md) |
 
 Optional Cap SPI/I2C paths: `~/.config/kvxputerzero/spi_cc1101.txt`, `spi_nrf24.txt`, `spi_sx1262.txt`, `i2c_si4713.txt`, `i2c_pn532.txt`. Cap radios default to **`/dev/spidev0.1`** (CE1). Cap-CC1101 NFC is **ST25R3916** on the same SPI (mode 1, 5 MHz) with soft-CS **GPIO22** / IRQ **GPIO23** on Zero (Cap docs Adv map is G6/G4). Card Emulation is NFC-A Passive Target on the Cap PCB coil (not the RP-SMA). Bring-up enables `/sys/class/leds/ext_5v_out`, GPIO26 POWER_EN/RST, CC1101 RF_SW0 (GPIO14), and Cap-LoRa PI4IOE@0x43 antenna (P0). Keep the user in `spi`/`i2c`/`gpio`. Do not hot-plug Caps.
@@ -73,16 +73,16 @@ Theme colors, PDA prefs, and tool data live under `~/.config/kvxputerzero/` (on 
 
 **WiFi Analyzer** (`WiFi → WiFi Analyzer`) always opens: channel bars + SSID list using the **onboard** radio via `nmcli` scan by default. Optional **WiFi → Monitor adapter**: pick a USB stick with monitor mode for real airtime hopping (Host switch toward the hub; drivers already installed). Saved as `~/.config/kvxputerzero/wifi_monitor_iface` (`onboard` or iface name). USB capture uses `/usr/lib/kvxputerzero/kvxputerzero-wifimon`.
 
-**Wall Of Flipper / AirTag** use `/usr/lib/kvxputerzero/kvxputerzero-blescan` for raw LE adverts (same matchers as Cardputer). Privileges for both helpers are applied **automatically** by the `.deb` `postinst` on install (App Store / `apt install`) — no user configuration.
+**Wall Of Flipper / AirTag** use `/usr/lib/kvxputerzero/kvxputerzero-blescan` for raw LE adverts (same matchers as Cardputer). The App Store package does not change sudoers or file modes. The first time you open a BLE wall, Deauth IDS, or USB HID, the app asks for your administrator password and runs `sudo` for that action only. The password is not saved. Wi-Fi Analyzer keeps scanning with the onboard radio without that prompt.
 
 Keys: **F/X** select channel, **Z/C** dwell, **Enter** AP list for channel, **L** all APs, **K** lock/hop (monitor), **E** export CSV, **Esc** back.
 
 ### Tools briefly
 
-1. Open **Tools** → pick Calculator, Calculators, Codec / Hash, Passgen, TOTP, Combo, QRCodes, Barcode, PDA, Media Player, Timer, Matrix, DTMF, Morse, Microphone, MQTT, LLM, or Drone ID. Matrix plays the boot rain for 5 seconds; any key leaves it early.
-2. **Calculator**: type an expression (`sin(90)`, `2^10`, `ans*2`). **Enter** evaluates; empty field + **D** toggles DEG/RAD. PDA → Calc opens the same screen.
-3. On Codec/engineering-Calculators/Combo work screens: type input in the field, press **Enter** to run, **Esc** to go back to that tool’s menu (then Esc again to Tools).
-4. **Calculator / Calculators:** type normally; ops strip inserts `.` `/` `-` `+` … (**↑** / **F** focuses it, **← → Enter** / **Z C Enter** inserts). Eng calcs: bare **F/X/Z/C** = Up/Down/Left/Right (no Fn). After **Enter**, **F/X** scroll the result. DEG/RAD is the first chip on Calculator.
+1. Open **Tools** → pick Calculator, Calculators, Vendor MAC Search, Codec / Hash, Passgen, TOTP, Combo, QRCodes, Barcode, PDA, Media Player, Timer, Matrix, DTMF, Morse, Microphone, MQTT, LLM, or Drone ID. Matrix plays the boot rain for 5 seconds; any key leaves it early.
+2. **Calculator**: type an expression (`sin(90)`, `2^10`, `ans*2`). **Enter** evaluates; DEG/RAD chip sets angle mode. PDA → Calc opens the same screen. **Tab** opens calculator help (hold Tab still locks the screen).
+3. On Codec/Combo work screens: type input in the field, press **Enter** to run, **Esc** to go back to that tool’s menu (then Esc again to Tools).
+4. **Calculator / Calculators:** labeled fields with **F/X** to move, **Z/C** to change mode when a mode chip exists, ops strip inserts punctuation (**↑** focuses it). **Tab** opens per-calc help; click the info icon on the hint bar for the same modal. Favorites (list icon) live under `~/.config/kvxputerzero/calc/`. After **Enter**, **F/X** scroll the result. Vendor MAC Search is also under Calculators → Cyber and uses the packaged OUI table.
 5. **Passgen**: **Z/C** length, **F/X** count, **Enter** / **Sym+G** generate, **Sym+U/L/D/C** charsets, **Sym+S** append to `~/.config/kvxputerzero/passwords.txt`.
 6. **TOTP**: accounts stored plaintext in `~/.config/kvxputerzero/totp.json` (mode 0600). Needs correct system time. **Z/C** switch accounts.
 7. **QR / Barcode**: Enter on the work screen draws the glyph; **Space** inverts QR; Esc returns to the tool menu. Type **B** for `.` in URLs / IPs.
@@ -174,7 +174,7 @@ cmake --build --preset cp0-cross-rel --target package
 The Debian package appears as:
 
 ```text
-dist/kvxputerzero_<version>_rev4_arm64.deb
+dist/kvxputerzero_0.1.0_rev11_arm64.deb
 ```
 
 ### 3. Copy the package to the device

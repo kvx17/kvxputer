@@ -74,6 +74,8 @@ public:
     void open_eng_calc_menu();
     void open_eng_calc_group(int group);
     void open_eng_calc_op(int op);
+    // Opens an op with no Calculators group (Tools / shortcuts). Esc → Tools.
+    void open_standalone_eng_calc(int op);
     void open_life_counter(int game);
     void open_timer();
     void open_matrix();

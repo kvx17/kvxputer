@@ -56,6 +56,7 @@
 #include "jam_detect_screen.h"
 #include "usb_probe.h"
 #include "wifi_analyzer_screen.h"
+#include "elevate.h"
 #include "wifi_monitor.h"
 #include "wifi_scan.h"
 
@@ -329,8 +330,14 @@ Screen make_results(VM& vm, AssetManager& assets, const std::string& title, std:
 }
 
 Screen make_prompt(VM& vm, AssetManager& assets, const std::string& title, const std::string& hint,
-                   const std::string& initial, screen::PromptScreen::ConfirmFn fn) {
-    return std::make_unique<screen::PromptScreen>(vm, assets, title, hint, initial, std::move(fn));
+                   const std::string& initial, screen::PromptScreen::ConfirmFn fn, bool secret = false) {
+    return std::make_unique<screen::PromptScreen>(vm, assets, title, hint, initial, std::move(fn), secret);
+}
+
+bool monitor_adapter_selected() {
+    std::string err;
+    const std::string saved = platform::load_monitor_iface();
+    return !platform::monitor_iface_is_onboard(saved) && platform::monitor_iface_valid(saved, err);
 }
 
 Screen make_run(VM& vm, AssetManager& assets, const std::string& title, Worker worker) {
@@ -340,6 +347,26 @@ Screen make_run(VM& vm, AssetManager& assets, const std::string& title, Worker w
 Screen make_info(VM& vm, AssetManager& assets, const std::string& title, const std::string& text) {
     // Documents / help / confirmations — never menu rows.
     return std::make_unique<screen::DocScreen>(vm, assets, title, text);
+}
+
+// Password prompt before a raw socket helper. After a successful grant, reopen the same tool.
+Screen ask_net_caps(VM& vm, AssetManager& assets, ToolId id, const std::string& param) {
+    if (!platform::sudo_available()) {
+        return make_info(vm, assets, "Administrator",
+                         "This tool needs raw network access. sudo is not installed, so the password prompt cannot run.");
+    }
+    return make_prompt(
+        vm, assets, "Enter password",
+        "Type your device administrator password, then press Enter. It is not saved.", "",
+        [&vm, id, param](const std::string& pw) {
+            std::string err;
+            if (!platform::grant_net_helpers(pw, err)) {
+                nav_info(vm, err.empty() ? "sudo failed" : err);
+                return;
+            }
+            vm.open_tool(id, param);
+        },
+        true);
 }
 
 Screen make_info_card(VM& vm, AssetManager& assets, const std::string& title,
@@ -5111,13 +5138,27 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::Cctv: return make_cctv(vm, assets, st);
 
     // --- BLE -----------------------------------------------------------------------------
-    case ToolId::BleScan: return make_run(vm, assets, "BLE Scan", ble_worker(BleMode::Scan, ""));
-    case ToolId::BleHunter: return make_run(vm, assets, "BLE Hunter", ble_worker(BleMode::Hunter, param));
-    case ToolId::BleSniffer: return make_run(vm, assets, "BLE Sniffer", ble_worker(BleMode::Sniffer, ""));
-    case ToolId::WallOfFlipper: return make_run(vm, assets, "Wall Of Flipper", ble_worker(BleMode::Flipper, ""));
-    case ToolId::WallOfAirtag: return make_run(vm, assets, "Wall Of Airtag", ble_worker(BleMode::Airtag, ""));
-    case ToolId::SkimmerDetector: return make_run(vm, assets, "Skimmer Detector", ble_worker(BleMode::Skimmer, ""));
-    case ToolId::DroneId: return make_run(vm, assets, "Drone ID (BLE)", ble_worker(BleMode::DroneId, ""));
+    case ToolId::BleScan:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "BLE Scan", ble_worker(BleMode::Scan, ""));
+    case ToolId::BleHunter:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "BLE Hunter", ble_worker(BleMode::Hunter, param));
+    case ToolId::BleSniffer:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "BLE Sniffer", ble_worker(BleMode::Sniffer, ""));
+    case ToolId::WallOfFlipper:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "Wall Of Flipper", ble_worker(BleMode::Flipper, ""));
+    case ToolId::WallOfAirtag:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "Wall Of Airtag", ble_worker(BleMode::Airtag, ""));
+    case ToolId::SkimmerDetector:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "Skimmer Detector", ble_worker(BleMode::Skimmer, ""));
+    case ToolId::DroneId:
+        if (!platform::net_helpers_ready()) return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "Drone ID (BLE)", ble_worker(BleMode::DroneId, ""));
     case ToolId::BleDisconnect: return make_ble_disconnect(vm, assets);
     case ToolId::NinebotStatus:
         return make_info_card(vm, assets, "Ninebot Status",
@@ -5154,13 +5195,20 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::TagTinker: return make_tagtinker(vm, assets, st);
     case ToolId::IrCarrier: return make_ir_carrier(vm, assets);
     case ToolId::WifiMonitorAdapter: return make_wifi_monitor_adapter(vm, assets);
-    case ToolId::WifiAnalyzer: return make_wifi_analyzer(vm, assets);
+    case ToolId::WifiAnalyzer:
+        // Onboard nmcli scan does not need the helper. Monitor mode is used only
+        // when a USB adapter is saved and its capabilities are already granted.
+        return make_wifi_analyzer(vm, assets);
     case ToolId::WifiConnect: return make_wifi_connect(vm, assets, st);
     case ToolId::WifiDisconnect: return make_wifi_disconnect(vm, assets, st);
     case ToolId::WifiAp: return make_wifi_ap(vm, assets, st);
     case ToolId::WifiApInfo: return make_wifi_ap_info(vm, assets);
-    case ToolId::WifiJamDetect: return make_jam_detect(vm, assets);
-    case ToolId::WifiDeauthIds: return make_run(vm, assets, "Deauth IDS", deauth_ids_worker());
+    case ToolId::WifiJamDetect:
+        return make_jam_detect(vm, assets);
+    case ToolId::WifiDeauthIds:
+        if (monitor_adapter_selected() && !platform::net_helpers_ready())
+            return ask_net_caps(vm, assets, id, param);
+        return make_run(vm, assets, "Deauth IDS", deauth_ids_worker());
     case ToolId::BadUsbHunter: return make_badusb_hunter(vm, assets);
 
     // --- Scripts / PC Connect / GPS / Modules / accessory --------------------------------

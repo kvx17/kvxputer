@@ -72,6 +72,9 @@ std::vector<LaunchTarget> build_targets() {
     // First-level Tools entries that are screens rather than ToolId rows.
     add_page(out, "page:codec", "Codec / Hash", tools, AppPage::CodecMenu);
     add_page(out, "page:engcalc", "Calculators", tools, AppPage::EngCalcMenu);
+    // aux matches tools::engcalc::Op::Oui (keep in sync with eng_calc_lib.h).
+    constexpr int kOpOui = 35;
+    add_page(out, "page:mac_vendor", "Vendor MAC Search", tools, AppPage::EngCalcWork, kOpOui);
     add_page(out, "page:passgen", "Passgen", tools, AppPage::Passgen);
     add_page(out, "page:totp", "TOTP", tools, AppPage::TotpMenu);
     add_page(out, "page:combo", "Combo", tools, AppPage::ComboMenu);

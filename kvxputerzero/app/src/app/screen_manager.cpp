@@ -9,14 +9,13 @@
 #include "clock_face_screen.h"
 #include "gallery_screen.h"
 #include "codec_lib.h"
+#include "about_screen.h"
 #include "combo_lib.h"
-#include "device_status.h"
 #include "doc_screen.h"
 #include "eng_calc_lib.h"
 #include "eng_calc_screen.h"
 #include "life_counter_screen.h"
 #include "glyph_screen.h"
-#include "info_screen.h"
 #include "kvx_style.h"
 #include "launch_catalog.h"
 #include "menu_icons.h"
@@ -25,7 +24,6 @@
 #include "shortcut_capture_screen.h"
 #include "shortcut_pick_screen.h"
 #include "matrix_screen.h"
-#include "net_info.h"
 #include "options_list_screen.h"
 #include "passgen_screen.h"
 #include "pda_calendar_screen.h"
@@ -183,6 +181,12 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
         std::vector<MenuEntry> entries;
         entries.push_back({"Calculator", [this]() { view_model_.open_calculator(); }, view::ICON_MENU_CALCS});
         entries.push_back({"Calculators", [this]() { view_model_.open_eng_calc_menu(); }, view::ICON_MENU_CALCS});
+        entries.push_back({"Vendor MAC Search",
+                           [this]() {
+                               view_model_.open_standalone_eng_calc(
+                                   static_cast<int>(tools::engcalc::Op::Oui));
+                           },
+                           view::ICON_CH_ETH});
         entries.push_back({"Codec / Hash", [this]() { view_model_.open_codec_menu(); }, view::ICON_MENU_CODEC});
         entries.push_back({"Passgen", [this]() { view_model_.open_passgen(); }, view::ICON_MENU_PASSGEN});
         entries.push_back({"TOTP", [this]() { view_model_.open_totp_menu(); }, view::ICON_MENU_TOTP});
@@ -693,37 +697,8 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
             });
     }
 
-    case model::AppPage::About: {
-        screen::InfoScreen::Fields fields;
-        fields.push_back({"app", "kvxputerzero 0.1.0"});
-        fields.push_back({"model", "Cardputer Zero"});
-        view::StatusPillKind kind = view::StatusPillKind::Ok;
-        std::string status = "OK";
-        {
-            const auto st = platform::read_device_status();
-            if (st.battery_present && st.battery_percent >= 0) {
-                char buf[32];
-                std::snprintf(buf, sizeof(buf), "%d%%%s", static_cast<int>(st.battery_percent),
-                              st.battery_charging ? " charging" : "");
-                fields.push_back({"battery", buf});
-            } else {
-                fields.push_back({"battery", "unknown"});
-                kind = view::StatusPillKind::Idle;
-                status = "unknown";
-            }
-        }
-        {
-            std::string err;
-            const auto iface = platform::default_route_iface(err);
-            fields.push_back({"ipv4", iface.ipv4.empty() ? "none" : iface.ipv4});
-            if (iface.ipv4.empty() && kind == view::StatusPillKind::Ok) {
-                kind = view::StatusPillKind::Idle;
-                status = "no ipv4";
-            }
-        }
-        return std::make_unique<screen::InfoScreen>(view_model_, assets_, "About", std::move(fields),
-                                                    std::move(status), kind);
-    }
+    case model::AppPage::About:
+        return std::make_unique<screen::AboutScreen>(view_model_, assets_);
 
     case model::AppPage::PdaHub:
         return std::make_unique<screen::PdaHubScreen>(view_model_, assets_);

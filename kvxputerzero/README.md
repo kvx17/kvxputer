@@ -299,8 +299,9 @@ The bundled copy is [`app/assets/pcconnect/`](app/assets/pcconnect/README.md).
 
 | Tool | Purpose |
 | --- | --- |
-| **Calculator** | Scientific: `sin(90)`, `2^10`, `ans*2`. **Enter** evaluates. Empty field + **D** toggles DEG/RAD. |
-| **Calculators** | Subnet, base converter, byte units, resistor color, LED resistor, voltage divider, baud bit-time, dBm, epoch, temp/length/AWG, bitmask, CRC, units, Ohm’s law, voltage drop, motor, gas law, flow and pipe, parallel resistors, RC timer, battery life, frequency, PWM, percentage, date and time difference, tip split, distance. |
+| **Calculator** | Scientific: `sin(90)`, `2^10`, `ans*2`. **Enter** evaluates. DEG/RAD chip sets angle mode. **Tab** opens help. |
+| **Calculators** | Network, electronics, radio, cyber, data, GPS, and general helpers (subnet, Ohm’s law, MAC vendor, CRC, distance, …). Labeled fields with **F/X**; **Tab** help; last inputs and favorites under `~/.config/kvxputerzero/calc/`. |
+| **Vendor MAC Search** | Same as Calculators → Cyber → MAC vendor. Looks up a MAC/OUI in the packaged vendor table (longest prefix). Also on the Tools menu. |
 | **Codec / Hash** | Base64, hex, URL encode/decode, MD5, SHA1, SHA256. |
 | **Passgen** | **Z/C** length, **F/X** count, **Enter** generates. **Sym+U/L/D/C** toggle charsets. **Sym+S** appends to `passwords.txt`. |
 | **TOTP** | Authenticator codes in `totp.json` (mode 0600). Needs the right clock. **Z/C** switch accounts. |
@@ -317,7 +318,7 @@ The bundled copy is [`app/assets/pcconnect/`](app/assets/pcconnect/README.md).
 | **Drone ID** | Same BLE drone advertisements as under BLE. |
 | **iButton** | 1-Wire iButton read. The live read is also under Modules. |
 
-On calculator and codec screens, type in the field and press **Enter**. **Esc** returns to that tool’s menu, then to Tools. After **Enter** on a calculator, **F/X** scroll the result.
+On calculator screens, fill the labeled fields (or paste box) and press **Enter**. **Tab** opens that calculator’s help. **Esc** returns to that tool’s menu, then to Tools. After **Enter**, **F/X** scroll the result. Codec screens still use a single input line.
 
 ### Modules
 
@@ -347,7 +348,7 @@ Grove and Cap bring-up. PORT-style modules share the Grove connector; do not put
 | **Dim time** | Idle time before the panel dims. |
 | **Sound** | UI beeps. |
 | **Power** | Reboot or power off. |
-| **About** | Version and device. |
+| **About** | Short intro, repository and GitHub links with QR codes, and a buy-me-a-coffee link. System details (host, OS, CPU, memory, disk, battery, network) stay at the bottom. Scroll with **5 / 7**. |
 
 ### USB
 

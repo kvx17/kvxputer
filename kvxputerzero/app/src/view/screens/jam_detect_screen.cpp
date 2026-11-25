@@ -1,6 +1,7 @@
 #include "jam_detect_screen.h"
 
 #include "asset_manager.h"
+#include "elevate.h"
 #include "theme.h"
 #include "ui_const.h"
 #include "user_paths.h"
@@ -197,8 +198,9 @@ void JamDetectScreen::start_worker() {
     worker_ = std::thread([this]() {
         std::string err;
         const std::string saved = platform::load_monitor_iface();
-        const bool want_monitor =
-            !platform::monitor_iface_is_onboard(saved) && platform::monitor_iface_valid(saved, err);
+        const bool want_monitor = platform::net_helpers_ready() &&
+                                  !platform::monitor_iface_is_onboard(saved) &&
+                                  platform::monitor_iface_valid(saved, err);
 
         platform::WifiMonitorSession session;
         bool use_monitor = false;
@@ -259,14 +261,14 @@ void JamDetectScreen::start_worker() {
         int sweep_idx = 0;
         while (!cancel_) {
             uint8_t ch = kChannels[sweep_idx % kNch];
+            if (ch != last_set) {
+                if (session.set_channel(ch)) last_set = ch;
+                else if (last_set) ch = last_set;
+            }
             {
                 std::lock_guard<std::mutex> lock(data_mu_);
                 state_.sweep_ch = ch;
                 state_.nav_ch = ch;
-            }
-            if (ch != last_set) {
-                session.set_channel(ch);
-                last_set = ch;
             }
 
             uint32_t bytes = 0;

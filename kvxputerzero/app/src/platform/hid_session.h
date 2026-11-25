@@ -69,6 +69,10 @@ std::unique_ptr<Transport> make_sim_transport();
 void set_ble_known_hosts(Transport& t, const std::vector<std::string>& addrs);
 // USB gadget helper path, or empty when not installed.
 std::string find_hidgadget_helper();
+
+// Run kvxputerzero-hidgadget <verb>. Uses sudo when the helper is not setuid
+// and a password was accepted this session.
+bool run_hidgadget(const std::string& helper, const char* verb, std::string& output, std::string& error);
 // The Cardputer Zero Host/Slave switch is physical. True while it is on Host
 // (the internal hub and its devices are on the CM0 USB bus).
 bool usb_switch_on_host();

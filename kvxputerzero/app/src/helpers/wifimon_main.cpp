@@ -11,6 +11,8 @@
 //                      STATS total=N rate=/s
 //         or a single error line on failure.
 
+#include "ambient_net_caps.h"
+
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
@@ -357,6 +359,7 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, on_signal);
     std::signal(SIGINT, on_signal);
     std::signal(SIGPIPE, SIG_IGN);
+    pass_net_caps_to_children();
 
     Session s;
     s.requested = argv[1];

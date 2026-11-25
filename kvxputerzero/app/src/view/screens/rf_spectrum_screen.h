@@ -45,6 +45,7 @@ private:
     void update_footer();
     void open_peak_menu();
     void handoff_peak(model::ToolId tool);
+    void handoff_center(model::ToolId tool);
     void cycle_trace_mode();
     void place_user_marker();
     void clear_user_markers();
@@ -52,13 +53,18 @@ private:
     void find_strongest();
     void capture_baseline();
     void toggle_diff();
+    void cycle_display_mode();
     void apply_freq_entry();
     const char* band_name() const;
+    const char* display_mode_name() const;
 
     static void timer_cb(lv_timer_t* t);
 
+    enum class DisplayMode { Line, Waterfall };
+
     platform::RfSettings settings_;
     PresetId preset_{PresetId::Band433};
+    DisplayMode display_mode_{DisplayMode::Line};
     uint32_t center_hz_{433920000};
     uint32_t span_hz_{2000000};
     uint32_t step_hz_{25000};
@@ -92,8 +98,8 @@ private:
 
     bool threshold_alert_{false};
     uint32_t last_sweep_ms_{0};
-    bool show_waterfall_{true};
-    static constexpr int kWaterRows = 28;
+    bool show_peak_marker_{true};
+    static constexpr int kWaterRows = 48;
     static constexpr int kWaterCols = 100;
     std::array<int8_t, kWaterRows * kWaterCols> water_{};
 

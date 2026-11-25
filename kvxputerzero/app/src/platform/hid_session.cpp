@@ -1,6 +1,9 @@
 #include "hid_session.h"
 
+#include "elevate.h"
 #include "shell_util.h"
+
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <chrono>
@@ -40,6 +43,31 @@ std::string find_hidgadget_helper() {
     return {};
 }
 
+bool run_hidgadget(const std::string& helper, const char* verb, std::string& output, std::string& error) {
+    output.clear();
+    error.clear();
+    if (helper.empty() || !verb) {
+        error = "kvxputerzero-hidgadget missing";
+        return false;
+    }
+    struct stat st {};
+    const bool setuid = ::stat(helper.c_str(), &st) == 0 && (st.st_mode & S_ISUID);
+    if (::geteuid() == 0 || setuid) {
+        std::string quoted = "'";
+        for (char c : helper) {
+            if (c == '\'') quoted += "'\\''";
+            else quoted += c;
+        }
+        quoted += "' ";
+        quoted += verb;
+        quoted += " 2>&1";
+        platform::run_shell(quoted, output);
+        return true;
+    }
+    if (!platform::sudo_exec({helper, verb}, output, error)) return false;
+    return true;
+}
+
 bool usb_switch_on_host() {
 #if KVX_DESKTOP_BUILD
     return false;
@@ -66,7 +94,11 @@ bool prepare_bluetooth(std::string& note) {
         return false;
     }
     std::string out;
-    platform::run_shell("'" + helper + "' ble-prep 2>&1", out);
+    std::string run_err;
+    if (!run_hidgadget(helper, "ble-prep", out, run_err)) {
+        note = run_err.empty() ? "Bluetooth setup failed" : run_err;
+        return false;
+    }
     while (!out.empty() && (out.back() == '\n' || out.back() == '\r')) out.pop_back();
     if (out.rfind("OK", 0) == 0) {
         note = out.size() > 3 ? out.substr(3) : "ready";

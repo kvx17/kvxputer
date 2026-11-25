@@ -12,7 +12,7 @@ public:
     using ConfirmFn = std::function<void(const std::string& value)>;
 
     PromptScreen(viewmodel::BaseViewModel& view_model, app::AssetManager& assets, std::string title,
-                 std::string hint, std::string initial, ConfirmFn on_confirm);
+                 std::string hint, std::string initial, ConfirmFn on_confirm, bool secret = false);
 
 protected:
     void build() override;
@@ -26,6 +26,7 @@ private:
     std::string hint_;
     std::string initial_;
     ConfirmFn on_confirm_;
+    bool secret_{false};
     lv_obj_t* input_ta_{nullptr};
 };
 

@@ -1,6 +1,7 @@
 #include "hid_remote_screen.h"
 
 #include "asset_manager.h"
+#include "elevate.h"
 #include "kvx_style.h"
 #include "theme.h"
 #include "ui_const.h"
@@ -203,7 +204,10 @@ void HidRemoteScreen::rebuild_body() {
         lv_obj_set_style_text_color(edit_lbl_, tok.ink, 0);
         lv_obj_align(edit_lbl_, LV_ALIGN_LEFT_MID, 6, 0);
         auto* hint = lv_label_create(body_);
-        lv_label_set_text(hint, "Enter save   Esc cancel   Bksp delete");
+        lv_label_set_text(hint, edit_secret_ ? "Type your device administrator password.\nEnter confirms.  Esc cancels."
+                                            : "Enter save   Esc cancel   Bksp delete");
+        lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(hint, view::kScreenWidth - 16);
         lv_obj_set_style_text_font(hint, f10 ? f10 : &lv_font_montserrat_12, 0);
         lv_obj_set_style_text_color(hint, tok.ink_dim, 0);
         lv_obj_set_pos(hint, 8, 62);
@@ -559,6 +563,23 @@ platform::hid::LinkState HidRemoteScreen::link_state() {
 }
 
 void HidRemoteScreen::start_transport(TransportPref pref) {
+#if !USE_DESKTOP
+    if ((pref == TransportPref::Usb || pref == TransportPref::Ble) && !platform::root_session_ready()) {
+        begin_edit(
+            "Enter administrator password", "", 128,
+            [this, pref](const std::string& pw) {
+                std::string err;
+                if (!platform::accept_root_password(pw, err)) {
+                    show_message(err.empty() ? "Password rejected" : err, true);
+                    start_transport(pref);
+                    return;
+                }
+                start_transport(pref);
+            },
+            Phase::Transport, true);
+        return;
+    }
+#endif
     stop_transport();
     std::unique_ptr<platform::hid::Transport> t;
     switch (pref) {
@@ -905,19 +926,26 @@ void HidRemoteScreen::poll_hosts() {
 // --- text entry ---------------------------------------------------------------------
 
 void HidRemoteScreen::begin_edit(const std::string& title, const std::string& initial, size_t max_len,
-                                 std::function<void(const std::string&)> done, Phase back) {
+                                 std::function<void(const std::string&)> done, Phase back, bool secret) {
     edit_title_ = title;
     edit_buf_ = initial;
     edit_max_ = max_len;
     edit_done_ = std::move(done);
     edit_back_ = back;
+    edit_secret_ = secret;
     set_phase(Phase::Edit);
 }
 
 void HidRemoteScreen::refresh_edit() {
     if (!edit_lbl_) return;
-    const std::string shown = edit_buf_ + "_";
+    std::string shown;
+    if (edit_secret_ && edit_buf_.empty()) shown = "type password_";
+    else shown = (edit_secret_ ? std::string(edit_buf_.size(), '*') : edit_buf_) + "_";
     lv_label_set_text(edit_lbl_, shown.c_str());
+    if (edit_lbl_) {
+        const auto tok = tokens();
+        lv_obj_set_style_text_color(edit_lbl_, (edit_secret_ && edit_buf_.empty()) ? tok.ink_dim : tok.ink, 0);
+    }
 }
 
 bool HidRemoteScreen::handle_edit_key(uint32_t key) {
@@ -927,7 +955,10 @@ bool HidRemoteScreen::handle_edit_key(uint32_t key) {
     }
     if (is_enter(key)) {
         std::string v = edit_buf_;
-        while (!v.empty() && v.back() == ' ') v.pop_back();
+        if (!edit_secret_) {
+            while (!v.empty() && v.back() == ' ') v.pop_back();
+        }
+        edit_buf_.clear();
         auto done = edit_done_;
         set_phase(edit_back_);
         if (done) done(v);
@@ -1883,7 +1914,9 @@ bool HidRemoteScreen::handle_ptt_key(uint32_t key) {
 // --- action bar & timer -------------------------------------------------------------
 
 const char* HidRemoteScreen::typing_hint() const {
-    if (phase_ == Phase::Edit) return "Type a name  Enter save  Esc cancel";
+    if (phase_ == Phase::Edit) {
+        return edit_secret_ ? "Password  Enter confirm  Esc cancel" : "Type a name  Enter save  Esc cancel";
+    }
     if (phase_ == Phase::Hosts) return "1-6 host slot  |  Enter continue";
     if (phase_ == Phase::Mode && mode_ == Mode::Keyboard) return "Typing to the host  |  Fn+Esc or hold Esc: back";
     return nullptr;

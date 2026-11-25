@@ -1,7 +1,6 @@
 // USB transport for kvxkeyboard HID: configfs gadget via kvxputerzero-hidgadget.
 
 #include "hid_session.h"
-#include "shell_util.h"
 
 #include <cerrno>
 #include <cstring>
@@ -13,15 +12,6 @@
 
 namespace platform::hid {
 namespace {
-
-std::string quote(const std::string& s) {
-    std::string out = "'";
-    for (char c : s) {
-        if (c == '\'') out += "'\\''";
-        else out += c;
-    }
-    return out + "'";
-}
 
 std::string read_line(const std::string& path) {
     std::ifstream in(path);
@@ -45,7 +35,11 @@ public:
             return false;
         }
         std::string out;
-        platform::run_shell(quote(helper_) + " up 2>&1", out);
+        std::string run_err;
+        if (!run_hidgadget(helper_, "up", out, run_err)) {
+            error = run_err.empty() ? "USB gadget failed" : run_err;
+            return false;
+        }
         std::istringstream ss(out);
         std::string tag, udc, node;
         ss >> tag;
@@ -76,7 +70,8 @@ public:
         }
         if (up_ && !helper_.empty()) {
             std::string out;
-            platform::run_shell(quote(helper_) + " down 2>&1", out);
+            std::string run_err;
+            (void)run_hidgadget(helper_, "down", out, run_err);
         }
         up_ = false;
     }

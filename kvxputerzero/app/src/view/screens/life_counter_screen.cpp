@@ -1,8 +1,11 @@
 #include "life_counter_screen.h"
 
 #include "asset_manager.h"
+#include "eng_calc_help.h"
 #include "kvx_style.h"
+#include "linux_input.h"
 #include "theme.h"
+#include "ui_const.h"
 
 #include <algorithm>
 #include <string>
@@ -125,6 +128,7 @@ void LifeCounterScreen::build() {
     lv_label_set_long_mode(status_, LV_LABEL_LONG_CLIP);
     lv_obj_set_style_text_font(status_, small, 0);
     lv_obj_set_style_text_color(status_, tok.ink_dim, 0);
+    help_.build(root(), assets(), tok);
     refresh();
 }
 
@@ -171,16 +175,36 @@ void LifeCounterScreen::refresh() {
 }
 
 const char* LifeCounterScreen::typing_hint() const {
-    if (game_ == LifeGame::Truco) return "Z/C lado  1 2 3 +  X -1";
-    return "Z/C side  F +  X -";
+    return "Tab help | Enter run | F/X fields | Esc";
 }
 
 std::array<view::widgets::ActionSlot, 5> LifeCounterScreen::nav_actions() {
     return {};
 }
 
+std::array<view::widgets::HintIcon, 2> LifeCounterScreen::hint_icons() {
+    return {{
+        {view::ICON_INFO, [this]() { open_help(); }},
+        {},
+    }};
+}
+
+void LifeCounterScreen::open_help() {
+    if (help_.visible()) {
+        help_.hide();
+        return;
+    }
+    help_.show(title(), tools::engcalc::life_help_text(static_cast<int>(game_)));
+}
+
 bool LifeCounterScreen::handle_key(uint32_t key) {
+    if (help_.visible()) return help_.handle_key(key);
+    if (key == platform::kKeyTab) {
+        open_help();
+        return true;
+    }
     if (key == LV_KEY_ESC) {
+        help_.hide();
         view_model().go_back();
         return true;
     }

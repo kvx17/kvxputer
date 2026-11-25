@@ -9,6 +9,8 @@
 //         OK <n>
 //         or a single ERR line on hard failure.
 
+#include "ambient_net_caps.h"
+
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
@@ -193,14 +195,15 @@ int main(int argc, char** argv) {
         if (seconds > 30) seconds = 30;
     }
 
+    pass_net_caps_to_children();
     std::map<std::string, Hit> by_mac;
     // Prefer exclusive HCI LE scan (same raw AD stream Cardputer NimBLE sees).
     if (!scan_via_hci_active(by_mac, seconds)) {
         by_mac.clear();
         if (!scan_via_monitor(by_mac, seconds)) {
             std::fprintf(stderr,
-                         "ERR BLE helper lacks privileges (reinstall kvxputerzero .deb so "
-                         "postinst can grant caps)\n");
+                         "ERR BLE helper lacks privileges (open the tool again and enter the "
+                         "administrator password)\n");
             return 1;
         }
     }

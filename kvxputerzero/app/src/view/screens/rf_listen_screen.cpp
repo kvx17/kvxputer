@@ -226,11 +226,13 @@ void RfListenScreen::draw_mini() {
     std::vector<int> rssi;
     std::vector<uint32_t> freqs;
     uint32_t tuned = settings_.freq_hz;
+    uint32_t step = settings_.step_hz;
     {
         std::lock_guard<std::mutex> lock(mu_);
         rssi = mini_rssi_;
         freqs = mini_freqs_;
         tuned = settings_.freq_hz;
+        step = settings_.step_hz;
     }
 
     if (freqs.size() < 2 || rssi.size() != freqs.size()) {
@@ -248,13 +250,16 @@ void RfListenScreen::draw_mini() {
     const int floor_db = std::clamp(lo - 5, -120, -40);
     const int ref_db = std::clamp(std::max(hi + 8, floor_db + 20), floor_db + 15, 0);
 
-    const uint32_t start = freqs.front();
-    const uint32_t stop = freqs.back();
-    const double span = std::max(1.0, static_cast<double>(stop - start));
+    // Fixed axis centered on tuned freq so the green marker never wanders.
+    // Use the intended neighborhood (±16 steps), not adaptive sweep endpoints.
+    const uint32_t half = step * 16;
+    const uint32_t axis_start = tuned > half ? tuned - half : 0;
+    const uint32_t axis_stop = tuned + half;
+    const double span = std::max(1.0, static_cast<double>(axis_stop - axis_start));
 
     auto x_of = [&](uint32_t hz) -> int {
-        return plot_left +
-               static_cast<int>((static_cast<double>(hz - start) / span) * (plot_right - plot_left));
+        const double t = (static_cast<double>(hz) - static_cast<double>(axis_start)) / span;
+        return plot_left + static_cast<int>(std::clamp(t, 0.0, 1.0) * (plot_right - plot_left));
     };
     auto y_of = [&](int dbm) -> int {
         float t = (static_cast<float>(dbm - floor_db)) / std::max(1.f, static_cast<float>(ref_db - floor_db));
@@ -272,15 +277,15 @@ void RfListenScreen::draw_mini() {
              y_of(rssi[i]), trace);
     }
 
-    // Center = tuned frequency.
-    const int cx = x_of(tuned);
+    // Tuned marker is always dead-center of the fixed axis.
+    const int cx = (plot_left + plot_right) / 2;
     vline(data, mini_stride_, mini_w_, mini_h_, cx, plot_top, plot_bottom, center_col);
     put_px(data, mini_stride_, mini_w_, mini_h_, cx, y_of(rssi_dbm_), center_col);
 
     char a[12], b[12], c[12];
-    std::snprintf(a, sizeof(a), "%.2f", start / 1000000.0);
+    std::snprintf(a, sizeof(a), "%.2f", axis_start / 1000000.0);
     std::snprintf(b, sizeof(b), "%.2f", tuned / 1000000.0);
-    std::snprintf(c, sizeof(c), "%.2f", stop / 1000000.0);
+    std::snprintf(c, sizeof(c), "%.2f", axis_stop / 1000000.0);
     const int ylab = plot_bottom + 2;
     draw_text(data, mini_stride_, mini_w_, mini_h_, plot_left, ylab, a, ink);
     draw_text(data, mini_stride_, mini_w_, mini_h_, std::clamp(cx - 12, plot_left, plot_right - 24), ylab, b,
@@ -385,12 +390,17 @@ void RfListenScreen::start_worker() {
             std::vector<uint32_t> freqs;
             if (open) {
                 (void)radio.read_rssi_dbm(dbm, err);
-                const uint32_t start = settings_.freq_hz > settings_.step_hz * 16
-                                           ? settings_.freq_hz - settings_.step_hz * 16
-                                           : settings_.freq_hz;
-                const uint32_t stop = settings_.freq_hz + settings_.step_hz * 16;
-                uint32_t step = settings_.step_hz;
-                (void)platform::cc1101_plan_sweep(start, stop, step, 32, freqs, err);
+                // Fixed ±16-step neighborhood (no adaptive step) so the axis stays stable.
+                const uint32_t step = std::max(settings_.step_hz, 1000u);
+                const uint32_t half = step * 16;
+                const uint32_t start =
+                    settings_.freq_hz > half ? settings_.freq_hz - half : settings_.freq_hz;
+                freqs.clear();
+                freqs.reserve(33);
+                for (uint32_t f = start; f <= settings_.freq_hz + half; f += step) {
+                    freqs.push_back(f);
+                    if (freqs.size() >= 33) break;
+                }
                 (void)radio.spectrum_sweep(freqs, mini, err, &cancel_);
                 (void)radio.set_frequency_hz(settings_.freq_hz, err, true);
 

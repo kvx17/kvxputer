@@ -7,7 +7,7 @@
 include(GNUInstallDirs)
 
 set(APP_DISPLAY_NAME "kvxputerzero")
-set(APP_DEBIAN_REVISION "rev10" CACHE STRING "Debian package revision/vendor suffix")
+set(APP_DEBIAN_REVISION "rev11" CACHE STRING "Debian package revision/vendor suffix")
 set(APP_DEBIAN_ARCHITECTURE "arm64" CACHE STRING "Debian package architecture")
 # Deliberately a placeholder: the store rejects packages whose Maintainer is
 # still a template/M5Stack identity, so set your own name and email here.
@@ -68,6 +68,12 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/pcconnect/"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}/pcconnect"
     PATTERN ".DS_Store" EXCLUDE
 )
+# Generated MAC vendor table (built by the oui_table target; not the raw CSV).
+if(DEFINED OUI_TABLE_BIN)
+    install(FILES "${OUI_TABLE_BIN}"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/${APP_NAME}/files"
+    )
+endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets/images/"
     DESTINATION "${CMAKE_INSTALL_DATADIR}/APPLaunch/share/images"
     FILES_MATCHING
@@ -123,6 +129,16 @@ endif()
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "${APP_DEBIAN_DEPENDS}")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION TRUE)
+
+foreach(_ver_tgt ${PROJECT_NAME}_view ${PROJECT_NAME}_runners)
+    if(TARGET ${_ver_tgt})
+        target_compile_definitions(${_ver_tgt}
+            PUBLIC
+                KVX_APP_VERSION="${PROJECT_VERSION}"
+                KVX_APP_REVISION="${APP_DEBIAN_REVISION}"
+        )
+    endif()
+endforeach()
 
 configure_file(
     "${CMAKE_CURRENT_LIST_DIR}/templates/conffiles.in"

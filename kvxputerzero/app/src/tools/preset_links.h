@@ -10,6 +10,8 @@ inline constexpr const char* kRepoUrl = "https://github.com/kvx17/kvxputer";
 inline constexpr const char* kRepoLabel = "kvxputer repo";
 inline constexpr const char* kGithubUrl = "https://github.com/kvx17";
 inline constexpr const char* kGithubLabel = "kvx17 GitHub";
+inline constexpr const char* kCoffeeUrl = "https://buymeacoffee.com/kvx17";
+inline constexpr const char* kCoffeeLabel = "Buy me a coffee";
 inline constexpr const char* kZeroDocsUrl = "https://docs.m5stack.com/en/CardputerZero";
 
 // Useful Links submenu (same list in QR + NFC).
