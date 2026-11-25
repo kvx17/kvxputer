@@ -38,6 +38,10 @@ private:
     int trim_lo_{0};
     int trim_hi_{0};
     int peak_rssi_{-120};
+    int live_rssi_{-120};
+    int arm_left_s_{0};
+    bool rssi_archive_{false};
+    bool help_on_{false};
     std::string status_;
     std::string path_saved_;
 

@@ -3,6 +3,7 @@
 #include "wifi_scan.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -129,5 +130,10 @@ private:
     bool running_{false};
     std::vector<uint8_t> pending_; // leftover after OK banner
 };
+
+// Run kvxputerzero-wifimon <iface> --ids until cancel. Streams text lines (DEAUTH/DISASSOC/STATS).
+// Returns false if helper/iface unavailable (error set). Detection only — no transmit.
+bool run_deauth_ids(const std::string& ifname, std::atomic<bool>& cancel,
+                    const std::function<void(const std::string&)>& on_line, std::string& error);
 
 } // namespace platform

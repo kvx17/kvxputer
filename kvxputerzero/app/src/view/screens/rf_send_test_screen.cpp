@@ -25,7 +25,7 @@ RfSendTestScreen::~RfSendTestScreen() {
 void RfSendTestScreen::build() {
     auto* root = content();
     const auto tok = tokens();
-    make_header(root, "RF Send Test");
+    make_header(root, "Carrier Test");
 
     label_ = lv_label_create(root);
     lv_obj_set_pos(label_, 6, 24);
@@ -35,7 +35,7 @@ void RfSendTestScreen::build() {
     lv_obj_set_style_text_color(label_, tok.ink, 0);
 
     status_lbl_ = lv_label_create(root);
-    lv_obj_set_pos(status_lbl_, 6, 90);
+    lv_obj_set_pos(status_lbl_, 6, 100);
     lv_obj_set_width(status_lbl_, 308);
     lv_obj_set_style_text_font(status_lbl_, font ? font : &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(status_lbl_, tok.accent, 0);
@@ -54,9 +54,10 @@ void RfSendTestScreen::refresh() {
     if (!label_) return;
     char buf[256];
     std::snprintf(buf, sizeof(buf),
-                  "Freq %s MHz\nPA %d  Dur %d ms  Region %s\nZ/C freq  F/X dur  P pa  Enter TX\nAny key stops TX",
+                  "Bench / antenna test only\nFreq %s MHz  PA %d  ≤%d ms  %s\nZ/C freq  F/X dur  P pa\nEnter TX  any key stops",
                   platform::rf_format_mhz(settings_.freq_hz).c_str(), static_cast<int>(settings_.pa),
-                  settings_.tx_duration_ms, settings_.region == platform::RfRegion::Us ? "US" : "EU");
+                  std::min(2000, settings_.tx_duration_ms),
+                  settings_.region == platform::RfRegion::Us ? "US" : "EU");
     lv_label_set_text(label_, buf);
     if (status_lbl_) {
         if (!block_reason_.empty() && !tx_active_) lv_label_set_text(status_lbl_, block_reason_.c_str());
@@ -68,6 +69,13 @@ void RfSendTestScreen::start_tx() {
     stop_tx();
     if (!platform::rf_tx_allowed(settings_.region, settings_.freq_hz, block_reason_)) {
         status_ = "TX blocked";
+        refresh();
+        return;
+    }
+    const int dur = std::min(2000, settings_.tx_duration_ms);
+    std::string duty_reason;
+    if (!platform::rf_duty_reserve(settings_.freq_hz, dur, duty_reason)) {
+        status_ = duty_reason;
         refresh();
         return;
     }
@@ -83,7 +91,6 @@ void RfSendTestScreen::start_tx() {
     refresh();
     const uint32_t hz = settings_.freq_hz;
     const auto pa = platform::rf_clamp_pa(settings_.region, settings_.pa);
-    const int dur = std::min(2000, settings_.tx_duration_ms);
     worker_ = std::thread([this, hz, pa, dur]() {
         platform::Cc1101Session radio;
         std::string err;

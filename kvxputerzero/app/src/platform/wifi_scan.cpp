@@ -174,4 +174,45 @@ bool wifi_radio_off(std::string& error) {
     return nmcli_ok("nmcli radio wifi off 2>&1", error);
 }
 
+bool wifi_start_hotspot(const std::string& ssid, const std::string& psk, std::string& error) {
+    error.clear();
+    if (ssid.empty()) {
+        error = "empty SSID";
+        return false;
+    }
+    if (psk.size() < 8) {
+        error = "password min 8 chars";
+        return false;
+    }
+    // Creates/activates a connection named "Hotspot" by default.
+    const std::string cmd = "nmcli device wifi hotspot ssid " + shell_quote(ssid) + " password " +
+                            shell_quote(psk) + " 2>&1";
+    return nmcli_ok(cmd, error);
+}
+
+bool wifi_stop_hotspot(std::string& error) {
+    error.clear();
+    // Prefer the connection nmcli names "Hotspot"; fall back to any wifi AP mode connection.
+    if (nmcli_ok("nmcli -w 8 connection down Hotspot 2>&1", error)) return true;
+    const std::string text =
+        run_capture("nmcli -t -f NAME,TYPE,DEVICE connection show --active 2>/dev/null");
+    std::istringstream iss(text);
+    std::string line;
+    while (std::getline(iss, line)) {
+        // NAME:TYPE:DEVICE — TYPE may be 802-11-wireless
+        const auto c1 = line.find(':');
+        if (c1 == std::string::npos) continue;
+        const auto c2 = line.find(':', c1 + 1);
+        if (c2 == std::string::npos) continue;
+        const std::string name = line.substr(0, c1);
+        const std::string type = line.substr(c1 + 1, c2 - c1 - 1);
+        if (type.find("wireless") == std::string::npos && type.find("wifi") == std::string::npos) continue;
+        if (name.empty()) continue;
+        error.clear();
+        if (nmcli_ok("nmcli -w 8 connection down " + shell_quote(name) + " 2>&1", error)) return true;
+    }
+    if (error.empty()) error = "no hotspot connection";
+    return false;
+}
+
 } // namespace platform

@@ -1,11 +1,13 @@
 #include "rf_settings.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 
 namespace platform {
@@ -41,6 +43,16 @@ void parse_hz_list(const std::string& v, std::vector<uint32_t>& out) {
     }
 }
 
+void parse_path_list(const std::string& v, std::vector<std::string>& out) {
+    out.clear();
+    std::istringstream iss(v);
+    std::string tok;
+    while (std::getline(iss, tok, ',')) {
+        tok = trim(tok);
+        if (!tok.empty()) out.push_back(tok);
+    }
+}
+
 std::string join_hz_list(const std::vector<uint32_t>& v) {
     std::ostringstream oss;
     for (size_t i = 0; i < v.size(); ++i) {
@@ -48,6 +60,40 @@ std::string join_hz_list(const std::vector<uint32_t>& v) {
         oss << v[i];
     }
     return oss.str();
+}
+
+std::string join_path_list(const std::vector<std::string>& v) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i) oss << ',';
+        oss << v[i];
+    }
+    return oss.str();
+}
+
+bool is_eu_868(uint32_t hz) {
+    return hz >= 868000000u && hz <= 868600000u;
+}
+
+struct DutyWindow {
+    std::mutex mu;
+    std::vector<std::pair<std::chrono::steady_clock::time_point, int>> bursts; // start, ms
+};
+
+DutyWindow& duty() {
+    static DutyWindow d;
+    return d;
+}
+
+int duty_used_locked(DutyWindow& d) {
+    const auto now = std::chrono::steady_clock::now();
+    const auto cut = now - std::chrono::seconds(60);
+    d.bursts.erase(std::remove_if(d.bursts.begin(), d.bursts.end(),
+                                  [&](const auto& b) { return b.first < cut; }),
+                   d.bursts.end());
+    int sum = 0;
+    for (const auto& b : d.bursts) sum += b.second;
+    return sum;
 }
 
 } // namespace
@@ -79,9 +125,29 @@ std::string rf_auto_name(uint32_t hz, const char* mod_tag) {
     return buf;
 }
 
+const char* rf_flipper_preset_name(Cc1101Preset preset) {
+    switch (preset) {
+        case Cc1101Preset::SpectrumWide:
+            return "FuriHalSubGhzPresetOok650Async";
+        case Cc1101Preset::OokAsync:
+            return "FuriHalSubGhzPresetOok270Async";
+        case Cc1101Preset::Fsk2:
+            return "FuriHalSubGhzPreset2FSKDev238Async";
+    }
+    return "FuriHalSubGhzPresetOok650Async";
+}
+
+Cc1101Preset rf_preset_from_name(const std::string& name) {
+    if (name.find("Ook270") != std::string::npos || name.find("270") != std::string::npos)
+        return Cc1101Preset::OokAsync;
+    if (name.find("2FSK") != std::string::npos || name.find("FSK") != std::string::npos)
+        return Cc1101Preset::Fsk2;
+    if (name.find("650") != std::string::npos) return Cc1101Preset::SpectrumWide;
+    return Cc1101Preset::OokAsync;
+}
+
 RfSettings load_rf_settings() {
     RfSettings s;
-    // Legacy single-line freq
     {
         std::ifstream in(config_dir() + "/rf_freq_hz.txt");
         std::string v;
@@ -108,13 +174,22 @@ RfSettings load_rf_settings() {
         else if (key == "threshold_dbm") s.threshold_dbm = std::atoi(val.c_str());
         else if (key == "region") s.region = (val == "US" || val == "us") ? RfRegion::Us : RfRegion::Eu;
         else if (key == "modulation") s.modulation = (val == "FSK" || val == "fsk") ? RfModHint::Fsk : RfModHint::Ook;
-        else if (key == "pa") {
+        else if (key == "preset") {
+            if (val == "OOK650" || val == "SpectrumWide") s.preset = Cc1101Preset::SpectrumWide;
+            else if (val == "FSK" || val == "2FSK" || val == "Fsk2") s.preset = Cc1101Preset::Fsk2;
+            else s.preset = Cc1101Preset::OokAsync;
+            s.modulation = (s.preset == Cc1101Preset::Fsk2) ? RfModHint::Fsk : RfModHint::Ook;
+        } else if (key == "pa") {
             const int p = std::atoi(val.c_str());
             s.pa = static_cast<Cc1101PaLevel>(std::clamp(p, 0, 3));
         } else if (key == "tx_ms") s.tx_duration_ms = std::clamp(std::atoi(val.c_str()), 1, 2000);
         else if (key == "record_max_ms") s.record_max_ms = std::clamp(std::atoi(val.c_str()), 500, 30000);
+        else if (key == "rx_bw_khz") s.rx_bw_khz = std::strtof(val.c_str(), nullptr);
+        else if (key == "rssi_cal_db") s.rssi_cal_db = std::clamp(std::atoi(val.c_str()), -30, 30);
+        else if (key == "allow_sub_http") s.allow_sub_http_import = (val == "1" || val == "true");
         else if (key == "recents") parse_hz_list(val, s.recents);
         else if (key == "favourites") parse_hz_list(val, s.favourites);
+        else if (key == "favourite_paths") parse_path_list(val, s.favourite_paths);
     }
     return s;
 }
@@ -135,11 +210,19 @@ void save_rf_settings(const RfSettings& s) {
     out << "threshold_dbm=" << s.threshold_dbm << "\n";
     out << "region=" << (s.region == RfRegion::Us ? "US" : "EU") << "\n";
     out << "modulation=" << (s.modulation == RfModHint::Fsk ? "FSK" : "OOK") << "\n";
+    const char* preset = "OOK270";
+    if (s.preset == Cc1101Preset::SpectrumWide) preset = "OOK650";
+    else if (s.preset == Cc1101Preset::Fsk2) preset = "2FSK";
+    out << "preset=" << preset << "\n";
     out << "pa=" << static_cast<int>(s.pa) << "\n";
     out << "tx_ms=" << s.tx_duration_ms << "\n";
     out << "record_max_ms=" << s.record_max_ms << "\n";
+    out << "rx_bw_khz=" << s.rx_bw_khz << "\n";
+    out << "rssi_cal_db=" << s.rssi_cal_db << "\n";
+    out << "allow_sub_http=" << (s.allow_sub_http_import ? "1" : "0") << "\n";
     out << "recents=" << join_hz_list(s.recents) << "\n";
     out << "favourites=" << join_hz_list(s.favourites) << "\n";
+    out << "favourite_paths=" << join_path_list(s.favourite_paths) << "\n";
 }
 
 void rf_push_recent(RfSettings& s, uint32_t hz) {
@@ -155,7 +238,6 @@ bool rf_tx_allowed(RfRegion region, uint32_t hz, std::string& reason) {
         reason = "EU TX: 433.05–434.79 or 868.0–868.6 MHz only";
         return false;
     }
-    // US
     if (hz >= 902000000u && hz <= 928000000u) return true;
     reason = "US TX: 902–928 MHz only";
     return false;
@@ -163,9 +245,29 @@ bool rf_tx_allowed(RfRegion region, uint32_t hz, std::string& reason) {
 
 Cc1101PaLevel rf_clamp_pa(RfRegion region, Cc1101PaLevel want) {
     (void)region;
-    // Keep TX power modest regardless of region.
     if (want == Cc1101PaLevel::Max) return Cc1101PaLevel::Mid;
     return want;
+}
+
+bool rf_duty_reserve(uint32_t hz, int on_air_ms, std::string& reason) {
+    reason.clear();
+    if (!is_eu_868(hz) || on_air_ms <= 0) return true;
+    auto& d = duty();
+    std::lock_guard<std::mutex> lock(d.mu);
+    const int used = duty_used_locked(d);
+    if (used + on_air_ms > 600) {
+        reason = "EU 868 duty 1% exhausted (" + std::to_string(600 - used) + " ms left)";
+        return false;
+    }
+    d.bursts.emplace_back(std::chrono::steady_clock::now(), on_air_ms);
+    return true;
+}
+
+int rf_duty_remaining_ms(uint32_t hz) {
+    if (!is_eu_868(hz)) return 600;
+    auto& d = duty();
+    std::lock_guard<std::mutex> lock(d.mu);
+    return std::max(0, 600 - duty_used_locked(d));
 }
 
 } // namespace platform

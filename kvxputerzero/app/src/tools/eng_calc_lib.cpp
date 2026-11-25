@@ -1,5 +1,6 @@
 #include "eng_calc_lib.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cerrno>
 #include <cmath>
@@ -2746,6 +2747,817 @@ std::string run_distance(Tokens in, bool& ok) {
     return o.str();
 }
 
+// ---------------------------------------------------------------------------
+// Reactance, 555, entropy, hashes, JWT, XOR, CIDR, OUI, radio, transfer, kWh, coords, hex
+// ---------------------------------------------------------------------------
+
+bool parse_henries(const std::string& in, double& out) {
+    std::string t = trim(in);
+    if (t.empty()) return false;
+    if (t.back() == 'h' || t.back() == 'H') t.pop_back();
+    for (size_t i = 1; i < t.size(); ++i) {
+        const char c = t[i];
+        double mult = 0;
+        if (c == 'u' || c == 'U') mult = 1e-6;
+        else if (c == 'n' || c == 'N') mult = 1e-9;
+        else if (c == 'm') mult = 1e-3;
+        else if (c == 'H' || c == 'h') mult = 1.0;
+        else continue;
+        double whole = 0;
+        if (!parse_double(t.substr(0, i), whole)) continue;
+        const std::string right = t.substr(i + 1);
+        double frac = 0;
+        if (!right.empty()) {
+            for (char d : right) {
+                if (!std::isdigit(static_cast<unsigned char>(d))) {
+                    whole = -1;
+                    break;
+                }
+            }
+            if (whole < 0) continue;
+            frac = std::strtod(right.c_str(), nullptr) / std::pow(10.0, static_cast<double>(right.size()));
+        }
+        out = (whole + frac) * mult;
+        return std::isfinite(out);
+    }
+    return parse_double(t, out);
+}
+
+bool parse_radio_hz(const std::string& in, double& hz) {
+    if (parse_hertz(in, hz) && hz > 0) {
+        std::string u;
+        double v = 0;
+        if (split_suffix(in, v, u) && u.empty() && hz < 1e6) hz *= 1e6;
+        return hz > 0;
+    }
+    return false;
+}
+
+std::string run_reactance(Tokens t, bool& ok) {
+    enum { Cap, Ind, Rc, Rl, Lc };
+    int mode = pick_mode(t, {{"c", Cap}, {"xc", Cap}, {"cap", Cap},
+                             {"l", Ind}, {"xl", Ind}, {"ind", Ind},
+                             {"rc", Rc}, {"rl", Rl}, {"lc", Lc}, {"res", Lc}});
+    if (mode < 0) return fail(ok, "need: c F C | l F L | rc F R C | lc L C");
+    if (mode == Lc) {
+        if (t.size() != 2) return fail(ok, "need: lc L C   e.g. 10u 100n");
+        double l = 0, c = 0;
+        if (!parse_henries(t[0], l) || !(l > 0)) return fail(ok, "L must be > 0 (e.g. 10u)");
+        if (!parse_farads(t[1], c) || !(c > 0)) return fail(ok, "C must be > 0 (e.g. 100n)");
+        const double f = 1.0 / (2.0 * kPi * std::sqrt(l * c));
+        Out o;
+        o.add("f0", eng(f) + "Hz");
+        o.add("period", fmt_span(1.0 / f));
+        o.add("Xl=Xc", fmt_ohms(2.0 * kPi * f * l) + " ohm");
+        return o.str();
+    }
+    if (t.size() < 2) return fail(ok, "need frequency and a part value");
+    double f = 0;
+    if (!parse_hertz(t[0], f) || !(f > 0)) return fail(ok, "bad frequency (e.g. 1k, 10M)");
+    Out o;
+    o.add("f", eng(f) + "Hz");
+    if (mode == Cap) {
+        double c = 0;
+        if (!parse_farads(t[1], c) || !(c > 0)) return fail(ok, "C must be > 0");
+        const double xc = 1.0 / (2.0 * kPi * f * c);
+        o.add("Xc", fmt_ohms(xc) + " ohm");
+        o.add("phase", "-90 deg");
+    } else if (mode == Ind) {
+        double l = 0;
+        if (!parse_henries(t[1], l) || !(l > 0)) return fail(ok, "L must be > 0");
+        const double xl = 2.0 * kPi * f * l;
+        o.add("Xl", fmt_ohms(xl) + " ohm");
+        o.add("phase", "+90 deg");
+    } else if (mode == Rc) {
+        if (t.size() < 3) return fail(ok, "need: rc F R C");
+        double r = 0, c = 0;
+        if (!parse_ohms(t[1], r) || !(r > 0)) return fail(ok, "R must be > 0");
+        if (!parse_farads(t[2], c) || !(c > 0)) return fail(ok, "C must be > 0");
+        const double xc = 1.0 / (2.0 * kPi * f * c);
+        const double z = std::sqrt(r * r + xc * xc);
+        o.add("Z", fmt_ohms(z) + " ohm");
+        o.add("Xc", fmt_ohms(xc) + " ohm");
+        o.add("phase", sig(-std::atan2(xc, r) * 180.0 / kPi) + " deg");
+    } else {
+        if (t.size() < 3) return fail(ok, "need: rl F R L");
+        double r = 0, l = 0;
+        if (!parse_ohms(t[1], r) || !(r > 0)) return fail(ok, "R must be > 0");
+        if (!parse_henries(t[2], l) || !(l > 0)) return fail(ok, "L must be > 0");
+        const double xl = 2.0 * kPi * f * l;
+        const double z = std::sqrt(r * r + xl * xl);
+        o.add("Z", fmt_ohms(z) + " ohm");
+        o.add("Xl", fmt_ohms(xl) + " ohm");
+        o.add("phase", sig(std::atan2(xl, r) * 180.0 / kPi) + " deg");
+    }
+    return o.str();
+}
+
+std::string run_555(Tokens t, bool& ok) {
+    enum { Astable, Mono };
+    int mode = pick_mode(t, {{"astable", Astable}, {"a", Astable}, {"mono", Mono}, {"m", Mono}, {"one", Mono}});
+    if (mode < 0) mode = t.size() >= 3 ? Astable : Mono;
+    constexpr double kLn2 = 0.693147;
+    if (mode == Mono) {
+        if (t.size() < 2) return fail(ok, "need: mono R C   e.g. 10k 100n");
+        double r = 0, c = 0;
+        if (!parse_ohms(t[0], r) || !(r > 0)) return fail(ok, "R must be > 0");
+        if (!parse_farads(t[1], c) || !(c > 0)) return fail(ok, "C must be > 0");
+        const double pulse = 1.098612 * r * c;
+        Out o;
+        o.add("pulse", fmt_span(pulse));
+        o.add("R", fmt_ohms(r) + " ohm");
+        o.add("C", eng(c) + "F");
+        return o.str();
+    }
+    if (t.size() < 3) return fail(ok, "need: astable Ra Rb C   e.g. 10k 10k 100n");
+    double ra = 0, rb = 0, c = 0;
+    if (!parse_ohms(t[0], ra) || !(ra > 0) || !parse_ohms(t[1], rb) || !(rb > 0))
+        return fail(ok, "Ra and Rb must be > 0");
+    if (!parse_farads(t[2], c) || !(c > 0)) return fail(ok, "C must be > 0");
+    const double high = kLn2 * (ra + rb) * c;
+    const double low = kLn2 * rb * c;
+    const double freq = 1.0 / (high + low);
+    Out o;
+    o.add("freq", eng(freq) + "Hz");
+    o.add("high", fmt_span(high));
+    o.add("low", fmt_span(low));
+    o.add("duty", sig(high / (high + low) * 100.0) + "%");
+    return o.str();
+}
+
+std::string fmt_crack(double seconds) {
+    if (!std::isfinite(seconds) || seconds > 1e30) return "impractical";
+    if (seconds < 0.001) return "< 1 ms";
+    if (seconds < 1) return sig(seconds * 1000.0) + " ms";
+    if (seconds < 60) return sig(seconds) + " s";
+    if (seconds < 3600) return sig(seconds / 60.0) + " min";
+    if (seconds < 86400) return sig(seconds / 3600.0) + " h";
+    if (seconds < 86400.0 * 365.25) return sig(seconds / 86400.0) + " d";
+    const double years = seconds / (86400.0 * 365.25);
+    if (years < 1e6) return sig(years) + " y";
+    if (years < 1e9) return sig(years / 1e6) + " My";
+    return sig(years / 1e9) + " By";
+}
+
+std::string crack_at(double bits, double rate) {
+    if (!(rate > 0)) return "bad rate";
+    if (bits >= 1020) return "impractical";
+    const double seconds = std::pow(2.0, bits - 1.0) / rate;
+    return fmt_crack(seconds);
+}
+
+std::string run_entropy(const std::string& in, bool& ok) {
+    std::string s = trim(in);
+    Tokens t = split_ws(s);
+    double rate = 1e10;
+    if (!t.empty() && lower(t[0]) == "rate" && t.size() >= 3) {
+        if (!parse_double(t[1], rate) || !(rate > 0)) return fail(ok, "rate must be guesses/s > 0");
+        s = trim(s.substr(s.find(t[1]) + t[1].size()));
+        t = split_ws(s);
+    }
+    if (!t.empty() && (lower(t[0]) == "len" || lower(t[0]) == "length") && t.size() >= 3) {
+        double len = 0, pool = 0;
+        if (!parse_double(t[1], len) || !(len > 0) || !parse_double(t[2], pool) || !(pool > 1))
+            return fail(ok, "need: len length charset   e.g. len 12 95");
+        const double bits = len * std::log2(pool);
+        Out o;
+        o.add("bits", sig(bits));
+        o.add("charset", sig(pool));
+        o.add("crack", crack_at(bits, rate) + " @ " + eng(rate) + "/s");
+        return o.str();
+    }
+    if (!t.empty() && lower(t[0]) == "words" && t.size() >= 2) {
+        double n = 0;
+        if (!parse_double(t[1], n) || !(n > 0)) return fail(ok, "need: words N");
+        const double bits = n * 12.925;
+        Out o;
+        o.add("bits", sig(bits));
+        o.add("words", sig(n) + " x 12.9");
+        o.add("crack", crack_at(bits, rate) + " @ " + eng(rate) + "/s");
+        return o.str();
+    }
+    if (s.empty()) return fail(ok, "type a password, or len 12 95, or words 6");
+    bool lo = false, up = false, di = false, sp = false, sy = false;
+    for (unsigned char uc : s) {
+        if (std::islower(uc)) lo = true;
+        else if (std::isupper(uc)) up = true;
+        else if (std::isdigit(uc)) di = true;
+        else if (uc == ' ') sp = true;
+        else sy = true;
+    }
+    int pool = 0;
+    std::string kind;
+    auto add = [&](const char* name, int n) {
+        pool += n;
+        if (!kind.empty()) kind += "+";
+        kind += name;
+    };
+    if (lo) add("lower", 26);
+    if (up) add("upper", 26);
+    if (di) add("digit", 10);
+    if (sy) add("symbol", 33);
+    else if (sp) add("space", 1);
+    if (pool < 2) return fail(ok, "charset too small");
+    const double bits = static_cast<double>(s.size()) * std::log2(static_cast<double>(pool));
+    Out o;
+    o.add("bits", sig(bits));
+    o.add("charset", kind + " " + std::to_string(pool));
+    o.add("crack", crack_at(bits, rate) + " @ " + eng(rate) + "/s");
+    return o.str();
+}
+
+bool is_hex_string(const std::string& s) {
+    if (s.empty() || (s.size() % 2) != 0) return false;
+    for (unsigned char c : s) {
+        if (!std::isxdigit(c)) return false;
+    }
+    return true;
+}
+
+std::string run_hash_id(const std::string& in, bool& ok) {
+    const std::string s = trim(in);
+    if (s.empty()) return fail(ok, "paste a hash");
+    const std::string low = lower(s);
+    auto named = [&](const char* what, const char* mode) {
+        Out o;
+        o.add("hash", what);
+        o.add("hashcat", mode);
+        return o.str();
+    };
+    if (low.rfind("$2a$", 0) == 0 || low.rfind("$2b$", 0) == 0 || low.rfind("$2y$", 0) == 0 ||
+        low.rfind("$2x$", 0) == 0)
+        return named("bcrypt", "-m 3200");
+    if (low.rfind("$argon2id$", 0) == 0) return named("Argon2id", "-m 34000");
+    if (low.rfind("$argon2i$", 0) == 0) return named("Argon2i", "-m 34000");
+    if (low.rfind("$argon2d$", 0) == 0) return named("Argon2d", "-m 34000");
+    if (low.rfind("$apr1$", 0) == 0) return named("Apache MD5", "-m 1600");
+    if (low.rfind("$1$", 0) == 0) return named("md5crypt", "-m 500");
+    if (low.rfind("$5$", 0) == 0) return named("sha256crypt", "-m 7400");
+    if (low.rfind("$6$", 0) == 0) return named("sha512crypt", "-m 1800");
+    if (low.rfind("$p$", 0) == 0 || low.rfind("$h$", 0) == 0) return named("phpass", "-m 400");
+    if (low.rfind("$8$", 0) == 0) return named("Cisco type 8", "-m 9200");
+    if (low.rfind("$9$", 0) == 0) return named("Cisco type 9", "-m 9300");
+    if (low.rfind("$dcc2$", 0) == 0) return named("Domain Cached Credentials 2", "-m 2100");
+    if (low.rfind("$krb5tgs$", 0) == 0) return named("Kerberos TGS-REP", "-m 13100");
+    if (low.rfind("$krb5asrep$", 0) == 0) return named("Kerberos AS-REP", "-m 18200");
+    if (low.rfind("$krb5pa$", 0) == 0) return named("Kerberos AS-REQ", "-m 7500");
+    if (low.rfind("wpa*", 0) == 0) return named("WPA-PBKDF2 PMKID/EAPOL", "-m 22000");
+    if (low.rfind("{sha}", 0) == 0) return named("LDAP {SHA}", "-m 101");
+    if (low.rfind("{ssha}", 0) == 0) return named("LDAP {SSHA}", "-m 111");
+    if (!s.empty() && s[0] == '*' && is_hex_string(s.substr(1)) && s.size() == 41)
+        return named("MySQL 4/5", "-m 300");
+    const int colons = static_cast<int>(std::count(s.begin(), s.end(), ':'));
+    if (colons >= 4 && s.find("::") != std::string::npos) return named("NetNTLMv2", "-m 5600");
+    std::string hex = low;
+    if (hex.rfind("0x", 0) == 0) hex = hex.substr(2);
+    if (is_hex_string(hex)) {
+        Out o;
+        const auto n = hex.size();
+        if (n == 16) {
+            o.add("hash", "MySQL323");
+            o.add("hashcat", "-m 200");
+        } else if (n == 32) {
+            o.add("hash", "MD5 or NTLM");
+            o.add("hashcat", "-m 0  or  -m 1000");
+            o.add("note", "32 hex is ambiguous");
+        } else if (n == 40) {
+            o.add("hash", "SHA1");
+            o.add("hashcat", "-m 100");
+        } else if (n == 56) {
+            o.add("hash", "SHA224");
+            o.add("hashcat", "-m 1300");
+        } else if (n == 64) {
+            o.add("hash", "SHA256");
+            o.add("hashcat", "-m 1400");
+        } else if (n == 96) {
+            o.add("hash", "SHA384");
+            o.add("hashcat", "-m 10800");
+        } else if (n == 128) {
+            o.add("hash", "SHA512");
+            o.add("hashcat", "-m 1700");
+        } else {
+            return fail(ok, "hex length is not a known hash");
+        }
+        return o.str();
+    }
+    if (std::count(s.begin(), s.end(), '.') == 2) return fail(ok, "looks like a JWT - use JWT decode");
+    return fail(ok, "unrecognized hash");
+}
+
+int b64_val(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+' || c == '-') return 62;
+    if (c == '/' || c == '_') return 63;
+    return -1;
+}
+
+bool b64_decode(std::string in, std::string& out) {
+    std::string s;
+    for (char c : in) {
+        if (c == '=' || c == '\n' || c == '\r' || c == ' ') continue;
+        s.push_back(c);
+    }
+    if (s.empty()) return false;
+    while (s.size() % 4) s.push_back('=');
+    out.clear();
+    for (size_t i = 0; i < s.size(); i += 4) {
+        int v[4];
+        int pad = 0;
+        for (int k = 0; k < 4; ++k) {
+            if (s[i + static_cast<size_t>(k)] == '=') {
+                v[k] = 0;
+                ++pad;
+            } else {
+                v[k] = b64_val(s[i + static_cast<size_t>(k)]);
+                if (v[k] < 0) return false;
+            }
+        }
+        if (pad > 2) return false;
+        out.push_back(static_cast<char>((v[0] << 2) | (v[1] >> 4)));
+        if (pad < 2) out.push_back(static_cast<char>(((v[1] & 15) << 4) | (v[2] >> 2)));
+        if (pad < 1) out.push_back(static_cast<char>(((v[2] & 3) << 6) | v[3]));
+    }
+    return true;
+}
+
+std::string json_field(const std::string& json, const char* key) {
+    const std::string pat = std::string("\"") + key + "\"";
+    const auto at = json.find(pat);
+    if (at == std::string::npos) return "";
+    auto colon = json.find(':', at + pat.size());
+    if (colon == std::string::npos) return "";
+    auto q1 = json.find('"', colon + 1);
+    if (q1 == std::string::npos) return "";
+    auto q2 = json.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    return json.substr(q1 + 1, q2 - q1 - 1);
+}
+
+std::string run_jwt(const std::string& in, bool& ok) {
+    std::string s = trim(in);
+    if (!s.empty() && lower(s).rfind("bearer ", 0) == 0) s = trim(s.substr(7));
+    const auto d1 = s.find('.');
+    const auto d2 = d1 == std::string::npos ? std::string::npos : s.find('.', d1 + 1);
+    if (d1 == std::string::npos || d2 == std::string::npos) return fail(ok, "need header.payload.signature");
+    std::string header, payload;
+    if (!b64_decode(s.substr(0, d1), header)) return fail(ok, "bad header encoding");
+    if (!b64_decode(s.substr(d1 + 1, d2 - d1 - 1), payload)) return fail(ok, "bad payload encoding");
+    const std::string sig = s.substr(d2 + 1);
+    const std::string alg = json_field(header, "alg");
+    Out o;
+    o.add("alg", alg.empty() ? "?" : alg);
+    if (lower(alg) == "none" || sig.empty()) o.add("warn", "signature not checked");
+    else o.add("sig", "present, not verified");
+    o.add("header", header);
+    o.add("payload", payload);
+    return o.str();
+}
+
+bool parse_hex_bytes(const std::string& in, std::string& out) {
+    std::string hex;
+    for (unsigned char c : in) {
+        if (std::isxdigit(c)) hex.push_back(static_cast<char>(c));
+        else if (c != ' ' && c != ':' && c != '-') return false;
+    }
+    if (hex.empty() || (hex.size() % 2) != 0) return false;
+    out.clear();
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        unsigned int v = 0;
+        if (std::sscanf(hex.c_str() + i, "%2x", &v) != 1) return false;
+        out.push_back(static_cast<char>(v));
+    }
+    return true;
+}
+
+std::string hex_preview(const std::string& bytes) {
+    std::string hex, ascii;
+    const size_t n = bytes.size() > 48 ? 48 : bytes.size();
+    for (size_t i = 0; i < n; ++i) {
+        const auto c = static_cast<unsigned char>(bytes[i]);
+        if (!hex.empty()) hex += ' ';
+        hex += fmt("%02X", c);
+        ascii.push_back(c >= 32 && c < 127 ? static_cast<char>(c) : '.');
+    }
+    if (bytes.size() > n) hex += " ...";
+    return hex + "  " + ascii;
+}
+
+std::string run_xor(const std::string& in, bool& ok) {
+    const std::string s = trim(in);
+    const auto sp = s.find(' ');
+    if (sp == std::string::npos) return fail(ok, "need: key text   or   hex:0d text");
+    std::string key = s.substr(0, sp);
+    const std::string msg = s.substr(sp + 1);
+    if (msg.empty()) return fail(ok, "need text after the key");
+    std::string key_bytes;
+    if (lower(key).rfind("hex:", 0) == 0) {
+        if (!parse_hex_bytes(key.substr(4), key_bytes) || key_bytes.empty()) return fail(ok, "bad hex key");
+    } else {
+        key_bytes = key;
+    }
+    std::string out;
+    out.resize(msg.size());
+    for (size_t i = 0; i < msg.size(); ++i) {
+        out[i] = static_cast<char>(static_cast<unsigned char>(msg[i]) ^
+                                   static_cast<unsigned char>(key_bytes[i % key_bytes.size()]));
+    }
+    Out o;
+    o.add("len", std::to_string(out.size()));
+    o.add("hex", hex_preview(out));
+    return o.str();
+}
+
+struct CidrRange {
+    uint32_t start;
+    uint32_t end;
+};
+
+bool parse_cidr_token(const std::string& tok, CidrRange& range) {
+    const auto slash = tok.find('/');
+    if (slash == std::string::npos) return false;
+    uint32_t ip = 0;
+    if (!parse_ipv4(tok.substr(0, slash), ip)) return false;
+    long long pfx = 0;
+    if (!parse_int_range(tok.substr(slash + 1), pfx, 0, 32)) return false;
+    const uint32_t mask = prefix_to_mask(static_cast<int>(pfx));
+    range.start = ip & mask;
+    range.end = range.start | ~mask;
+    return true;
+}
+
+std::vector<std::string> cover_cidr(uint32_t start, uint32_t end) {
+    std::vector<std::string> lines;
+    while (true) {
+        uint32_t max_host = 0;
+        if (start == 0) max_host = 32;
+        else {
+            uint32_t x = start;
+            while ((x & 1u) == 0u && max_host < 32) {
+                x >>= 1;
+                ++max_host;
+            }
+        }
+        const uint64_t remain = static_cast<uint64_t>(end) - start + 1;
+        uint32_t host = 0;
+        while (host < max_host && (1ull << (host + 1)) <= remain) ++host;
+        lines.push_back(fmt_ipv4(start) + "/" + std::to_string(32 - static_cast<int>(host)));
+        const uint64_t next = static_cast<uint64_t>(start) + (1ull << host);
+        if (next > static_cast<uint64_t>(end)) break;
+        start = static_cast<uint32_t>(next);
+    }
+    return lines;
+}
+
+std::string run_cidr_agg(Tokens t, bool& ok) {
+    skip_mode(t, {"agg", "supernet", "sum"});
+    if (t.size() < 2 || t.size() > 16) return fail(ok, "need 2 to 16 networks, e.g. 10.0.0.0/24 10.0.1.0/24");
+    std::vector<CidrRange> ranges;
+    for (const auto& tok : t) {
+        CidrRange r;
+        if (!parse_cidr_token(tok, r)) return fail(ok, "bad CIDR " + tok);
+        ranges.push_back(r);
+    }
+    for (size_t i = 0; i < ranges.size(); ++i) {
+        for (size_t j = i + 1; j < ranges.size(); ++j) {
+            if (ranges[j].start < ranges[i].start) std::swap(ranges[i], ranges[j]);
+        }
+    }
+    std::vector<CidrRange> merged;
+    for (const auto& r : ranges) {
+        if (!merged.empty()) {
+            const uint64_t lim = static_cast<uint64_t>(merged.back().end) + 1;
+            if (r.start <= lim) {
+                if (r.end > merged.back().end) merged.back().end = r.end;
+                continue;
+            }
+        }
+        merged.push_back(r);
+    }
+    Out o;
+    std::vector<std::string> lines;
+    for (const auto& r : merged) {
+        auto part = cover_cidr(r.start, r.end);
+        lines.insert(lines.end(), part.begin(), part.end());
+    }
+    o.add("blocks", std::to_string(lines.size()));
+    for (const auto& line : lines) o.line(line);
+    return o.str();
+}
+
+const char* lookup_oui(uint32_t oui) {
+    static const char* table[] = {
+        "00000C Cisco",        "000393 Apple",        "000569 VMware",       "00090F Fortinet",
+        "000A95 Apple",        "000B86 Aruba",        "000C29 VMware",       "000C42 MikroTik",
+        "000D88 D-Link",       "000D93 Apple",        "000E0C Intel",        "000F20 HP",
+        "000FB5 Netgear",      "001018 Broadcom",     "001083 HP",           "001143 Dell",
+        "001185 HP",           "00124B Texas Instruments", "00037F Atheros", "001451 Apple",
+        "00155D Microsoft",    "00156D Ubiquiti",     "00166F Intel",        "001676 Intel",
+        "0016CB Apple",        "0016EA Intel",        "0016EB Intel",        "0017A4 HP",
+        "0017AB Nintendo",     "0017F2 Apple",        "001882 Huawei",       "00195B D-Link",
+        "0019E3 Apple",        "001A11 Google",       "001A1E Aruba",        "001A80 Sony",
+        "001A8A Samsung",      "001B11 D-Link",       "001B17 Palo Alto",    "001B21 Intel",
+        "001B2F Netgear",      "001B63 Apple",        "001B77 Intel",        "001B78 HP",
+        "001BEA Nintendo",     "001C23 Dell",         "001CB3 Apple",        "001CF0 D-Link",
+        "001D25 Samsung",      "001D4F Apple",        "001DBA Sony",         "001E0B HP",
+        "001E2A Netgear",      "001E35 Nintendo",     "001E52 Apple",        "001E58 D-Link",
+        "001E64 Intel",        "001E65 Intel",        "001E67 Intel",        "001EC2 Apple",
+        "001EC9 Dell",         "001EE1 Samsung",      "001F32 Nintendo",     "001F33 Netgear",
+        "001F3B Intel",        "001F5B Apple",        "001FF3 Apple",        "002119 Samsung",
+        "00215A HP",           "002170 Dell",         "002191 D-Link",       "0021E9 Apple",
+        "002241 Apple",        "0022AA Nintendo",     "002312 Apple",        "002332 Apple",
+        "002339 Samsung",      "0023DF Apple",        "002436 Apple",        "00246C Aruba",
+        "0024BE Sony",         "0024F3 Nintendo",     "002500 Apple",        "00254B Apple",
+        "00259E Huawei",       "0025B3 HP",           "0025BC Apple",        "002608 Apple",
+        "002637 Samsung",      "00264A Apple",        "0026B0 Apple",        "0026BB Apple",
+        "0026F2 Netgear",      "005056 VMware",       "00E04C Realtek",      "00E0FC Huawei",
+        "0418D6 Ubiquiti",     "045D4B Sony",         "049226 ASUS",         "04D4C4 ASUS",
+        "04F938 Huawei",       "080027 VirtualBox",   "0808C2 Samsung",      "08306B Palo Alto",
+        "0C1DAF Xiaomi",       "10521C Espressif",    "14CC20 TP-Link",      "18742E Amazon",
+        "18E829 Ubiquiti",     "2008ED Huawei",       "204C03 Aruba",        "20E52A Netgear",
+        "240AC4 Espressif",    "246F28 Espressif",    "24A43C Ubiquiti",     "24DEC6 Aruba",
+        "286C07 Xiaomi",       "28CFE9 Apple",        "2C4D54 ASUS",         "2CC81B MikroTik",
+        "2CF432 Espressif",    "30AEA4 Espressif",    "3480B3 Xiaomi",       "3C22FB Apple",
+        "3C5AB4 Google",       "3C6105 Espressif",    "3CFDFE Intel",        "40B4CD Amazon",
+        "40F520 Espressif",    "44D9E7 Ubiquiti",     "483FDA Espressif",    "488F5A MikroTik",
+        "50642B Xiaomi",       "50C7BF TP-Link",      "50DCE7 Amazon",       "525400 QEMU",
+        "546C0E Texas Instruments", "54EE75 Lenovo",  "5C0A5B Samsung",      "640980 Xiaomi",
+        "64B473 Xiaomi",       "6837E9 Amazon",       "6C3B6B MikroTik",     "6CF37F Aruba",
+        "70723C Huawei",       "742344 Xiaomi",       "744D28 MikroTik",     "7483C2 Ubiquiti",
+        "74C246 Amazon",       "74D02B ASUS",         "7811DC Xiaomi",       "788A20 Ubiquiti",
+        "7CBB8A Nintendo",     "7CDFA1 Espressif",    "802AA8 Ubiquiti",     "84CCA8 Espressif",
+        "84D6D0 Amazon",       "84F3EB Espressif",    "8C71F8 Samsung",      "8CAAB5 Espressif",
+        "94B40F Aruba",        "94B97E Espressif",    "98B6E9 Nintendo",     "98DAC4 TP-Link",
+        "98FA9B Lenovo",       "9C99A0 Xiaomi",       "A0F3C1 TP-Link",      "A4CF12 Espressif",
+        "AC67B2 Espressif",    "AC9E17 ASUS",         "ACE215 Huawei",       "B0A737 Roku",
+        "B0B448 Texas Instruments", "B4E62D Espressif", "B4FBE4 Ubiquiti",  "B827EB Raspberry Pi",
+        "B869F4 MikroTik",     "B8CA3A Dell",         "C006C3 TP-Link",      "C03F0E Netgear",
+        "C45BBE Espressif",    "C4AD34 MikroTik",     "C8C9A3 Espressif",    "CC50E3 Espressif",
+        "CC6DA0 Roku",         "D03972 Texas Instruments", "D4CA6D MikroTik", "D83134 Roku",
+        "D83ADD Raspberry Pi", "D8A01D Espressif",    "D8C7C8 Aruba",        "DCA632 Raspberry Pi",
+        "DC9FDB Ubiquiti",     "E00C7F Nintendo",     "E0247F Huawei",               "E063DA Ubiquiti",     "E45F01 Raspberry Pi", "E48D8C MikroTik",     "EC94CB Espressif",
+        "F09FC2 Ubiquiti",     "F4CFA2 Espressif",    "F47B5E Samsung",      "F4F5D8 Google",
+        "F8BC12 Dell",         "FCECDA Ubiquiti",
+    };
+    char key[8];
+    std::snprintf(key, sizeof(key), "%06X", oui & 0xFFFFFFu);
+    for (const char* row : table) {
+        if (std::strncmp(row, key, 6) == 0) return row + 7;
+    }
+    return nullptr;
+}
+
+std::string run_oui(const std::string& in, bool& ok) {
+    std::string hex;
+    for (unsigned char c : in) {
+        if (std::isxdigit(c)) hex.push_back(static_cast<char>(std::toupper(c)));
+    }
+    if (hex.size() != 6 && hex.size() != 12) return fail(ok, "need a MAC or OUI, e.g. 24:0A:C4:11:22:33");
+    unsigned int oui = 0;
+    if (std::sscanf(hex.c_str(), "%6x", &oui) != 1) return fail(ok, "bad MAC");
+    const unsigned first = (oui >> 16) & 0xFF;
+    Out o;
+    o.add("oui", fmt("%02X:%02X:%02X", (oui >> 16) & 0xFF, (oui >> 8) & 0xFF, oui & 0xFF));
+    if (const char* vendor = lookup_oui(oui)) {
+        o.add("vendor", vendor);
+    } else if (first & 0x02) {
+        o.add("vendor", "locally administered");
+        o.add("note", "not a factory OUI");
+    } else if (first & 0x01) {
+        o.add("vendor", "group address");
+    } else {
+        o.add("vendor", "unknown");
+        o.add("note", "not in the built-in list");
+    }
+    return o.str();
+}
+
+double fspl_db(double hz, double meters) {
+    return 20.0 * std::log10(meters) + 20.0 * std::log10(hz) - 147.55;
+}
+
+std::string run_fspl(Tokens t, bool& ok) {
+    enum { Loss, Link };
+    int mode = pick_mode(t, {{"fspl", Loss}, {"loss", Loss}, {"link", Link}, {"budget", Link}});
+    if (mode == Link) {
+        if (t.size() < 5) return fail(ok, "need: link tx_dBm tx_dB rx_dB freq dist");
+        double tx = 0, gtx = 0, grx = 0, hz = 0, meters = 0, extra = 0;
+        if (!parse_double(t[0], tx) || !parse_double(t[1], gtx) || !parse_double(t[2], grx))
+            return fail(ok, "tx and antenna gains must be numbers (dBm, dB)");
+        if (!parse_radio_hz(t[3], hz)) return fail(ok, "bad frequency");
+        if (!parse_length_m(t[4], "m", meters) || !(meters > 0)) return fail(ok, "distance must be > 0");
+        if (t.size() >= 6 && !parse_double(t[5], extra)) return fail(ok, "extra loss must be dB");
+        const double loss = fspl_db(hz, meters);
+        const double rx = tx + gtx + grx - loss - extra;
+        Out o;
+        o.add("rx", sig(rx) + " dBm");
+        o.add("FSPL", sig(loss) + " dB");
+        o.add("tx", sig(tx) + " dBm");
+        return o.str();
+    }
+    if (t.size() < 2) return fail(ok, "need: freq distance   e.g. 2.4G 1km");
+    double hz = 0, meters = 0;
+    if (!parse_radio_hz(t[0], hz)) return fail(ok, "bad frequency (e.g. 2.4G, 433M)");
+    if (!parse_length_m(t[1], "m", meters) || !(meters > 0)) return fail(ok, "distance must be > 0");
+    Out o;
+    o.add("FSPL", sig(fspl_db(hz, meters)) + " dB");
+    o.add("f", eng(hz) + "Hz");
+    o.add("distance", fmt_len(meters));
+    return o.str();
+}
+
+bool split_suffix_raw(const std::string& s, double& v, std::string& suffix) {
+    if (s.empty()) return false;
+    char* end = nullptr;
+    errno = 0;
+    const double d = std::strtod(s.c_str(), &end);
+    if (end == s.c_str() || !std::isfinite(d)) return false;
+    v = d;
+    suffix = end;
+    return true;
+}
+
+bool parse_size_bytes(const std::string& tok, double& bytes) {
+    double n = 0;
+    std::string suf;
+    if (!split_suffix_raw(tok, n, suf) || n < 0) return false;
+    const std::string u = lower(suf);
+    if (u.empty() || u == "b") bytes = n;
+    else if (u == "kb") bytes = n * 1e3;
+    else if (u == "mb") bytes = n * 1e6;
+    else if (u == "gb") bytes = n * 1e9;
+    else if (u == "tb") bytes = n * 1e12;
+    else if (u == "kib") bytes = n * 1024.0;
+    else if (u == "mib") bytes = n * 1048576.0;
+    else if (u == "gib") bytes = n * 1073741824.0;
+    else if (u == "tib") bytes = n * 1099511627776.0;
+    else return false;
+    return true;
+}
+
+bool parse_bit_rate(const std::string& tok, double& bps) {
+    double n = 0;
+    std::string suf;
+    if (!split_suffix_raw(tok, n, suf) || !(n > 0)) return false;
+    if (suf.empty()) {
+        bps = n * 1e6;
+        return true;
+    }
+    const bool byte_rate = suf.find('B') != std::string::npos && suf.find('b') == std::string::npos;
+    const std::string u = lower(suf);
+    double scale = 1e6;
+    if (u.find('g') != std::string::npos) scale = 1e9;
+    else if (u.find('k') != std::string::npos) scale = 1e3;
+    else if (u.find('m') != std::string::npos) scale = 1e6;
+    if (byte_rate) scale *= 8.0;
+    bps = n * scale;
+    return true;
+}
+
+std::string run_transfer(Tokens t, bool& ok) {
+    skip_mode(t, {"xfer", "time", "copy"});
+    if (t.size() != 2) return fail(ok, "need: size rate   e.g. 1GiB 100Mbps");
+    double bytes = 0, bps = 0;
+    if (!parse_size_bytes(t[0], bytes)) return fail(ok, "bad size (B KB MB GB KiB MiB GiB)");
+    if (!parse_bit_rate(t[1], bps)) return fail(ok, "bad rate (Mbps, or MBps)");
+    const double seconds = bytes * 8.0 / bps;
+    Out o;
+    o.add("time", fmt_hms_span(static_cast<long long>(std::llround(seconds))));
+    o.add("seconds", sig(seconds));
+    o.add("rate", sig(bps / 1e6) + " Mbps");
+    return o.str();
+}
+
+std::string run_kwh(Tokens t, bool& ok) {
+    skip_mode(t, {"kwh", "cost", "power"});
+    auto watts_of = [](const std::string& tok, double& w) {
+        double n = 0;
+        std::string suf;
+        if (!split_suffix_raw(tok, n, suf)) return false;
+        const std::string u = lower(suf);
+        if (u.empty() || u == "w") w = n;
+        else if (u == "kw") w = n * 1000.0;
+        else return false;
+        return w >= 0;
+    };
+    auto hours_of = [](const std::string& tok, double& h) {
+        double n = 0;
+        std::string suf;
+        if (!split_suffix_raw(tok, n, suf) || n < 0) return false;
+        const std::string u = lower(suf);
+        if (u.empty() || u == "h" || u == "hr") h = n;
+        else if (u == "min" || u == "m") h = n / 60.0;
+        else return false;
+        return true;
+    };
+    double kwh = 0, price = 0;
+    if (t.size() == 2) {
+        if (!parse_double(t[0], kwh) || kwh < 0) return fail(ok, "kWh must be >= 0");
+        if (!parse_double(t[1], price) || price < 0) return fail(ok, "price must be >= 0");
+    } else if (t.size() == 3) {
+        double w = 0, h = 0;
+        if (!watts_of(t[0], w)) return fail(ok, "power must be W or kW");
+        if (!hours_of(t[1], h)) return fail(ok, "time must be hours (or 30min)");
+        if (!parse_double(t[2], price) || price < 0) return fail(ok, "price per kWh must be >= 0");
+        kwh = w * h / 1000.0;
+    } else {
+        return fail(ok, "need: kWh price | watts hours price");
+    }
+    Out o;
+    o.add("kWh", sig(kwh));
+    o.add("price", sig(price));
+    o.add("cost", fmt("%.2f", kwh * price));
+    return o.str();
+}
+
+std::string fmt_dms(double deg, bool lat) {
+    const char hemi = lat ? (deg >= 0 ? 'N' : 'S') : (deg >= 0 ? 'E' : 'W');
+    double a = std::fabs(deg);
+    int d = static_cast<int>(a);
+    double mins = (a - d) * 60.0;
+    int m = static_cast<int>(mins);
+    double s = (mins - m) * 60.0;
+    if (s >= 59.995) {
+        s = 0;
+        ++m;
+    }
+    if (m >= 60) {
+        m = 0;
+        ++d;
+    }
+    return fmt("%d %02d %05.2f %c", d, m, s, hemi);
+}
+
+bool parse_dms_side(const Tokens& t, size_t at, double& deg) {
+    if (at + 3 >= t.size()) return false;
+    double d = 0, m = 0, s = 0;
+    if (!parse_double(t[at], d) || !parse_double(t[at + 1], m) || !parse_double(t[at + 2], s)) return false;
+    if (d < 0 || m < 0 || m >= 60 || s < 0 || s >= 60) return false;
+    const std::string h = lower(t[at + 3]);
+    const double mag = d + m / 60.0 + s / 3600.0;
+    if (h == "n" || h == "e") deg = mag;
+    else if (h == "s" || h == "w") deg = -mag;
+    else return false;
+    return true;
+}
+
+std::string run_coord(Tokens t, bool& ok) {
+    skip_mode(t, {"dd", "dms", "coord"});
+    t = split_commas(t);
+    if (t.size() == 2) {
+        double lat = 0, lon = 0;
+        if (!parse_double(t[0], lat) || !parse_double(t[1], lon)) return fail(ok, "need lat lon");
+        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return fail(ok, "lat -90..90, lon -180..180");
+        Out o;
+        o.add("lat", fmt_dms(lat, true));
+        o.add("lon", fmt_dms(lon, false));
+        o.add("dd", sig(lat) + " " + sig(lon));
+        return o.str();
+    }
+    if (t.size() == 8) {
+        double lat = 0, lon = 0;
+        if (!parse_dms_side(t, 0, lat) || !parse_dms_side(t, 4, lon))
+            return fail(ok, "need: d m s N/S d m s E/W");
+        if (std::fabs(lat) > 90 || std::fabs(lon) > 180) return fail(ok, "lat/lon out of range");
+        Out o;
+        o.add("lat", sig(lat));
+        o.add("lon", sig(lon));
+        o.add("dd", sig(lat) + " " + sig(lon));
+        return o.str();
+    }
+    return fail(ok, "need: lat lon | d m s N d m s W");
+}
+
+std::string run_hex_view(const std::string& in, bool& ok) {
+    std::string raw = in;
+    if (!raw.empty() && raw.back() == '\n') raw.pop_back();
+    std::string bytes;
+    const std::string low = lower(trim(raw));
+    if (low.rfind("hex:", 0) == 0) {
+        if (!parse_hex_bytes(trim(raw).substr(4), bytes)) return fail(ok, "bad hex");
+    } else {
+        bytes = raw;
+    }
+    if (bytes.empty()) return fail(ok, "type text, or hex:001122");
+    const bool cut = bytes.size() > 64;
+    if (cut) bytes.resize(64);
+    Out o;
+    for (size_t i = 0; i < bytes.size(); i += 4) {
+        std::string hex, ascii;
+        const size_t n = std::min<size_t>(4, bytes.size() - i);
+        for (size_t k = 0; k < n; ++k) {
+            const auto c = static_cast<unsigned char>(bytes[i + k]);
+            if (k) hex += ' ';
+            hex += fmt("%02X", c);
+            ascii.push_back(c >= 32 && c < 127 ? static_cast<char>(c) : '.');
+        }
+        o.line(fmt("%04X  %-11s  %s", static_cast<unsigned>(i), hex.c_str(), ascii.c_str()));
+    }
+    if (cut) o.line("... truncated at 64 bytes");
+    return o.str();
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -2782,6 +3594,19 @@ const char* op_label(Op op) {
     case Op::TimeDiff: return "Time difference";
     case Op::TipSplit: return "Tip split";
     case Op::Distance: return "Distance";
+    case Op::Reactance: return "RC/LC reactance";
+    case Op::Timer555: return "555 timer";
+    case Op::Entropy: return "Password entropy";
+    case Op::HashId: return "Hash identify";
+    case Op::Jwt: return "JWT decode";
+    case Op::Xor: return "XOR";
+    case Op::CidrAgg: return "CIDR aggregate";
+    case Op::Oui: return "MAC vendor";
+    case Op::Fspl: return "Link budget";
+    case Op::Transfer: return "Transfer time";
+    case Op::Kwh: return "kWh cost";
+    case Op::Coord: return "Coordinates";
+    case Op::HexView: return "Hex viewer";
     case Op::Count: break;
     }
     return "Calc";
@@ -2825,6 +3650,19 @@ const char* input_hint(Op op) {
         return "HH:MM HH:MM | add HH:MM 2h30 | YYYY-MM-DD HH:MM YYYY-MM-DD HH:MM";
     case Op::TipSplit: return "bill tip% [people=1]   e.g. 50 15 3";
     case Op::Distance: return "lat1 lon1 lat2 lon2   e.g. 40.7 -74 34.05 -118.2";
+    case Op::Reactance: return "c F C | l F L | rc F R C | lc L C   e.g. c 1k 100n";
+    case Op::Timer555: return "astable Ra Rb C | mono R C   e.g. 10k 10k 100n";
+    case Op::Entropy: return "password | len N charset | words N | rate guesses/s password";
+    case Op::HashId: return "paste a hash   e.g. $6$... or 64 hex chars";
+    case Op::Jwt: return "header.payload.signature";
+    case Op::Xor: return "key text | hex:0d text";
+    case Op::CidrAgg: return "net/pfx net/pfx ...   e.g. 10.0.0.0/24 10.0.1.0/24";
+    case Op::Oui: return "MAC or OUI   e.g. 24:0A:C4:11:22:33";
+    case Op::Fspl: return "freq dist | link tx_dBm tx_dB rx_dB freq dist   e.g. 2.4G 1km";
+    case Op::Transfer: return "size rate   e.g. 1GiB 100Mbps   (MBps is bytes/s)";
+    case Op::Kwh: return "kWh price | watts hours price   e.g. 1500W 4h 0.25";
+    case Op::Coord: return "lat lon | d m s N d m s W";
+    case Op::HexView: return "text | hex:001122";
     case Op::Count: break;
     }
     return "";
@@ -2860,6 +3698,19 @@ const char* input_example(Op op) {
     case Op::TimeDiff: return "e.g.  14:30 18:45   or   23:10 01:40";
     case Op::TipSplit: return "e.g.  50 15 3";
     case Op::Distance: return "e.g.  40.7 -74 34.05 -118.2";
+    case Op::Reactance: return "e.g.  c 1k 100n   or   lc 10u 100n";
+    case Op::Timer555: return "e.g.  10k 10k 100n   or   mono 10k 100n";
+    case Op::Entropy: return "e.g.  hunter2   or   len 12 95";
+    case Op::HashId: return "e.g.  $2b$...   or a hex digest";
+    case Op::Jwt: return "e.g.  header.payload.signature";
+    case Op::Xor: return "e.g.  secret hello";
+    case Op::CidrAgg: return "e.g.  10.0.0.0/24 10.0.1.0/24";
+    case Op::Oui: return "e.g.  24:0A:C4:11:22:33";
+    case Op::Fspl: return "e.g.  2.4G 1km   or   link 20 2 2 2.4G 1km";
+    case Op::Transfer: return "e.g.  1GiB 100Mbps";
+    case Op::Kwh: return "e.g.  1500W 4h 0.25";
+    case Op::Coord: return "e.g.  40.7128 -74.006";
+    case Op::HexView: return "e.g.  hello   or   hex:68656c6c6f";
     case Op::Count: break;
     }
     return "Enter values, then Enter";
@@ -2903,10 +3754,103 @@ std::string run(Op op, const std::string& input, bool& ok) {
     case Op::TimeDiff: return run_time_diff(t, ok);
     case Op::TipSplit: return run_tip(t, ok);
     case Op::Distance: return run_distance(t, ok);
+    case Op::Reactance: return run_reactance(t, ok);
+    case Op::Timer555: return run_555(t, ok);
+    case Op::Entropy: return run_entropy(in, ok);
+    case Op::HashId: return run_hash_id(in, ok);
+    case Op::Jwt: return run_jwt(in, ok);
+    case Op::Xor: return run_xor(in, ok);
+    case Op::CidrAgg: return run_cidr_agg(t, ok);
+    case Op::Oui: return run_oui(in, ok);
+    case Op::Fspl: return run_fspl(t, ok);
+    case Op::Transfer: return run_transfer(t, ok);
+    case Op::Kwh: return run_kwh(t, ok);
+    case Op::Coord: return run_coord(t, ok);
+    case Op::HexView: return run_hex_view(in, ok);
     case Op::Count: break;
     }
     ok = false;
     return "unknown calculator";
+}
+
+namespace {
+
+const int* group_items(Group group, int& count) {
+    static const int kNetwork[] = {static_cast<int>(Op::Subnet), static_cast<int>(Op::CidrAgg)};
+    static const int kElectronics[] = {
+        static_cast<int>(Op::OhmsLaw),     static_cast<int>(Op::Resistor),
+        static_cast<int>(Op::LedResistor), static_cast<int>(Op::VoltageDivider),
+        static_cast<int>(Op::Parallel),    static_cast<int>(Op::VoltageDrop),
+        static_cast<int>(Op::RcTimer),     static_cast<int>(Op::Reactance),
+        static_cast<int>(Op::Timer555),    static_cast<int>(Op::Battery),
+        static_cast<int>(Op::Pwm)};
+    static const int kRadio[] = {static_cast<int>(Op::Frequency), static_cast<int>(Op::Dbm),
+                                 static_cast<int>(Op::Fspl)};
+    static const int kCyber[] = {static_cast<int>(Op::Entropy), static_cast<int>(Op::HashId),
+                                 static_cast<int>(Op::Jwt),     static_cast<int>(Op::Xor),
+                                 static_cast<int>(Op::Oui)};
+    static const int kData[] = {
+        static_cast<int>(Op::BaseConvert), static_cast<int>(Op::ByteUnits), static_cast<int>(Op::Transfer),
+        static_cast<int>(Op::Bitmask),     static_cast<int>(Op::Crc),       static_cast<int>(Op::HexView),
+        static_cast<int>(Op::Epoch),       static_cast<int>(Op::DateDiff),  static_cast<int>(Op::TimeDiff),
+        static_cast<int>(Op::Kwh),         static_cast<int>(Op::Baud)};
+    static const int kGps[] = {static_cast<int>(Op::Distance), static_cast<int>(Op::Coord)};
+    static const int kGeneral[] = {static_cast<int>(Op::Percentage), static_cast<int>(Op::TipSplit),
+                                   static_cast<int>(Op::Units),      static_cast<int>(Op::Measure),
+                                   static_cast<int>(Op::Motor),      static_cast<int>(Op::Gas),
+                                   static_cast<int>(Op::Flow)};
+    static const int kOthers[] = {kMenuLifeBase, kMenuLifeBase + 1, kMenuLifeBase + 2};
+    switch (group) {
+    case Group::Network: count = 2; return kNetwork;
+    case Group::Electronics: count = 11; return kElectronics;
+    case Group::Radio: count = 3; return kRadio;
+    case Group::Cyber: count = 5; return kCyber;
+    case Group::Data: count = 11; return kData;
+    case Group::Gps: count = 2; return kGps;
+    case Group::General: count = 7; return kGeneral;
+    case Group::Others: count = 3; return kOthers;
+    case Group::Count: break;
+    }
+    count = 0;
+    return nullptr;
+}
+
+} // namespace
+
+const char* group_label(Group group) {
+    switch (group) {
+    case Group::Network: return "Network";
+    case Group::Electronics: return "Electronics";
+    case Group::Radio: return "Radio";
+    case Group::Cyber: return "Cyber";
+    case Group::Data: return "Data";
+    case Group::Gps: return "GPS";
+    case Group::General: return "General use";
+    case Group::Others: return "Others";
+    case Group::Count: break;
+    }
+    return "Calcs";
+}
+
+int group_size(Group group) {
+    int n = 0;
+    group_items(group, n);
+    return n;
+}
+
+int group_item_id(Group group, int index) {
+    int n = 0;
+    const int* items = group_items(group, n);
+    if (!items || index < 0 || index >= n) return 0;
+    return items[index];
+}
+
+const char* group_item_label(Group group, int index) {
+    const int id = group_item_id(group, index);
+    if (id == kMenuLifeBase) return "Yu-Gi-Oh LP";
+    if (id == kMenuLifeBase + 1) return "Magic Life";
+    if (id == kMenuLifeBase + 2) return "Truco";
+    return op_label(static_cast<Op>(id));
 }
 
 } // namespace tools::engcalc

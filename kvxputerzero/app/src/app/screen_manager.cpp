@@ -275,15 +275,35 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::EngCalcMenu: {
         std::vector<MenuEntry> entries;
-        for (int i = 0; i < static_cast<int>(tools::engcalc::Op::Count); ++i) {
-            auto op = static_cast<tools::engcalc::Op>(i);
-            entries.push_back(
-                {tools::engcalc::op_label(op), [this, i]() { view_model_.open_eng_calc_op(i); }});
+        for (int i = 0; i < static_cast<int>(tools::engcalc::Group::Count); ++i) {
+            const auto group = static_cast<tools::engcalc::Group>(i);
+            entries.push_back({tools::engcalc::group_label(group),
+                               [this, i]() { view_model_.open_eng_calc_group(i); }});
         }
-        entries.push_back({"Yu-Gi-Oh LP", [this]() { view_model_.open_life_counter(0); }});
-        entries.push_back({"Magic Life", [this]() { view_model_.open_life_counter(1); }});
-        entries.push_back({"Truco", [this]() { view_model_.open_life_counter(2); }});
         return std::make_unique<OptionsListScreen>(view_model_, assets_, "Calcs", std::move(entries));
+    }
+
+    case model::AppPage::EngCalcGroup: {
+        const auto group = static_cast<tools::engcalc::Group>(view_model_.eng_calc_group());
+        const int group_i = view_model_.eng_calc_group();
+        std::vector<MenuEntry> entries;
+        if (group_i >= 0 && group_i < static_cast<int>(tools::engcalc::Group::Count)) {
+            const int n = tools::engcalc::group_size(group);
+            for (int i = 0; i < n; ++i) {
+                const int id = tools::engcalc::group_item_id(group, i);
+                const char* label = tools::engcalc::group_item_label(group, i);
+                if (id >= tools::engcalc::kMenuLifeBase) {
+                    const int game = id - tools::engcalc::kMenuLifeBase;
+                    entries.push_back({label, [this, game]() { view_model_.open_life_counter(game); }});
+                } else {
+                    entries.push_back({label, [this, id]() { view_model_.open_eng_calc_op(id); }});
+                }
+            }
+        }
+        const char* title = (group_i >= 0 && group_i < static_cast<int>(tools::engcalc::Group::Count))
+                                ? tools::engcalc::group_label(group)
+                                : "Calcs";
+        return std::make_unique<OptionsListScreen>(view_model_, assets_, title, std::move(entries));
     }
 
     case model::AppPage::EngCalcWork: {

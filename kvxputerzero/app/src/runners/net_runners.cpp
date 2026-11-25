@@ -9,6 +9,8 @@
 #include "tcp_probe.h"
 #include "user_paths.h"
 #include "recon_scan.h"
+#include "usb_probe.h"
+#include "wifi_monitor.h"
 #include "wifi_scan.h"
 
 #include <chrono>
@@ -92,6 +94,57 @@ RunFn net_wifi_disconnect() {
         const bool ok = radio_off ? platform::wifi_radio_off(err) : platform::wifi_disconnect(err);
         if (!ok) return emit_error(line, err.empty() ? "disconnect failed" : err);
         return emit_ok(line, radio_off ? "radio off" : "disconnected");
+    };
+}
+
+RunFn net_wifi_ap() {
+    return [](const std::vector<std::string>& args, std::atomic<bool>&, const LineFn& line) {
+        if (args.size() == 1 && (args[0] == "stop" || args[0] == "down")) {
+            std::string err;
+            if (!platform::wifi_stop_hotspot(err)) return emit_error(line, err.empty() ? "stop failed" : err);
+            return emit_ok(line, "hotspot stopped");
+        }
+        if (args.size() < 2) return emit_error(line, "need: <ssid> <psk>  or  stop");
+        std::string err;
+        if (!platform::wifi_start_hotspot(args[0], args[1], err))
+            return emit_error(line, err.empty() ? "hotspot failed" : err);
+        return emit_ok(line, "hotspot up: " + args[0]);
+    };
+}
+
+RunFn net_jam_detect() {
+    return [](const std::vector<std::string>&, std::atomic<bool>&, const LineFn& line) {
+        return emit_ok(line, "Jam Detect is GUI-only (channel bars + threshold alert)");
+    };
+}
+
+RunFn net_deauth_ids() {
+    return [](const std::vector<std::string>&, std::atomic<bool>& cancel, const LineFn& line) {
+        const std::string saved = platform::load_monitor_iface();
+        if (platform::monitor_iface_is_onboard(saved)) {
+            return emit_error(line, "pick a USB monitor adapter (wifi_monitor_adapter)");
+        }
+        std::string err;
+        if (!platform::run_deauth_ids(saved, cancel, line, err)) {
+            return emit_error(line, err.empty() ? "deauth ids failed" : err);
+        }
+        return 0;
+    };
+}
+
+RunFn net_badusb_hunter() {
+    return [](const std::vector<std::string>&, std::atomic<bool>&, const LineFn& line) {
+        std::string err;
+        const auto devices = platform::list_usb_devices(err);
+        if (!err.empty() && devices.empty()) return emit_error(line, err);
+        if (devices.empty()) return emit_ok(line, "no USB devices");
+        for (const auto& d : devices) {
+            std::string s = d.sys_name + "  " + d.vendor_id + ":" + d.product_id;
+            if (!d.product.empty()) s += "  " + d.product;
+            if (d.suspicious) s += "  ! " + d.suspicion_reason;
+            if (line) line(s);
+        }
+        return 0;
     };
 }
 

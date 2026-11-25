@@ -27,4 +27,8 @@ bool wifi_connect_psk(const std::string& ssid, const std::string& psk, std::stri
 bool wifi_disconnect(std::string& error);
 bool wifi_radio_off(std::string& error);
 
+// Soft AP / hotspot via nmcli. Password must be at least 8 characters.
+bool wifi_start_hotspot(const std::string& ssid, const std::string& psk, std::string& error);
+bool wifi_stop_hotspot(std::string& error);
+
 } // namespace platform

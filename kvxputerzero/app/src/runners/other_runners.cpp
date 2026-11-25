@@ -3,7 +3,9 @@
 
 #include "backlight.h"
 #include "cap_detect.h"
+#include "cc1101.h"
 #include "device_status.h"
+#include "rf_settings.h"
 #include "gps_fix.h"
 #include "i2c_scan.h"
 #include "nrf24_radio.h"
@@ -266,6 +268,26 @@ RunFn modules_ibutton() {
     };
 }
 
+RunFn modules_companion_bins() {
+    return [](const std::vector<std::string>&, std::atomic<bool>&, const LineFn& line) {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::path(tools::config_dir()) / "companions";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        int n = 0;
+        for (const auto& ent : fs::directory_iterator(dir, ec)) {
+            if (ec) break;
+            if (!ent.is_regular_file(ec)) continue;
+            const auto name = ent.path().filename().string();
+            if (name.size() < 5 || name.substr(name.size() - 4) != ".bin") continue;
+            if (line) line(name + "  " + std::to_string(static_cast<unsigned long long>(ent.file_size(ec))));
+            ++n;
+        }
+        if (n == 0) return emit_ok(line, "no .bin in " + dir.string() + " — flash from a PC");
+        return emit_ok(line, "flash from a PC (do not flash on Zero)");
+    };
+}
+
 RunFn modules_joystick() { return tools_info("Unit Joystick presence — check I2C / Grove"); }
 RunFn modules_pahub_presence() { return modules_pahub(); }
 RunFn modules_pn532_killer() { return tools_info("PN532Killer UART — configure device path in GUI Modules"); }
@@ -275,14 +297,41 @@ RunFn radio_rf(const char* key) {
     std::string k = key ? key : "";
     return [k](const std::vector<std::string>&, std::atomic<bool>& cancel, const LineFn& line) {
         emit_cap(platform::detect_cc1101(), line);
-        if (k == "rf_send_test" || k == "rf_replay" || k == "rf_library") {
-            return emit_ok(line, "RF TX confirm accepted");
-        }
-        if (k == "rf_spectrum" || k == "rf_listen" || k == "rf_record") {
-            for (int i = 0; i < 10; ++i) {
-                if (cancelled(cancel)) return 130;
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (k == "rf_status") {
+            platform::Cc1101Session radio;
+            std::string err;
+            if (!radio.open({}, err)) return emit_error(line, err.empty() ? "Cap not present" : err);
+            uint8_t part = 0, ver = 0;
+            if (radio.read_chip_id(part, ver, err) && line) {
+                char buf[48];
+                std::snprintf(buf, sizeof(buf), "PARTNUM=0x%02X VERSION=0x%02X", part, ver);
+                line(buf);
             }
+            radio.close();
+            return 0;
+        }
+        if (k == "rf_spectrum") {
+            platform::Cc1101Session radio;
+            std::string err;
+            if (!radio.open({}, err)) return emit_error(line, err.empty() ? "Cap not present" : err);
+            auto s = platform::load_rf_settings();
+            std::vector<std::string> lines;
+            const uint32_t start = s.freq_hz > 1000000u ? s.freq_hz - 1000000u : s.freq_hz;
+            const uint32_t stop = s.freq_hz + 1000000u;
+            if (!radio.spectrum_scan(start, stop, s.step_hz, lines, err, &cancel)) {
+                radio.close();
+                return emit_error(line, err);
+            }
+            radio.close();
+            if (cancelled(cancel)) return 130;
+            for (const auto& l : lines) {
+                if (line) line(l);
+            }
+            return 0;
+        }
+        if (k == "rf_listen" || k == "rf_record" || k == "rf_replay" || k == "rf_library" ||
+            k == "rf_send_test" || k == "rf_send_code" || k == "rf_carrier" || k == "rf_config") {
+            return emit_ok(line, "GUI-only RF tool — open from the device RF channel");
         }
         return 0;
     };

@@ -124,9 +124,14 @@ const char* tool_icon(model::ToolId id) {
         return ICON_CH_DISCOVERY;
     case model::ToolId::WifiAnalyzer:
     case model::ToolId::WifiConnect:
+    case model::ToolId::WifiAp:
     case model::ToolId::WifiApInfo:
+    case model::ToolId::WifiJamDetect:
+    case model::ToolId::WifiDeauthIds:
     case model::ToolId::OpenNetworks:
         return ICON_CH_WIFI;
+    case model::ToolId::BadUsbHunter:
+        return ICON_CH_USB;
     case model::ToolId::NfcRead:
     case model::ToolId::NfcScan:
     case model::ToolId::NfcWriteNdef:

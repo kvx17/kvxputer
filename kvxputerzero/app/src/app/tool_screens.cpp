@@ -53,6 +53,8 @@
 #include "file_share_server.h"
 #include "roku_screen.h"
 #include "hid_remote_screen.h"
+#include "jam_detect_screen.h"
+#include "usb_probe.h"
 #include "wifi_analyzer_screen.h"
 #include "wifi_monitor.h"
 #include "wifi_scan.h"
@@ -897,6 +899,7 @@ Screen make_net_toolkit(VM& vm, AssetManager& assets, const Stage& st) {
     const ToolId id = ToolId::NetToolkit;
     if (st.name.empty()) {
         std::vector<MenuEntry> e;
+        e.push_back(stage_entry(vm, id, "Help", "help"));
         e.push_back(stage_entry(vm, id, "Port Scan", "ask_scan"));
         e.push_back(stage_entry(vm, id, "Banner Grab", "ask_banner"));
         e.push_back(stage_entry(vm, id, "Ping", "ask_ping"));
@@ -904,6 +907,18 @@ Screen make_net_toolkit(VM& vm, AssetManager& assets, const Stage& st) {
         e.push_back(stage_entry(vm, id, "Trace", "ask_trace"));
         e.push_back(stage_entry(vm, id, "Curl-lite", "ask_curl"));
         return make_options(vm, assets, "Net Toolkit", std::move(e));
+    }
+    if (st.name == "help") {
+        return make_info(vm, assets, "Net Toolkit Help",
+                         "Everyday STA network tools.\n"
+                         "Join WiFi first when prompted.\n"
+                         "\n"
+                         "Port Scan / Banner / Ping\n"
+                         "Dig: A/AAAA/CNAME/TXT/MX\n"
+                         "Curl-lite: GET headers + body\n"
+                         "Trace: traceroute hops\n"
+                         "\n"
+                         "Not full nmap/dig. Lab use.");
     }
     if (st.name == "ask_scan")
         return ask_then(vm, assets, id, "Port Scan", "host [ports: 22,80 or 1-1024]", "", "scan");
@@ -4273,6 +4288,153 @@ Screen make_wifi_disconnect(VM& vm, AssetManager& assets, const Stage& st) {
     return make_options(vm, assets, "Wi-Fi Disconnect", std::move(e));
 }
 
+struct WifiApPending {
+    std::mutex mu;
+    std::string ssid;
+    std::string psk;
+};
+
+WifiApPending& wifi_ap_pending() {
+    static WifiApPending p;
+    return p;
+}
+
+Worker wifi_start_ap_worker(std::string ssid, std::string psk) {
+    return [ssid, psk](Cancel&, const Log& log, const Status& status) {
+        status("starting hotspot " + ssid);
+        std::string err;
+        if (platform::wifi_start_hotspot(ssid, psk, err)) {
+            write_text_file(tools::config_file("wifi_ap_ssid.txt"), ssid + "\n");
+            log("hotspot up: " + ssid);
+            log("password: " + psk);
+        } else {
+            log("hotspot failed: " + err);
+        }
+    };
+}
+
+Worker wifi_stop_ap_worker() {
+    return [](Cancel&, const Log& log, const Status& status) {
+        status("stopping hotspot...");
+        std::string err;
+        if (platform::wifi_stop_hotspot(err)) log("hotspot stopped");
+        else log("stop failed: " + err);
+    };
+}
+
+Screen make_wifi_ap(VM& vm, AssetManager& assets, const Stage& st) {
+    const ToolId id = ToolId::WifiAp;
+    if (st.name == "stop") return make_run(vm, assets, "Stop AP", wifi_stop_ap_worker());
+    if (st.name == "askssid") {
+        return make_prompt(vm, assets, "AP SSID", "hotspot name",
+                           read_config_value("wifi_ap_ssid.txt", "kvxputer"),
+                           [&vm, id](const std::string& v) {
+                               const std::string ssid = trim(v);
+                               if (ssid.empty()) return;
+                               {
+                                   auto& p = wifi_ap_pending();
+                                   std::lock_guard<std::mutex> lock(p.mu);
+                                   p.ssid = ssid;
+                               }
+                               nav(vm, id, "askpsk");
+                           });
+    }
+    if (st.name == "askpsk") {
+        std::string ssid;
+        {
+            auto& p = wifi_ap_pending();
+            std::lock_guard<std::mutex> lock(p.mu);
+            ssid = p.ssid;
+        }
+        return make_prompt(vm, assets, "AP Password", "min 8 chars for " + ssid, "kvxputer",
+                           [&vm, id](const std::string& v) {
+                               const std::string psk = trim(v);
+                               {
+                                   auto& p = wifi_ap_pending();
+                                   std::lock_guard<std::mutex> lock(p.mu);
+                                   p.psk = psk;
+                               }
+                               nav(vm, id, "start");
+                           });
+    }
+    if (st.name == "start") {
+        std::string ssid, psk;
+        {
+            auto& p = wifi_ap_pending();
+            std::lock_guard<std::mutex> lock(p.mu);
+            ssid = p.ssid;
+            psk = p.psk;
+        }
+        if (ssid.empty()) return make_info(vm, assets, "Start WiFi AP", "empty SSID");
+        if (psk.size() < 8) return make_info(vm, assets, "Start WiFi AP", "password min 8 chars");
+        return make_run(vm, assets, "Start WiFi AP", wifi_start_ap_worker(std::move(ssid), std::move(psk)));
+    }
+    std::vector<MenuEntry> e;
+    e.push_back(stage_entry(vm, id, "Start hotspot...", "askssid"));
+    e.push_back(stage_entry(vm, id, "Stop hotspot", "stop"));
+    return make_options(vm, assets, "Start WiFi AP", std::move(e));
+}
+
+Screen make_jam_detect(VM& vm, AssetManager& assets) {
+    return std::make_unique<screen::JamDetectScreen>(vm, assets);
+}
+
+Worker deauth_ids_worker() {
+    return [](Cancel& cancel, const Log& log, const Status& status) {
+        const std::string saved = platform::load_monitor_iface();
+        if (platform::monitor_iface_is_onboard(saved)) {
+            log("pick a USB monitor adapter under WiFi → Monitor adapter");
+            return;
+        }
+        status("Deauth IDS on " + saved);
+        std::string err;
+        if (!platform::run_deauth_ids(saved, cancel, log, err) && !err.empty()) log(err);
+        status("stopped");
+    };
+}
+
+Screen make_badusb_hunter(VM& vm, AssetManager& assets) {
+    return make_info_card(vm, assets, "BadUSB Hunter",
+                          [](Cancel&, screen::InfoScreen::Fields& fields, std::string& status,
+                             view::StatusPillKind& kind) {
+                              std::string err;
+                              const auto devices = platform::list_usb_devices(err);
+                              if (!err.empty() && devices.empty()) {
+                                  fields.push_back({"error", err});
+                                  status = "error";
+                                  kind = view::StatusPillKind::Error;
+                                  return;
+                              }
+                              if (devices.empty()) {
+                                  fields.push_back({"usb", "no devices"});
+                                  status = "none";
+                                  kind = view::StatusPillKind::Missing;
+                                  return;
+                              }
+                              int flagged = 0;
+                              for (const auto& d : devices) {
+                                  std::string title = d.sys_name + " " + d.vendor_id + ":" + d.product_id;
+                                  std::string body = d.product.empty() ? d.manufacturer : d.product;
+                                  if (body.empty()) body = "class " + d.device_class;
+                                  if (d.suspicious) {
+                                      ++flagged;
+                                      body = "! " + body + " — " + d.suspicion_reason;
+                                  }
+                                  fields.push_back({title, body});
+                                  for (const auto& iface : d.interfaces) {
+                                      fields.push_back({"  iface", iface});
+                                  }
+                              }
+                              if (flagged > 0) {
+                                  status = sfmt("%d HID keyboard", flagged);
+                                  kind = view::StatusPillKind::Busy;
+                              } else {
+                                  status = sfmt("%zu device(s)", devices.size());
+                                  kind = view::StatusPillKind::Ok;
+                              }
+                          });
+}
+
 std::string wifi_active_ssid() {
     std::string out;
     platform::run_shell("nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null | awk -F: '$1==\"yes\"{print $2; exit}'", out);
@@ -4864,6 +5026,7 @@ std::unique_ptr<screen::KvxScreen> make_channel_tool_menu(viewmodel::BaseViewMod
         add_by_id(ToolId::UnitScrollStatus);
         add_by_id(ToolId::UartShell);
         add_by_id(ToolId::PahubScan);
+        add_by_id(ToolId::CompanionBins);
         add_by_id(ToolId::IButtonRead);
         add_by_id(ToolId::Pn532KillerUart);
         add_by_id(ToolId::UartLlm);
@@ -4994,7 +5157,11 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     case ToolId::WifiAnalyzer: return make_wifi_analyzer(vm, assets);
     case ToolId::WifiConnect: return make_wifi_connect(vm, assets, st);
     case ToolId::WifiDisconnect: return make_wifi_disconnect(vm, assets, st);
+    case ToolId::WifiAp: return make_wifi_ap(vm, assets, st);
     case ToolId::WifiApInfo: return make_wifi_ap_info(vm, assets);
+    case ToolId::WifiJamDetect: return make_jam_detect(vm, assets);
+    case ToolId::WifiDeauthIds: return make_run(vm, assets, "Deauth IDS", deauth_ids_worker());
+    case ToolId::BadUsbHunter: return make_badusb_hunter(vm, assets);
 
     // --- Scripts / PC Connect / GPS / Modules / accessory --------------------------------
     case ToolId::ScriptsRunner: return make_scripts(vm, assets, st);

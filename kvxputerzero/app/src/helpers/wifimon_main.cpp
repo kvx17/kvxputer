@@ -2,13 +2,19 @@
 // Grant: sudo setcap cap_net_admin,cap_net_raw+ep <this binary>
 //
 // Usage: kvxputerzero-wifimon <iface>
-// Stdin:  "C <1-11>\n" set channel, "Q\n" quit
-// Stdout: "OK\n" then length-prefixed (u32 LE) radiotap+802.11 frames
+//        kvxputerzero-wifimon <iface> --ids
+// Stdin:  "C <1-11>\n" set channel, "Q\n" quit  (frame mode only)
+// Stdout (frame mode): "OK\n" then length-prefixed (u32 LE) radiotap+802.11 frames
+// Stdout (--ids):      "OK\n" then text lines:
+//                      DEAUTH aa:bb:.. -> cc:dd:.. ch=N rssi=M
+//                      DISASSOC ...
+//                      STATS total=N rate=/s
 //         or a single error line on failure.
 
 #include <arpa/inet.h>
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -227,9 +233,124 @@ bool write_all(int fd, const void* data, size_t len) {
 
 } // namespace
 
+size_t radiotap_len(const uint8_t* pkt, size_t len) {
+    if (len < 8 || pkt[0] != 0) return 0;
+    const uint16_t it_len = static_cast<uint16_t>(pkt[2]) | (static_cast<uint16_t>(pkt[3]) << 8);
+    if (it_len < 8 || it_len > len) return 0;
+    return it_len;
+}
+
+int8_t radiotap_rssi(const uint8_t* pkt, size_t it_len) {
+    if (it_len < 8) return -128;
+    const uint32_t present = static_cast<uint32_t>(pkt[4]) | (static_cast<uint32_t>(pkt[5]) << 8) |
+                             (static_cast<uint32_t>(pkt[6]) << 16) | (static_cast<uint32_t>(pkt[7]) << 24);
+    size_t off = 8;
+    auto skip = [&](size_t n) {
+        if (off + n > it_len) off = it_len;
+        else off += n;
+    };
+    if (present & (1u << 0)) skip(8);  // TSFT
+    if (present & (1u << 1)) skip(1);  // Flags
+    if (present & (1u << 2)) skip(1);  // Rate
+    if (present & (1u << 3)) skip(4);  // Channel
+    if (present & (1u << 4)) skip(2);  // FHSS
+    if (present & (1u << 5)) {
+        if (off < it_len) return static_cast<int8_t>(pkt[off]);
+    }
+    return -128;
+}
+
+void mac_str(const uint8_t* m, char* out, size_t n) {
+    std::snprintf(out, n, "%02x:%02x:%02x:%02x:%02x:%02x", m[0], m[1], m[2], m[3], m[4], m[5]);
+}
+
+int run_ids_mode(Session& s) {
+    // Auto-hop channels; emit text lines for deauth / disassoc only.
+    uint8_t pkt[4096];
+    int hop_ch = 1;
+    uint64_t total = 0;
+    uint64_t window = 0;
+    auto window_t0 = std::chrono::steady_clock::now();
+    auto hop_t0 = window_t0;
+    set_channel(s, hop_ch);
+
+    // Non-blocking stdin (EOF / Q quits)
+    {
+        const int flags = ::fcntl(STDIN_FILENO, F_GETFL, 0);
+        ::fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    }
+    std::string cmd_buf;
+
+    while (!g_stop) {
+        pollfd fds[2]{};
+        fds[0].fd = STDIN_FILENO;
+        fds[0].events = POLLIN;
+        fds[1].fd = s.sock;
+        fds[1].events = POLLIN;
+        const int pr = ::poll(fds, 2, 100);
+        if (pr < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+
+        if (fds[0].revents & (POLLIN | POLLHUP | POLLERR)) {
+            char buf[64];
+            const ssize_t n = ::read(STDIN_FILENO, buf, sizeof(buf));
+            if (n == 0) break;
+            if (n > 0) {
+                cmd_buf.append(buf, buf + n);
+                if (cmd_buf.find('Q') != std::string::npos || cmd_buf.find('q') != std::string::npos) {
+                    g_stop = 1;
+                    break;
+                }
+            }
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - hop_t0).count() >= 350) {
+            hop_ch = hop_ch >= 11 ? 1 : hop_ch + 1;
+            set_channel(s, hop_ch);
+            hop_t0 = now;
+        }
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - window_t0).count() >= 1000) {
+            std::printf("STATS total=%llu rate=%llu/s ch=%d\n",
+                        static_cast<unsigned long long>(total),
+                        static_cast<unsigned long long>(window), hop_ch);
+            std::fflush(stdout);
+            window = 0;
+            window_t0 = now;
+        }
+
+        if (!(fds[1].revents & POLLIN)) continue;
+        for (;;) {
+            const ssize_t n = ::recv(s.sock, pkt, sizeof(pkt), 0);
+            if (n <= 0) break;
+            const size_t rt = radiotap_len(pkt, static_cast<size_t>(n));
+            if (rt == 0 || rt + 16 > static_cast<size_t>(n)) continue;
+            const uint8_t* body = pkt + rt;
+            const uint8_t fc0 = body[0];
+            // Management deauth 0xC0, disassoc 0xA0
+            const char* kind = nullptr;
+            if (fc0 == 0xC0) kind = "DEAUTH";
+            else if (fc0 == 0xA0) kind = "DISASSOC";
+            else continue;
+            char src[24], dst[24];
+            mac_str(body + 10, src, sizeof(src)); // addr2 transmitter
+            mac_str(body + 4, dst, sizeof(dst));  // addr1 receiver
+            const int8_t rssi = radiotap_rssi(pkt, rt);
+            ++total;
+            ++window;
+            std::printf("%s %s -> %s ch=%d rssi=%d\n", kind, src, dst, hop_ch, static_cast<int>(rssi));
+            std::fflush(stdout);
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
-    if (argc != 2 || !iface_name_ok(argv[1])) {
-        std::fprintf(stderr, "usage: kvxputerzero-wifimon <iface>\n");
+    const bool ids = (argc == 3 && std::strcmp(argv[2], "--ids") == 0);
+    if ((argc != 2 && !ids) || !iface_name_ok(argv[1])) {
+        std::fprintf(stderr, "usage: kvxputerzero-wifimon <iface> [--ids]\n");
         return 2;
     }
 
@@ -248,6 +369,12 @@ int main(int argc, char** argv) {
     }
     std::printf("OK\n");
     std::fflush(stdout);
+
+    if (ids) {
+        const int rc = run_ids_mode(s);
+        restore(s);
+        return rc;
+    }
 
     // Non-blocking stdin
     {

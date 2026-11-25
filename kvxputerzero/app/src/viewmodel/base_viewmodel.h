@@ -72,6 +72,7 @@ public:
     void open_codec_menu();
     void open_codec_op(int op);
     void open_eng_calc_menu();
+    void open_eng_calc_group(int group);
     void open_eng_calc_op(int op);
     void open_life_counter(int game);
     void open_timer();
@@ -131,6 +132,7 @@ public:
 
     int codec_op() const;
     int eng_calc_op() const;
+    int eng_calc_group() const;
     int timer_seconds() const;
     void set_timer_seconds(int seconds);
 

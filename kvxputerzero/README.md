@@ -71,7 +71,9 @@ Onboard scan goes through `nmcli`. A USB adapter in monitor mode is optional and
 | --- | --- |
 | **WiFi Analyzer** | Channel bars and SSID list. **F/X** pick a channel, **Z/C** change dwell, **Enter** lists APs on that channel, **L** lists all APs, **K** locks or hops (monitor mode), **E** exports CSV, **Esc** back. |
 | **Monitor adapter** | Choose onboard Wi‑Fi or a USB stick that can do monitor mode. Saved in `wifi_monitor_iface`. |
-| **Connect / Disconnect / AP info** | Join or leave a network and show the current AP. |
+| **Connect / Disconnect / Start WiFi AP / AP info** | Join or leave a network, start or stop a hotspot (`nmcli`), and show the current AP. |
+| **Jam Detect** | Channel airtime bars with a threshold alert. USB monitor adapter preferred for live airtime. |
+| **Deauth IDS** | Count-only view of deauth/disassoc frames (USB monitor adapter). Detection only. |
 | **Net Toolkit** | Port scan, banners, ping, and small lookups while associated. |
 | **Scan Hosts** | Hosts on the local network. |
 | **Listen TCP / Client TCP** | Raw TCP listen or outbound client. |
@@ -98,7 +100,7 @@ USB monitor capture uses `/usr/lib/kvxputerzero/kvxputerzero-wifimon`. The `.deb
 
 ### Discovery
 
-Discovery tools, matching the Cardputer ADV catalog: BLE Scan, BLE Hunter, Wall Of Flipper, Wall Of AirTag, Skimmer Detector, WiFi Analyzer, PineAP Hunter, LAN Watch, Scan Hosts, Open networks, Roku Remote, RF Spectrum, NRF Spectrum, WD Both, Site Survey, Wardriving Master, and UPnP Tools. **Enter** opens the one you highlight. Search from the channel home (Space) finds these and every other menu item.
+Discovery tools, matching the Cardputer ADV catalog: BLE Scan, BLE Hunter, Wall Of Flipper, Wall Of AirTag, Skimmer Detector, WiFi Analyzer, Jam Detect, Deauth IDS, PineAP Hunter, LAN Watch, Scan Hosts, Open networks, Roku Remote, BadUSB Hunter, RF Spectrum, NRF Spectrum, WD Both, Site Survey, Wardriving Master, and UPnP Tools. **Enter** opens the one you highlight. Search from the channel home (Space) finds these and every other menu item.
 
 ### NetOps
 
@@ -203,6 +205,13 @@ Onboard IR is TX GPIO12 and RX GPIO13. The library is Flipper-style `.ir` files.
 | --- | --- |
 | **Link status** | Onboard Ethernet link, address, and gateway. |
 | **Scan Hosts** | Hosts on the Ethernet LAN. |
+
+### USB
+
+| Tool | Purpose |
+| --- | --- |
+| **kvxkeyboard HID** | Keyboard, mouse, presenter, and media remote over USB or BLE (see the USB section below). |
+| **BadUSB Hunter** | Host-side look at plugged-in USB devices. Flags HID keyboard interfaces. Does not emulate a keyboard. |
 
 ### GPS
 
@@ -322,6 +331,7 @@ Grove and Cap bring-up. PORT-style modules share the Grove connector; do not put
 | **Unit Joystick** | Stick at I2C `0x63`. |
 | **UART Shell** | Same serial shell as NetOps. |
 | **PaHub Scan** | Channels on a PaHub mux (`0x70`–`0x77`). |
+| **Companion bins** | Lists `~/.config/kvxputerzero/companions/*.bin` with a flash-from-PC note. Does not flash on the Zero. |
 | **PaHub presence** | Whether the mux itself answers. |
 | **iButton Read** | Read a 1-Wire iButton. |
 | **PN532Killer UART** | Status of a UART-attached PN532Killer. |
@@ -341,7 +351,7 @@ Grove and Cap bring-up. PORT-style modules share the Grove connector; do not put
 
 ### USB
 
-**kvxkeyboard HID** turns the Zero into a keyboard, mouse, presenter and media remote for a computer or phone, over a **USB cable** or **Bluetooth LE**. It is the Cardputer ADV app of the same name. BadUSB and mass storage are not available. File copy uses the Zero’s own Linux tools (SSH, `scp`).
+**kvxkeyboard HID** turns the Zero into a keyboard, mouse, presenter and media remote for a computer or phone, over a **USB cable** or **Bluetooth LE**. It is the Cardputer ADV app of the same name. **BadUSB Hunter** (same channel) inspects plugged-in USB devices for HID keyboard interfaces. BadUSB gadget and mass storage are not available. File copy uses the Zero’s own Linux tools (SSH, `scp`).
 
 **Connect**
 

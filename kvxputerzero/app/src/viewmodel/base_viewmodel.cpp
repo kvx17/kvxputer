@@ -129,6 +129,10 @@ void BaseViewModel::go_back() {
         break;
     case model::AppPage::EngCalcWork:
     case model::AppPage::LifeCounter:
+        show_page(model_.eng_calc_group() >= 0 ? model::AppPage::EngCalcGroup
+                                                : model::AppPage::EngCalcMenu);
+        break;
+    case model::AppPage::EngCalcGroup:
         show_page(model::AppPage::EngCalcMenu);
         break;
     case model::AppPage::ColorHex:
@@ -458,7 +462,13 @@ void BaseViewModel::open_codec_op(int op) {
 }
 
 void BaseViewModel::open_eng_calc_menu() {
+    model_.set_eng_calc_group(-1);
     show_page(model::AppPage::EngCalcMenu);
+}
+
+void BaseViewModel::open_eng_calc_group(int group) {
+    model_.set_eng_calc_group(group);
+    show_page(model::AppPage::EngCalcGroup);
 }
 
 void BaseViewModel::open_eng_calc_op(int op) {
@@ -772,6 +782,10 @@ int BaseViewModel::codec_op() const {
 
 int BaseViewModel::eng_calc_op() const {
     return model_.eng_calc_op();
+}
+
+int BaseViewModel::eng_calc_group() const {
+    return model_.eng_calc_group();
 }
 
 int BaseViewModel::timer_seconds() const {

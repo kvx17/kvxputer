@@ -93,6 +93,10 @@ struct Cc1101Session {
 
     uint32_t frequency_hz() const { return freq_hz_; }
     Cc1101Preset preset() const { return preset_; }
+    float rx_bw_khz() const { return rx_bw_khz_; }
+
+    // PARTNUM (0x30) / VERSION (0x31) status registers.
+    bool read_chip_id(uint8_t& partnum, uint8_t& version, std::string& error);
 
 private:
     struct Impl;
@@ -100,7 +104,10 @@ private:
     uint32_t freq_hz_{433920000};
     Cc1101Preset preset_{Cc1101Preset::SpectrumWide};
     Cc1101PaLevel pa_{Cc1101PaLevel::Low};
+    float rx_bw_khz_{650.f};
+    int rssi_cal_db_{0};
     bool rx_active_{false};
+    bool apply_rf_sw1(std::string& error);
 
     bool strobe(uint8_t cmd, std::string& error);
     bool write_reg(uint8_t reg, uint8_t val, std::string& error);

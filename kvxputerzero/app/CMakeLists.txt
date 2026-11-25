@@ -464,6 +464,14 @@ file(GLOB_RECURSE PLATFORM_SOURCES CONFIGURE_DEPENDS
 )
 list(FILTER PLATFORM_SOURCES EXCLUDE REGEX ".*/linux_input\\.cpp$")
 list(FILTER PLATFORM_SOURCES EXCLUDE REGEX ".*/screenshot_service\\.cpp$")
+# Raw ESP32/Arduino sources not yet adapted for Zero Linux. They pull in
+# Arduino.h / root/storage/paths.h / menu/others/audio.h / scan_hosts.h, which
+# do not exist in this port, so the GLOB would break the build. Each needs a
+# real Linux port (like web_crawler/cctv) before it can be removed from here.
+list(FILTER PLATFORM_SOURCES EXCLUDE REGEX "/pwnagotchi/")
+# NOTE: usb_probe.cpp is a real Linux module (sysfs), used by the BadUSB Hunter
+# screen and net runner — it must stay IN the build, so it is not listed here.
+list(FILTER PLATFORM_SOURCES EXCLUDE REGEX "/(ble_ninebot|ble_sniffer|ble_spam|deauther|ducky_typer|evil_portal|ir_jammer|karma_attack|name_flood_menu|netcut|nrf_jammer|nrf_jammer_api|nrf_mousejack|pineap_hunter|rf_bruteforce|rf_jammer|sniffer|wifi_atks)\\.cpp$")
 
 add_library(${PROJECT_NAME}_platform 
     STATIC

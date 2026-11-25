@@ -330,42 +330,84 @@ uint32_t map_evdev_key(uint16_t code) {
             return kKeyF1;
         case KEY_FN_2:
             return kKeyF2;
-        // Sym punctuation the Zero keymap emits outside the letter range.
-        // Observed on device: 199={  200=}  211=;  216='  233=|
-        case 199:
-            return '{';
-        case KEY_PLAYCD:
-            return '}';
-        case KEY_HP:
-            return ';';
-        case KEY_CHAT:
-            return '\'';
-        case KEY_FORWARDMAIL:
-            return '|';
-        // Hardware Sym layer may emit these directly (tca8418 rewrite).
+        // Sym is applied in the tca8418 driver. Shipped Zero boards (v5 overlay)
+        // emit linux,keymap1 codes that a US keyboard would read as other
+        // punctuation, then the console map (tca8418_keypad_m5stack_keymap.map)
+        // turns them into the blue legends. Match that map:
+        //   1! 2@ 3# 4$ 5% 6^ 7& 8* 9( 0)
+        //   Q~ W` E_ R- T+ Y= U[ I] O{ P}
+        //   A; S: D'    G" H< J> K\ L|
+        //            V, B. N/ M?
+        case KEY_LEFTBRACE:
+            return '!';
+        case KEY_RIGHTBRACE:
+            return '@';
         case KEY_SEMICOLON:
-            return ';';
-        case KEY_COMMA:
-            return ',';
-        case KEY_DOT:
-            return '.';
-        case KEY_SLASH:
-            return '/';
+            return '#';
         case KEY_APOSTROPHE:
-            return '\'';
+            return '$';
         case KEY_GRAVE:
+            return '%';
+        case KEY_BACKSLASH:
+            return '^';
+        case KEY_COMMA:
+            return '&';
+        case KEY_DOT:
+            return '*';
+        case KEY_SLASH:
+            return '(';
+        case KEY_MUHENKAN:
+            return ')';
+        case KEY_KPASTERISK:
+            return '~';
+        case KEY_NUMLOCK:
             return '`';
+        case KEY_SCROLLLOCK:
+            return '_';
+        case KEY_KP7:
+            return '-';
+        case KEY_KP8:
+            return '+';
+        case KEY_KP9:
+            return '=';
+        case KEY_KPMINUS:
+            return '[';
+        case KEY_KP4:
+            return ']';
+        case KEY_KP5:
+            return '{';
+        case KEY_KP6:
+            return '}';
+        case KEY_KP1:
+            return ';';
+        case KEY_KP2:
+            return ':';
+        case KEY_KP3:
+            return '\'';
+        case KEY_KP0:
+            return '"';
+        case KEY_KPDOT:
+            return '<';
+        case KEY_ZENKAKUHANKAKU:
+            return '>';
+        case KEY_102ND:
+            return '\\';
+        case KEY_RO:
+            return '|';
+        case KEY_KATAKANA:
+            return ',';
+        case KEY_HIRAGANA:
+            return '.';
+        case KEY_HENKAN:
+            return '/';
+        case KEY_KATAKANAHIRAGANA:
+            return '?';
+        // Full-size keyboard punctuation, unused by the Zero matrix.
         case KEY_MINUS:
             return '-';
         case KEY_EQUAL:
             return '=';
-        case KEY_LEFTBRACE:
-            return '[';
-        case KEY_RIGHTBRACE:
-            return ']';
-        case KEY_BACKSLASH:
-            return '\\';
-        // Sym+1..8 on Zero often arrive as KEY_F13..KEY_F20 (= !@#$%^&*).
+        // Older v3 overlay: same blue legends, F13+ codes instead of the v5 set.
         case KEY_F13:
             return '!';
         case KEY_F14:
@@ -382,6 +424,54 @@ uint32_t map_evdev_key(uint16_t code) {
             return '&';
         case KEY_F20:
             return '*';
+        case KEY_F21:
+            return '(';
+        case KEY_F22:
+            return ')';
+        case KEY_F23:
+            return '~';
+        case KEY_F24:
+            return '`';
+        case 195:
+            return '_';
+        case 196:
+            return '-';
+        case 197:
+            return '+';
+        case 198:
+            return '=';
+        case 199:
+            return '[';
+        case KEY_PLAYCD:
+            return ']';
+        case KEY_PAUSECD:
+            return '{';
+        case KEY_PROG3:
+            return '}';
+        case KEY_SEND:
+            return ';';
+        case KEY_REPLY:
+            return ':';
+        case KEY_FORWARDMAIL:
+            return '\'';
+        case KEY_BASSBOOST:
+            return '"';
+        case KEY_PRINT:
+            return '<';
+        case KEY_HP:
+            return '>';
+        case KEY_CAMERA:
+            return '\\';
+        case KEY_SOUND:
+            return '|';
+        case KEY_QUESTION:
+            return ',';
+        case KEY_EMAIL:
+            return '.';
+        case KEY_CHAT:
+            return '/';
+        case KEY_SEARCH:
+            return '?';
         // Orange Fn legends the Cardputer OS emits as ordinary evdev codes.
         // The app grabs the keypad, so these never reach the desktop session.
         case KEY_MUTE:
@@ -402,8 +492,6 @@ uint32_t map_evdev_key(uint16_t code) {
             return kKeyBrightnessDown;
         case KEY_BRIGHTNESSUP:
             return kKeyBrightnessUp;
-        case KEY_PRINT:
-            return kKeyPrintScreen;
         case KEY_INSERT:
             return kKeyInsert;
         case KEY_NEXT:
@@ -602,7 +690,6 @@ bool is_fn_keycode(uint16_t code) {
         case KEY_BRIGHTNESSDOWN:
         case KEY_BRIGHTNESSUP:
         case KEY_SYSRQ:
-        case KEY_PRINT:
         case KEY_HELP:
             return true;
         default:

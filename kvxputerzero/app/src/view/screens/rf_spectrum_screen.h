@@ -42,11 +42,18 @@ private:
     void on_timer();
     void draw_plot();
     void update_header();
+    void update_footer();
     void open_peak_menu();
+    void handoff_peak(model::ToolId tool);
     void cycle_trace_mode();
     void place_user_marker();
     void clear_user_markers();
     void pulse_alert();
+    void find_strongest();
+    void capture_baseline();
+    void toggle_diff();
+    void apply_freq_entry();
+    const char* band_name() const;
 
     static void timer_cb(lv_timer_t* t);
 
@@ -85,22 +92,33 @@ private:
 
     bool threshold_alert_{false};
     uint32_t last_sweep_ms_{0};
-    bool show_waterfall_{false};
+    bool show_waterfall_{true};
     static constexpr int kWaterRows = 28;
     static constexpr int kWaterCols = 100;
     std::array<int8_t, kWaterRows * kWaterCols> water_{};
+
+    bool help_on_{false};
+    bool entering_freq_{false};
+    std::string freq_entry_;
+    bool diff_on_{false};
+    bool has_baseline_{false};
+    std::vector<int> baseline_;
+    std::string status_extra_;
 
     bool cap_ok_{false};
     std::string cap_error_;
     bool demo_{false};
 
-    lv_obj_t* header_lbl_{nullptr};
+    lv_obj_t* peak_lbl_{nullptr};
+    lv_obj_t* view_lbl_{nullptr};
+    lv_obj_t* footer_lbl_{nullptr};
     lv_obj_t* canvas_{nullptr};
     lv_draw_buf_t* draw_{nullptr};
     int stride_{0};
     int plot_w_{320};
     int plot_h_{100};
     int water_h_{0};
+    bool auto_scale_{true};
 
     lv_timer_t* timer_{nullptr};
     std::atomic<bool> cancel_{false};

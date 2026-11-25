@@ -109,6 +109,14 @@ void BaseModel::set_eng_calc_op(int op) {
     eng_calc_op_ = op;
 }
 
+int BaseModel::eng_calc_group() const {
+    return eng_calc_group_;
+}
+
+void BaseModel::set_eng_calc_group(int group) {
+    eng_calc_group_ = group;
+}
+
 ColorTarget BaseModel::color_target() const {
     return color_target_;
 }

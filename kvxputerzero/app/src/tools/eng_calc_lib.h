@@ -46,8 +46,41 @@ enum class Op {
     TimeDiff,
     TipSplit,
     Distance,
+    Reactance,
+    Timer555,
+    Entropy,
+    HashId,
+    Jwt,
+    Xor,
+    CidrAgg,
+    Oui,
+    Fspl,
+    Transfer,
+    Kwh,
+    Coord,
+    HexView,
     Count,
 };
+
+// Top-level Calculators groups. kMenuLifeBase + n opens a life-counter game.
+enum class Group {
+    Network = 0,
+    Electronics,
+    Radio,
+    Cyber,
+    Data,
+    Gps,
+    General,
+    Others,
+    Count,
+};
+
+constexpr int kMenuLifeBase = 1000;
+
+const char* group_label(Group group);
+int group_size(Group group);
+int group_item_id(Group group, int index);
+const char* group_item_label(Group group, int index);
 
 // Menu label (matches the Cardputer calc menu).
 const char* op_label(Op op);

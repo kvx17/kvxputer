@@ -25,6 +25,7 @@ enum class AppPage {
     CodecMenu,
     CodecWork,
     EngCalcMenu,
+    EngCalcGroup,
     EngCalcWork,
     LifeCounter,
     Timer,
@@ -129,6 +130,8 @@ public:
 
     int eng_calc_op() const;
     void set_eng_calc_op(int op);
+    int eng_calc_group() const;
+    void set_eng_calc_group(int group);
 
     ColorTarget color_target() const;
     void set_color_target(ColorTarget target);
@@ -248,6 +251,7 @@ private:
     int menu_index_ = 0;
     int codec_op_ = 0;
     int eng_calc_op_ = 0;
+    int eng_calc_group_ = -1;
     ColorTarget color_target_ = ColorTarget::Primary;
     uint32_t pri_color_ = kPriDefault;
     uint32_t sec_color_ = kSecFrom565;

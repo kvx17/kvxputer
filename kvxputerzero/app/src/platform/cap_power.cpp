@@ -438,21 +438,41 @@ bool enable_cap_power(CapKindHint kind, std::string& error, std::atomic<bool>* c
     return true;
 }
 
+void cc1101_rf_switch_levels(uint32_t hz, bool& sw0_high, bool& sw1_high) {
+    // Cap SP3T (M5 docs): 315 → 0,1 · 433 → 1,0 · 868/915 → 1,1
+    if (hz < 350000000u) {
+        sw0_high = false;
+        sw1_high = true;
+    } else if (hz < 500000000u) {
+        sw0_high = true;
+        sw1_high = false;
+    } else {
+        sw0_high = true;
+        sw1_high = true;
+    }
+}
+
+uint8_t cc1101_iocfg2_for_sw1(bool sw1_high) {
+    // GDOX_HW_TO_0 (0x2F); INV bit (0x40) forces the pad high for RF_SW1=1.
+    return sw1_high ? static_cast<uint8_t>(0x6F) : static_cast<uint8_t>(0x2F);
+}
+
 bool set_cc1101_rf_path(uint32_t hz, std::string& error) {
     error.clear();
     if (kDesktop) {
         error = "Cap not present";
         return false;
     }
-    // Low path for sub-500 MHz; high for 779–928 (RF_SW1 is hardwired high on Cap).
-    const bool high = hz >= 500000000u;
+    bool sw0 = false, sw1 = false;
+    cc1101_rf_switch_levels(hz, sw0, sw1);
+    (void)sw1; // GDO2 / IOCFG2 is set by Cc1101Session after SPI is open.
     if (!g_held.rf_sw_held) {
         g_held.rf_sw0 = GpioLine("/dev/gpiochip0", kGpioRfSw0);
-        if (!g_held.rf_sw0.request_output(high, error)) return false;
+        if (!g_held.rf_sw0.request_output(sw0, error)) return false;
         g_held.rf_sw_held = true;
         return true;
     }
-    return g_held.rf_sw0.set_value(high, error);
+    return g_held.rf_sw0.set_value(sw0, error);
 }
 
 bool read_cc1101_gdo0(bool& high, std::string& error) {
@@ -476,6 +496,46 @@ bool request_cc1101_gdo0_edges(std::string& error) {
     }
     g_held.gdo0 = GpioLine("/dev/gpiochip0", kGpioGdo0);
     return g_held.gdo0.request_edge_events(error);
+}
+
+bool read_cc1101_gdo0_edges(std::vector<GpioEdgeEvent>& out, std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    if (!g_held.gdo0.ok()) {
+        error = "GDO0 not requested";
+        return false;
+    }
+    return g_held.gdo0.read_edge_events(out, error);
+}
+
+bool request_cc1101_gdo0_output(bool initial_high, std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    g_held.gdo0 = GpioLine("/dev/gpiochip0", kGpioGdo0);
+    return g_held.gdo0.request_output(initial_high, error);
+}
+
+bool set_cc1101_gdo0(bool high, std::string& error) {
+    error.clear();
+    if (kDesktop) {
+        error = "Cap not present";
+        return false;
+    }
+    if (!g_held.gdo0.ok()) {
+        error = "GDO0 not requested";
+        return false;
+    }
+    return g_held.gdo0.set_value(high, error);
+}
+
+void release_cc1101_gdo0() {
+    g_held.gdo0.release();
 }
 
 int cc1101_gdo0_fd() {

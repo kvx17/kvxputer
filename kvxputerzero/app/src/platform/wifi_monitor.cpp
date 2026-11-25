@@ -893,4 +893,109 @@ bool WifiMonitorSession::read_frame(std::vector<uint8_t>& out, int timeout_ms, s
     return true;
 }
 
+bool run_deauth_ids(const std::string& ifname, std::atomic<bool>& cancel,
+                    const std::function<void(const std::string&)>& on_line, std::string& error) {
+    error.clear();
+    if (!iface_name_ok(ifname)) {
+        error = "invalid interface name";
+        return false;
+    }
+    if (monitor_iface_is_onboard(ifname)) {
+        error = "Deauth IDS needs a USB monitor adapter (WiFi → Monitor adapter)";
+        return false;
+    }
+    const std::string helper = find_wifimon_helper();
+    if (helper.empty()) {
+        error = "kvxputerzero-wifimon missing (reinstall kvxputerzero package)";
+        return false;
+    }
+
+    int out_pipe[2]{-1, -1};
+    int in_pipe[2]{-1, -1};
+    if (::pipe(out_pipe) != 0 || ::pipe(in_pipe) != 0) {
+        error = "pipe failed";
+        return false;
+    }
+    const pid_t pid = ::fork();
+    if (pid < 0) {
+        error = "fork failed";
+        ::close(out_pipe[0]);
+        ::close(out_pipe[1]);
+        ::close(in_pipe[0]);
+        ::close(in_pipe[1]);
+        return false;
+    }
+    if (pid == 0) {
+        ::dup2(in_pipe[0], STDIN_FILENO);
+        ::dup2(out_pipe[1], STDOUT_FILENO);
+        ::close(in_pipe[0]);
+        ::close(in_pipe[1]);
+        ::close(out_pipe[0]);
+        ::close(out_pipe[1]);
+        ::execl(helper.c_str(), "kvxputerzero-wifimon", ifname.c_str(), "--ids",
+                static_cast<char*>(nullptr));
+        _exit(127);
+    }
+    ::close(in_pipe[0]);
+    ::close(out_pipe[1]);
+    const int stdin_fd = in_pipe[1];
+    const int stdout_fd = out_pipe[0];
+    ::fcntl(stdout_fd, F_SETFL, ::fcntl(stdout_fd, F_GETFL, 0) | O_NONBLOCK);
+
+    std::string buf;
+    bool ok_seen = false;
+    auto finish = [&](bool ok) {
+        // Ask helper to quit, then SIGTERM.
+        const char q = 'Q';
+        (void)::write(stdin_fd, &q, 1);
+        ::close(stdin_fd);
+        ::close(stdout_fd);
+        ::kill(pid, SIGTERM);
+        int status = 0;
+        ::waitpid(pid, &status, 0);
+        return ok;
+    };
+
+    while (!cancel.load()) {
+        pollfd pfd{};
+        pfd.fd = stdout_fd;
+        pfd.events = POLLIN;
+        const int pr = ::poll(&pfd, 1, 200);
+        if (pr < 0) {
+            if (errno == EINTR) continue;
+            error = "poll failed";
+            return finish(false);
+        }
+        if (pr == 0) continue;
+        if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) break;
+
+        char chunk[512];
+        const ssize_t n = ::read(stdout_fd, chunk, sizeof(chunk));
+        if (n == 0) break;
+        if (n < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
+            error = "read failed";
+            return finish(false);
+        }
+        buf.append(chunk, chunk + n);
+        size_t pos;
+        while ((pos = buf.find('\n')) != std::string::npos) {
+            std::string line = buf.substr(0, pos);
+            buf.erase(0, pos + 1);
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            if (!ok_seen) {
+                if (line != "OK") {
+                    error = line.empty() ? "helper failed" : line;
+                    return finish(false);
+                }
+                ok_seen = true;
+                if (on_line) on_line("listening for deauth/disassoc…");
+                continue;
+            }
+            if (on_line && !line.empty()) on_line(line);
+        }
+    }
+    return finish(ok_seen);
+}
+
 } // namespace platform

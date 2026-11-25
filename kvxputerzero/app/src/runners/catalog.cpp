@@ -76,7 +76,13 @@ std::vector<Entry> build() {
                        false, {{"ssid", "SSID", true}, {"psk", "password", false}}));
     out.push_back(make("wifi", "wifi_disconnect", "Disconnect", Tid::WifiDisconnect, Kind::Log,
                        net_wifi_disconnect()));
+    out.push_back(make("wifi", "wifi_ap", "Start WiFi AP", Tid::WifiAp, Kind::Log, net_wifi_ap(), false, false,
+                       {{"ssid", "SSID", false}, {"psk", "password (min 8)", false}}));
     out.push_back(make("wifi", "wifi_ap_info", "AP info", Tid::WifiApInfo, Kind::Log, net_wifi_ap_info()));
+    out.push_back(make("wifi", "jam_detect", "Jam Detect", Tid::WifiJamDetect, Kind::StandIn, net_jam_detect(),
+                       false, true));
+    out.push_back(make("wifi", "deauth_ids", "Deauth IDS", Tid::WifiDeauthIds, Kind::Log, net_deauth_ids(), false,
+                       true));
     out.push_back(make("wifi", "net_toolkit", "Net Toolkit", Tid::NetToolkit, Kind::Menu, net_ping(), false, false,
                        {}, {"ping", "dig", "curl", "trace"}));
     out.push_back(make("wifi", "ping", "Ping", Tid::None, Kind::Log, net_ping(), false, false,
@@ -174,6 +180,11 @@ std::vector<Entry> build() {
     out.push_back(make("ble", "chameleon_status", "Chameleon Status", Tid::ChameleonStatus, Kind::Log,
                        net_ble_status("chameleon", ""), false, true));
 
+    out.push_back(make("usb", "hid_remote", "kvxkeyboard HID", Tid::HidRemote, Kind::Info,
+                       tools_info("kvxkeyboard HID runs in the screen app (USB / BLE).")));
+    out.push_back(make("usb", "badusb_hunter", "BadUSB Hunter", Tid::BadUsbHunter, Kind::Log,
+                       net_badusb_hunter()));
+
     // Ethernet
     out.push_back(make("ethernet", "eth_link", "Link status", Tid::None, Kind::Log, net_eth_link()));
     out.push_back(make("ethernet", "scan_hosts", "Scan Hosts", Tid::ScanHosts, Kind::Log, net_scan_hosts()));
@@ -256,6 +267,8 @@ std::vector<Entry> build() {
                        true, {{"device", "tty", true}}));
     out.push_back(make("modules", "pahub_scan", "PaHub Scan", Tid::PahubScan, Kind::Log, modules_pahub(), false,
                        true));
+    out.push_back(make("modules", "companion_bins", "Companion bins", Tid::CompanionBins, Kind::Log,
+                       modules_companion_bins()));
     out.push_back(make("modules", "ibutton_read", "iButton Read", Tid::IButtonRead, Kind::Log, modules_ibutton(),
                        false, true));
     out.push_back(make("modules", "pn532_killer", "PN532Killer UART", Tid::Pn532KillerUart, Kind::Info,
@@ -267,6 +280,7 @@ std::vector<Entry> build() {
 
     // RF / NRF / LoRa / FM
     out.push_back(make("rf", "rf_status", "Cap Status", Tid::RfStatus, Kind::Log, radio_rf("rf_status"), false, true));
+    out.push_back(make("rf", "rf_config", "RF Settings", Tid::RfConfig, Kind::Log, radio_rf("rf_config"), false, true));
     out.push_back(make("rf", "rf_spectrum", "Spectrum", Tid::RfSpectrum, Kind::Log, radio_rf("rf_spectrum"), false,
                        true));
     out.push_back(make("rf", "rf_listen", "Listen", Tid::RfListen, Kind::Log, radio_rf("rf_listen"), false, true));
@@ -275,7 +289,11 @@ std::vector<Entry> build() {
                        true));
     out.push_back(make("rf", "rf_library", "Protocol Library", Tid::RfLibrary, Kind::Log, radio_rf("rf_library"), true,
                        true));
+    out.push_back(make("rf", "rf_send_code", "Send Code", Tid::RfSendCode, Kind::Log, radio_rf("rf_send_code"), true,
+                       true));
     out.push_back(make("rf", "rf_send_test", "Send Test", Tid::RfSendTest, Kind::Log, radio_rf("rf_send_test"), true,
+                       true));
+    out.push_back(make("rf", "rf_carrier", "Carrier Test", Tid::RfCarrierTest, Kind::Log, radio_rf("rf_carrier"), true,
                        true));
 
     out.push_back(make("nrf24", "nrf24_info", "Information", Tid::Nrf24Info, Kind::Info, radio_nrf24("nrf24_info")));
@@ -386,8 +404,8 @@ std::vector<Entry> build() {
     out.push_back(make("camera", "camera", "Camera", Tid::None, Kind::StandIn, standin_camera()));
     out.push_back(make("gallery", "gallery", "Gallery", Tid::None, Kind::StandIn, standin_gallery()));
     out.push_back(make("usb", "usb", "USB", Tid::None, Kind::Info,
-                       tools_info("kvxkeyboard HID (USB / BLE keyboard, mouse, presenter) runs in the screen app: "
-                                  "USB channel. BadUSB and mass storage are not available.")));
+                       tools_info("USB channel: kvxkeyboard HID + BadUSB Hunter (host inspect). "
+                                  "BadUSB gadget and mass storage are not available.")));
     out.push_back(make("config", "main_color", "Main color", Tid::None, Kind::Log, config_tool("main_color"), false,
                        false, {{"hex", "RRGGBB", true}}));
     out.push_back(make("config", "accent_color", "Accent color", Tid::None, Kind::Log, config_tool("accent_color"),

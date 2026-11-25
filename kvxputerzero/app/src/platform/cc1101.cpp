@@ -2,18 +2,22 @@
 
 #include "cap_detect.h"
 #include "cap_power.h"
+#include "rf_settings.h"
 #include "spi_device.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <dirent.h>
 #include <fstream>
 #include <memory>
 #include <sstream>
 #include <thread>
+#include <time.h>
 
 namespace platform {
 namespace {
@@ -82,16 +86,56 @@ constexpr uint8_t PATABLE = 0x3E;
 // Status
 constexpr uint8_t RSSI = 0x34;
 constexpr uint8_t MARCSTATE = 0x35;
+constexpr uint8_t PARTNUM = 0x30;
+constexpr uint8_t VERSION = 0x31;
 
-uint8_t pa_byte(Cc1101PaLevel level) {
-    // Approximate PATABLE values for 433/868 (SmartRF / Elechouse tables).
-    switch (level) {
-        case Cc1101PaLevel::Min: return 0x03; // ~-30 dBm
-        case Cc1101PaLevel::Low: return 0x60; // ~0 dBm
-        case Cc1101PaLevel::Mid: return 0xC8; // ~+7 dBm
-        case Cc1101PaLevel::Max: return 0xC0; // ~+10 dBm
+// TI CC1101 datasheet PATABLE columns (Min/Low/Mid/Max ≈ −30 / 0 / +5 / +7 dBm).
+// Max (+10) is never returned: rf_clamp_pa blocks Cc1101PaLevel::Max at the TX gate.
+uint8_t pa_byte(Cc1101PaLevel level, int band_idx) {
+    // Columns: 315, 433, 868, 915 (868/915 share synthesizer band index 2 → pick by hz later).
+    static constexpr uint8_t kTab[4][4] = {
+        // Min   Low   Mid   Max(+7, not +10)
+        {0x12, 0x60, 0x85, 0xC8}, // 315
+        {0x12, 0x60, 0x85, 0xC8}, // 433 (0xC0 is +10; keep Mid/Max ≤ +7 as 0xC8)
+        {0x03, 0x50, 0x85, 0xC8}, // 868
+        {0x03, 0x50, 0x85, 0xC8}, // 915
+    };
+    int col = 1;
+    if (band_idx == 0) col = 0;
+    else if (band_idx == 1) col = 1;
+    else col = 2; // 779–928 → 868 table; 915 uses same column
+    const int row = std::clamp(static_cast<int>(level), 0, 3);
+    return kTab[col][row];
+}
+
+int rssi_offset_for_band(int band_idx) {
+    (void)band_idx;
+    // Datasheet convert: RSSI_dBm = (RSSI_raw / 2) − offset. Nominal 74 for 26 MHz.
+    return 74;
+}
+
+int dwell_us_for_bw(float bw_khz) {
+    if (bw_khz < 1.f) bw_khz = 650.f;
+    // ~8 / RX_BW seconds → µs; clamp so sweeps stay responsive.
+    const int us = static_cast<int>(std::lround(8.0e6 / (bw_khz * 1000.0)));
+    return std::clamp(us, 400, 2500);
+}
+
+void sleep_until_abs(const timespec& deadline) {
+    for (;;) {
+        const int rc = ::clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &deadline, nullptr);
+        if (rc == 0) return;
+        if (rc != EINTR) return;
     }
-    return 0x60;
+}
+
+timespec add_us(timespec t, int64_t us) {
+    t.tv_nsec += us * 1000;
+    while (t.tv_nsec >= 1000000000L) {
+        t.tv_nsec -= 1000000000L;
+        t.tv_sec += 1;
+    }
+    return t;
 }
 
 uint8_t mdmcfg4_for_bw(float khz) {
@@ -276,6 +320,7 @@ bool Cc1101Session::open(const std::string& spidev, std::string& error) {
     if (!spi) return false;
     impl_ = new Impl();
     impl_->spi = std::move(spi);
+    rssi_cal_db_ = load_rf_settings().rssi_cal_db;
     if (!soft_reset(error)) return false;
     return apply_preset(Cc1101Preset::SpectrumWide, error);
 }
@@ -312,8 +357,8 @@ bool Cc1101Session::apply_preset(Cc1101Preset preset, std::string& error) {
 
     auto w = [&](uint8_t r, uint8_t v) { return write_reg(r, v, error); };
 
-    // Shared base
-    if (!w(IOCFG2, 0x2E) || !w(IOCFG1, 0x2E)) return false;
+    // Shared base. IOCFG2 is rewritten per frequency for Cap RF_SW1 (GDO2).
+    if (!w(IOCFG2, cc1101_iocfg2_for_sw1(true)) || !w(IOCFG1, 0x2E)) return false;
     if (!w(FIFOTHR, 0x47) || !w(PKTCTRL1, 0x04) || !w(PKTCTRL0, 0x00)) return false;
     if (!w(ADDR, 0x00) || !w(CHANNR, 0x00)) return false;
     if (!w(FSCTRL1, 0x06) || !w(FSCTRL0, 0x00)) return false;
@@ -327,40 +372,53 @@ bool Cc1101Session::apply_preset(Cc1101Preset preset, std::string& error) {
     switch (preset) {
         case Cc1101Preset::SpectrumWide:
             // ASK/OOK, no sync, asynchronous serial, wide BW ~650 kHz, GDO0 = serial data out.
-            if (!w(IOCFG0, 0x0D)) return false; // serial synchronous data output
+            if (!w(IOCFG0, 0x0D)) return false;
             if (!w(MDMCFG4, mdmcfg4_for_bw(650.f)) || !w(MDMCFG3, 0x83)) return false;
-            if (!w(MDMCFG2, 0x30) || !w(MDMCFG1, 0x22) || !w(MDMCFG0, 0xF8)) return false; // ASK/OOK
+            if (!w(MDMCFG2, 0x30) || !w(MDMCFG1, 0x22) || !w(MDMCFG0, 0xF8)) return false;
             if (!w(DEVIATN, 0x00) || !w(FREND0, 0x11) || !w(MCSM1, 0x0C)) return false;
+            rx_bw_khz_ = 650.f;
             break;
         case Cc1101Preset::OokAsync:
             if (!w(IOCFG0, 0x0D)) return false;
             if (!w(MDMCFG4, mdmcfg4_for_bw(270.f)) || !w(MDMCFG3, 0x93)) return false;
             if (!w(MDMCFG2, 0x30) || !w(MDMCFG1, 0x22) || !w(MDMCFG0, 0xF8)) return false;
             if (!w(DEVIATN, 0x00) || !w(FREND0, 0x11) || !w(MCSM1, 0x0C)) return false;
-            if (!w(PKTCTRL0, 0x32)) return false; // async serial mode
+            if (!w(PKTCTRL0, 0x32)) return false;
+            rx_bw_khz_ = 270.f;
             break;
         case Cc1101Preset::Fsk2:
-            if (!w(IOCFG0, 0x06)) return false; // sync word assert
+            if (!w(IOCFG0, 0x06)) return false;
             if (!w(MDMCFG4, mdmcfg4_for_bw(203.f)) || !w(MDMCFG3, 0x83)) return false;
-            if (!w(MDMCFG2, 0x03) || !w(MDMCFG1, 0x22) || !w(MDMCFG0, 0xF8)) return false; // 2-FSK
+            if (!w(MDMCFG2, 0x03) || !w(MDMCFG1, 0x22) || !w(MDMCFG0, 0xF8)) return false;
             if (!w(DEVIATN, 0x40) || !w(FREND0, 0x10) || !w(MCSM1, 0x3C)) return false;
             if (!w(PKTCTRL0, 0x05)) return false;
+            rx_bw_khz_ = 203.f;
             break;
     }
 
     if (!set_pa_level(pa_, error)) return false;
+    if (!apply_rf_sw1(error)) return false;
     preset_ = preset;
     rx_active_ = false;
     return true;
 }
 
+bool Cc1101Session::apply_rf_sw1(std::string& error) {
+    bool sw0 = false, sw1 = true;
+    cc1101_rf_switch_levels(freq_hz_, sw0, sw1);
+    (void)sw0;
+    return write_reg(IOCFG2, cc1101_iocfg2_for_sw1(sw1), error);
+}
+
 bool Cc1101Session::set_pa_level(Cc1101PaLevel level, std::string& error) {
     pa_ = level;
-    const uint8_t v = pa_byte(level);
+    const int band = cc1101_band_index(freq_hz_);
+    const uint8_t v = pa_byte(level, band < 0 ? 1 : band);
     return write_burst(PATABLE, &v, 1, error);
 }
 
 bool Cc1101Session::set_rx_bw_khz(float khz, std::string& error) {
+    rx_bw_khz_ = khz;
     return write_reg(MDMCFG4, mdmcfg4_for_bw(khz), error);
 }
 
@@ -382,6 +440,14 @@ bool Cc1101Session::set_frequency_hz(uint32_t hz, std::string& error, bool enter
         error.clear();
     }
 
+    freq_hz_ = hz;
+    if (!apply_rf_sw1(error)) {
+        error.clear();
+    }
+    if (!set_pa_level(pa_, error)) {
+        error.clear();
+    }
+
     const uint32_t freq = static_cast<uint32_t>(std::lround((static_cast<double>(hz) * 65536.0) / kFxosc));
     if (!write_reg(FREQ2, static_cast<uint8_t>((freq >> 16) & 0xFF), error)) return false;
     if (!write_reg(FREQ1, static_cast<uint8_t>((freq >> 8) & 0xFF), error)) return false;
@@ -391,7 +457,6 @@ bool Cc1101Session::set_frequency_hz(uint32_t hz, std::string& error, bool enter
     wait_idle(error);
     error.clear();
 
-    freq_hz_ = hz;
     rx_active_ = false;
     if (enter_rx_flag) return enter_rx(error);
     return true;
@@ -400,8 +465,7 @@ bool Cc1101Session::set_frequency_hz(uint32_t hz, std::string& error, bool enter
 bool Cc1101Session::enter_rx(std::string& error) {
     if (!strobe(SRX, error)) return false;
     rx_active_ = true;
-    // Brief AGC settle.
-    std::this_thread::sleep_for(std::chrono::microseconds(400));
+    std::this_thread::sleep_for(std::chrono::microseconds(dwell_us_for_bw(rx_bw_khz_)));
     return true;
 }
 
@@ -419,11 +483,23 @@ bool Cc1101Session::read_rssi_dbm(int& dbm, std::string& error) {
     if (!rx_active_) {
         if (!enter_rx(error)) return false;
     }
-    uint8_t raw = 0;
-    if (!read_status(RSSI, raw, error)) return false;
-    const int8_t s = static_cast<int8_t>(raw);
-    dbm = static_cast<int>(s) / 2 - 74;
+    const int band = cc1101_band_index(freq_hz_);
+    const int offset = rssi_offset_for_band(band < 0 ? 1 : band);
+    int sum = 0;
+    for (int i = 0; i < 2; ++i) {
+        uint8_t raw = 0;
+        if (!read_status(RSSI, raw, error)) return false;
+        const int8_t s = static_cast<int8_t>(raw);
+        sum += static_cast<int>(s) / 2 - offset + rssi_cal_db_;
+        if (i == 0) std::this_thread::sleep_for(std::chrono::microseconds(50));
+    }
+    dbm = sum / 2;
     return true;
+}
+
+bool Cc1101Session::read_chip_id(uint8_t& partnum, uint8_t& version, std::string& error) {
+    if (!read_status(PARTNUM, partnum, error)) return false;
+    return read_status(VERSION, version, error);
 }
 
 bool Cc1101Session::spectrum_sweep(const std::vector<uint32_t>& freqs, std::vector<int>& rssi_out,
@@ -433,17 +509,9 @@ bool Cc1101Session::spectrum_sweep(const std::vector<uint32_t>& freqs, std::vect
     if (freqs.empty()) return true;
     if (!apply_preset(Cc1101Preset::SpectrumWide, error)) return false;
 
-    uint32_t last_path_band = 0;
-    bool path_set = false;
     for (uint32_t f : freqs) {
         if (cancel && cancel->load()) break;
-        const uint32_t band = f >= 500000000u ? 1u : 0u;
-        if (!path_set || band != last_path_band) {
-            (void)set_cc1101_rf_path(f, error);
-            error.clear();
-            last_path_band = band;
-            path_set = true;
-        }
+        // set_frequency_hz updates RF_SW0 + IOCFG2 (RF_SW1) per hop.
         if (!set_frequency_hz(f, error, true)) {
             rssi_out.push_back(-120);
             error.clear();
@@ -508,18 +576,24 @@ bool Cc1101Session::tx_carrier(uint32_t hz, Cc1101PaLevel level, int duration_ms
     if (!apply_preset(Cc1101Preset::OokAsync, error)) return false;
     if (!set_pa_level(level, error)) return false;
     if (!set_frequency_hz(hz, error, false)) return false;
-    // Async serial TX: hold GDO0 high via FREND/PA; STX with continuous TX.
-    // IOCFG0 = 0x2E (high-Z), force TX by writing TX FIFO length 0 and STX in async.
+    // Async serial TX: GDO0 is data in; hold high for continuous carrier.
     if (!write_reg(IOCFG0, 0x2E, error)) return false;
-    if (!write_reg(PKTCTRL0, 0x32, error)) return false; // async
-    if (!strobe(STX, error)) return false;
+    if (!write_reg(PKTCTRL0, 0x32, error)) return false;
+    if (!apply_rf_sw1(error)) return false;
+    if (!request_cc1101_gdo0_output(true, error)) return false;
+    if (!strobe(STX, error)) {
+        release_cc1101_gdo0();
+        return false;
+    }
 
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(duration_ms);
     while (std::chrono::steady_clock::now() < end) {
         if (cancel && cancel->load()) break;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    return stop_tx(error);
+    const bool ok_stop = stop_tx(error);
+    release_cc1101_gdo0();
+    return ok_stop;
 }
 
 bool Cc1101Session::tx_raw_timings(uint32_t hz, Cc1101PaLevel level, const std::vector<int>& timings_us,
@@ -533,24 +607,65 @@ bool Cc1101Session::tx_raw_timings(uint32_t hz, Cc1101PaLevel level, const std::
     if (!apply_preset(Cc1101Preset::OokAsync, error)) return false;
     if (!set_pa_level(level, error)) return false;
     if (!set_frequency_hz(hz, error, false)) return false;
-    // Bit-bang: STX for mark duration with continuous carrier, SIDLE for space.
+    // Async serial OOK: STX once, bit-bang GDO0 with absolute deadlines (no SPI per edge).
+    if (!write_reg(IOCFG0, 0x2E, error)) return false;
+    if (!write_reg(PKTCTRL0, 0x32, error)) return false;
+    if (!apply_rf_sw1(error)) return false;
+    if (!request_cc1101_gdo0_output(false, error)) return false;
+
+    auto cleanup = [&]() {
+        (void)stop_tx(error);
+        release_cc1101_gdo0();
+    };
+
+    if (!strobe(STX, error)) {
+        cleanup();
+        return false;
+    }
+
+    int64_t max_jitter_ns = 0;
     for (int r = 0; r < repeats; ++r) {
         if (cancel && cancel->load()) break;
+
+        timespec start{};
+        ::clock_gettime(CLOCK_MONOTONIC, &start);
+        // Warm-up carrier ~1.5 ms before first element.
+        timespec deadline = add_us(start, 1500);
+        if (!set_cc1101_gdo0(true, error)) {
+            cleanup();
+            return false;
+        }
+        sleep_until_abs(deadline);
+
         for (int t : timings_us) {
             if (cancel && cancel->load()) break;
             const int us = std::abs(t);
-            if (t > 0) {
-                if (!strobe(STX, error)) return false;
-                std::this_thread::sleep_for(std::chrono::microseconds(us));
-            } else {
-                if (!strobe(SIDLE, error)) return false;
-                std::this_thread::sleep_for(std::chrono::microseconds(us));
+            if (us <= 0) continue;
+            const bool mark = t > 0;
+            if (!set_cc1101_gdo0(mark, error)) {
+                cleanup();
+                return false;
             }
+            deadline = add_us(deadline, us);
+            timespec now{};
+            ::clock_gettime(CLOCK_MONOTONIC, &now);
+            const int64_t late_ns =
+                (now.tv_sec - deadline.tv_sec) * 1000000000LL + (now.tv_nsec - deadline.tv_nsec);
+            if (late_ns > max_jitter_ns) max_jitter_ns = late_ns;
+            sleep_until_abs(deadline);
         }
-        (void)strobe(SIDLE, error);
-        if (delay_ms > 0 && r + 1 < repeats) std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        (void)set_cc1101_gdo0(false, error);
+        if (delay_ms > 0 && r + 1 < repeats) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        }
     }
-    return stop_tx(error);
+    if (max_jitter_ns > 0) {
+        std::fprintf(stderr, "cc1101 tx_raw_timings max_jitter_us=%lld\n",
+                     static_cast<long long>(max_jitter_ns / 1000));
+    }
+    cleanup();
+    error.clear();
+    return true;
 }
 
 bool Cc1101Session::send_test_packet(const uint8_t* payload, size_t len, std::string& error) {

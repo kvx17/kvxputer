@@ -16,8 +16,10 @@
 #include "rf_listen_screen.h"
 #include "rf_record_screen.h"
 #include "rf_replay_screen.h"
+#include "rf_send_code_screen.h"
 #include "rf_send_test_screen.h"
 #include "rf_settings.h"
+#include "rf_settings_screen.h"
 #include "rf_spectrum_screen.h"
 #include "run_screen.h"
 #include "si4713.h"
@@ -235,9 +237,29 @@ Screen make_rf_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
                 return;
             }
             fields.push_back({"chip", "CC1101"});
-            fields.push_back({"path", c.path});
+            fields.push_back({"spidev", c.path});
             if (!c.detail.empty()) fields.push_back({"detail", c.detail});
+            uint8_t part = 0, ver = 0;
+            {
+                platform::Cc1101Session radio;
+                std::string err;
+                if (radio.open({}, err) && radio.read_chip_id(part, ver, err)) {
+                    char idbuf[32];
+                    std::snprintf(idbuf, sizeof(idbuf), "0x%02X / 0x%02X", part, ver);
+                    fields.push_back({"PART/VER", idbuf});
+                    const bool genuine = (part == 0x00 && ver == 0x14) || ver == 0x04 || ver == 0x14;
+                    fields.push_back({"id", genuine ? "CC1101 OK" : "unexpected"});
+                }
+                radio.close();
+            }
+            bool sw0 = false, sw1 = false;
+            platform::cc1101_rf_switch_levels(settings.freq_hz, sw0, sw1);
             fields.push_back({"freq", platform::rf_format_mhz(settings.freq_hz) + " MHz"});
+            fields.push_back({"RF_SW", std::string("SW0=") + (sw0 ? "1" : "0") + " SW1=" + (sw1 ? "1" : "0")});
+            const char* ant = "868 MHz antenna (covers 915)";
+            if (settings.freq_hz < 350000000u) ant = "315 MHz antenna";
+            else if (settings.freq_hz < 500000000u) ant = "433 MHz antenna";
+            fields.push_back({"antenna", ant});
             fields.push_back({"region", settings.region == platform::RfRegion::Us ? "US" : "EU"});
             fields.push_back({"step", std::to_string(settings.step_hz) + " Hz"});
             status = "OK";
@@ -261,8 +283,14 @@ Screen make_rf_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
     if (id == ToolId::RfReplay) {
         return std::make_unique<screen::RfReplayScreen>(vm, assets, false);
     }
-    if (id == ToolId::RfSendTest) {
+    if (id == ToolId::RfSendTest || id == ToolId::RfCarrierTest) {
         return std::make_unique<screen::RfSendTestScreen>(vm, assets);
+    }
+    if (id == ToolId::RfConfig) {
+        return std::make_unique<screen::RfSettingsScreen>(vm, assets);
+    }
+    if (id == ToolId::RfSendCode) {
+        return std::make_unique<screen::RfSendCodeScreen>(vm, assets);
     }
     return nullptr;
 }
@@ -767,8 +795,41 @@ Screen make_tag_tool(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
 
 // --- Modules extras ----------------------------------------------------------------------
 
+Screen make_companion_bins(VM& vm, AssetManager& assets) {
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::path(tools::config_dir()) / "companions";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    std::vector<std::string> lines;
+    if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
+        lines.push_back("Create ~/.config/kvxputerzero/companions/");
+        lines.push_back("Put .bin files there.");
+        lines.push_back("Flash from a PC (pio companion-*).");
+        return make_results(vm, assets, "Companion bins", std::move(lines));
+    }
+    for (const auto& ent : fs::directory_iterator(dir, ec)) {
+        if (ec) break;
+        if (!ent.is_regular_file(ec)) continue;
+        const auto name = ent.path().filename().string();
+        if (name.size() < 5 || name.substr(name.size() - 4) != ".bin") continue;
+        const auto sz = ent.file_size(ec);
+        lines.push_back(name + "  " + std::to_string(static_cast<unsigned long long>(sz)) + " bytes");
+    }
+    if (lines.empty()) {
+        lines.push_back("No .bin in");
+        lines.push_back(dir.string());
+        lines.push_back("Flash from a PC:");
+        lines.push_back("pio companion-*");
+    } else {
+        lines.push_back("---");
+        lines.push_back("Flash from a PC (do not flash on Zero).");
+    }
+    return make_results(vm, assets, "Companion bins", std::move(lines));
+}
+
 Screen make_modules_extra(VM& vm, AssetManager& assets, ToolId id, const Stage& st) {
     if (id == ToolId::CapProbe) return make_cap_probe(vm, assets);
+    if (id == ToolId::CompanionBins) return make_companion_bins(vm, assets);
     if (id == ToolId::PahubScan) {
         return make_run(vm, assets, "PaHub Scan", [](Cancel&, const Log& log, const Status& status) {
             status("scanning");

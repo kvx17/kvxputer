@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
@@ -83,6 +84,17 @@ void RfReplayScreen::reload() {
 void RfReplayScreen::refresh() {
     if (!label_) return;
     char buf[512];
+    if (help_on_) {
+        std::snprintf(buf, sizeof(buf),
+                      "Enter TX/decode  R rename  D del\nN new  O override  G region\n1-3 fav  Shift+1-3 store\n?=help");
+        lv_label_set_text(label_, buf);
+        return;
+    }
+    if (renaming_) {
+        std::snprintf(buf, sizeof(buf), "Rename:\n%s_\nEnter confirm  Esc cancel", rename_buf_.c_str());
+        lv_label_set_text(label_, buf);
+        return;
+    }
     if (editing_) {
         std::snprintf(buf, sizeof(buf), "Pulse editor: %zu pairs\nZ/C add mark/space  Del pop\nEnter save as custom.sub  Esc cancel\n%s",
                       edit_timings_.size(), status_.c_str());
@@ -96,16 +108,19 @@ void RfReplayScreen::refresh() {
         return;
     }
     const auto& m = meta_[static_cast<size_t>(index_)];
+    const uint32_t hz = override_freq_ ? override_hz_ : (m.freq_hz ? m.freq_hz : settings_.freq_hz);
+    const int duty_left = platform::rf_duty_remaining_ms(hz);
     char meta_line[160];
     std::snprintf(meta_line, sizeof(meta_line), "%s  %s  %s  %zu edges",
                   platform::rf_format_mhz(m.freq_hz ? m.freq_hz : 0).c_str(),
                   m.protocol.empty() ? "?" : m.protocol.c_str(),
                   m.preset.empty() ? "-" : m.preset.c_str(), m.timings_us.size());
     std::snprintf(buf, sizeof(buf),
-                  "[%d/%zu] %s\n%s\nrep %d delay %dms %s%s\nF/X select  Enter %s  D del  R rename\n%s",
+                  "[%d/%zu] %s\n%s\nrep %d delay %dms %s%s  %s duty %dms\nF/X select  Enter %s  R rename\n%s",
                   index_ + 1, names_.size(), names_[static_cast<size_t>(index_)].c_str(), meta_line, repeats_,
                   delay_ms_, override_freq_ ? "ovr " : "",
                   override_freq_ ? platform::rf_format_mhz(override_hz_).c_str() : "",
+                  settings_.region == platform::RfRegion::Us ? "US" : "EU", duty_left,
                   library_mode_ ? "decode" : "TX", status_.c_str());
     lv_label_set_text(label_, buf);
 }
@@ -129,19 +144,31 @@ void RfReplayScreen::play_selected() {
         status_ = "No RAW_Data";
         return;
     }
+    if (m.comment.find("not replayable") != std::string::npos ||
+        m.comment.find("RSSI archive") != std::string::npos ||
+        m.comment.find("Archive: RSSI") != std::string::npos) {
+        status_ = "RSSI archive — not replayable";
+        return;
+    }
     uint32_t hz = override_freq_ ? override_hz_ : (m.freq_hz ? m.freq_hz : settings_.freq_hz);
     std::string reason;
     if (!platform::rf_tx_allowed(settings_.region, hz, reason)) {
         status_ = reason;
         return;
     }
-    // Rolling-code protocol files: refuse TX
-    if (!m.protocol.empty() && m.protocol != "RAW") {
-        const auto dec = platform::decode_ook_timings(m.timings_us);
-        if (dec.rolling) {
-            status_ = "Rolling-code: replay disabled";
-            return;
-        }
+    const auto dec = platform::decode_ook_timings(m.timings_us);
+    if (dec.ok && dec.rolling) {
+        status_ = "Rolling-code: replay disabled";
+        return;
+    }
+    int on_air_ms = 0;
+    for (int t : m.timings_us) {
+        if (t > 0) on_air_ms += (t + 999) / 1000;
+    }
+    on_air_ms *= std::max(1, repeats_);
+    if (!platform::rf_duty_reserve(hz, on_air_ms, reason)) {
+        status_ = reason;
+        return;
     }
     const auto cap = platform::detect_cc1101();
     if (!cap.present) {
@@ -181,16 +208,76 @@ void RfReplayScreen::delete_selected() {
 
 void RfReplayScreen::rename_selected() {
     if (names_.empty()) return;
-    // Simple rename: append _2 before extension
-    const std::string& old = names_[static_cast<size_t>(index_)];
-    std::string neu = old;
-    const auto dot = neu.rfind('.');
-    if (dot == std::string::npos) neu += "_2";
-    else neu.insert(dot, "_2");
+    renaming_ = true;
+    rename_buf_ = names_[static_cast<size_t>(index_)];
+    const auto dot = rename_buf_.rfind('.');
+    if (dot != std::string::npos) rename_buf_ = rename_buf_.substr(0, dot);
+    status_ = "Type new name";
+}
+
+void RfReplayScreen::import_subs_from_dir(const std::string& dir) {
     std::error_code ec;
-    fs::rename(platform::rf_dir() + "/" + old, platform::rf_dir() + "/" + neu, ec);
-    status_ = ec ? "Rename failed" : ("Renamed " + neu);
+    if (!fs::is_directory(dir, ec)) {
+        status_ = "Import dir missing";
+        return;
+    }
+    int n = 0;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != fs::recursive_directory_iterator(); ++it) {
+        if (ec) break;
+        if (it.depth() > 3) {
+            it.disable_recursion_pending();
+            continue;
+        }
+        if (!it->is_regular_file(ec)) continue;
+        const auto name = it->path().filename().string();
+        if (name.size() < 5 || name.substr(name.size() - 4) != ".sub") continue;
+        fs::copy_file(it->path(), platform::rf_dir() + "/" + name, fs::copy_options::overwrite_existing, ec);
+        if (!ec) ++n;
+        if (n >= 200) break;
+    }
+    status_ = "Imported " + std::to_string(n) + " .sub";
     reload();
+}
+
+void RfReplayScreen::bind_favourite_slot(size_t slot) {
+    if (names_.empty() || slot > 2) return;
+    while (settings_.favourite_paths.size() <= slot) settings_.favourite_paths.push_back({});
+    settings_.favourite_paths[slot] = names_[static_cast<size_t>(index_)];
+    platform::save_rf_settings(settings_);
+    status_ = "Fav " + std::to_string(slot + 1) + " = " + settings_.favourite_paths[slot];
+}
+
+void RfReplayScreen::play_favourite_slot(size_t slot) {
+    if (slot < settings_.favourite_paths.size() && !settings_.favourite_paths[slot].empty()) {
+        const std::string& want = settings_.favourite_paths[slot];
+        for (size_t i = 0; i < names_.size(); ++i) {
+            if (names_[i] == want) {
+                index_ = static_cast<int>(i);
+                if (!library_mode_) play_selected();
+                else decode_selected();
+                return;
+            }
+        }
+        status_ = "Fav file missing";
+        return;
+    }
+    // Legacy: nearest frequency favourite
+    if (slot < settings_.favourites.size() && !names_.empty()) {
+        uint32_t want = settings_.favourites[slot];
+        int best = 0;
+        uint32_t best_d = UINT32_MAX;
+        for (size_t i = 0; i < meta_.size(); ++i) {
+            const uint32_t d =
+                meta_[i].freq_hz > want ? meta_[i].freq_hz - want : want - meta_[i].freq_hz;
+            if (d < best_d) {
+                best_d = d;
+                best = static_cast<int>(i);
+            }
+        }
+        index_ = best;
+        if (!library_mode_) play_selected();
+        else decode_selected();
+    }
 }
 
 void RfReplayScreen::decode_selected() {
@@ -224,12 +311,44 @@ bool RfReplayScreen::handle_key(uint32_t key) {
         return true;
     }
     if (key == LV_KEY_ESC) {
+        if (renaming_) {
+            renaming_ = false;
+            status_ = "Rename cancelled";
+            return true;
+        }
         if (editing_) {
             editing_ = false;
             status_ = "Edit cancelled";
             return true;
         }
         return KvxScreen::handle_key(key);
+    }
+    if (renaming_) {
+        if (key == LV_KEY_ENTER) {
+            if (rename_buf_.empty()) {
+                status_ = "Empty name";
+                renaming_ = false;
+                return true;
+            }
+            std::string neu = rename_buf_;
+            if (neu.size() < 4 || neu.substr(neu.size() - 4) != ".sub") neu += ".sub";
+            const std::string& old = names_[static_cast<size_t>(index_)];
+            std::error_code ec;
+            fs::rename(platform::rf_dir() + "/" + old, platform::rf_dir() + "/" + neu, ec);
+            renaming_ = false;
+            status_ = ec ? "Rename failed" : ("Renamed " + neu);
+            reload();
+            return true;
+        }
+        if (key == LV_KEY_BACKSPACE || key == 8) {
+            if (!rename_buf_.empty()) rename_buf_.pop_back();
+            return true;
+        }
+        if (key >= 32 && key < 127 && key != '/' && rename_buf_.size() < 48) {
+            rename_buf_.push_back(static_cast<char>(key));
+            return true;
+        }
+        return true;
     }
     if (editing_) {
         if (key == LV_KEY_LEFT || key == 'z' || key == 'Z') {
@@ -318,24 +437,25 @@ bool RfReplayScreen::handle_key(uint32_t key) {
         status_ = settings_.region == platform::RfRegion::Us ? "Region US" : "Region EU";
         return true;
     }
-    // Quick slots 1-3: store/play favourites paths via settings favourites freqs — play first matching file
+    if (key == '!' || key == '@' || key == '#') {
+        const size_t slot = key == '!' ? 0 : (key == '@' ? 1 : 2);
+        bind_favourite_slot(slot);
+        return true;
+    }
     if (key >= '1' && key <= '3') {
-        const size_t slot = static_cast<size_t>(key - '1');
-        if (slot < settings_.favourites.size() && !names_.empty()) {
-            // Pick file closest to favourite freq
-            uint32_t want = settings_.favourites[slot];
-            int best = 0;
-            uint32_t best_d = UINT32_MAX;
-            for (size_t i = 0; i < meta_.size(); ++i) {
-                const uint32_t d = meta_[i].freq_hz > want ? meta_[i].freq_hz - want : want - meta_[i].freq_hz;
-                if (d < best_d) {
-                    best_d = d;
-                    best = static_cast<int>(i);
-                }
-            }
-            index_ = best;
-            if (!library_mode_) play_selected();
-            else decode_selected();
+        play_favourite_slot(static_cast<size_t>(key - '1'));
+        return true;
+    }
+    if (key == '?' ) {
+        help_on_ = !help_on_;
+        return true;
+    }
+    if (key == 'i' || key == 'I') {
+        // Import .sub from SD/USB mounts or Downloads.
+        import_subs_from_dir("/media");
+        if (status_.find("Imported 0") != std::string::npos) {
+            const char* home = std::getenv("HOME");
+            if (home) import_subs_from_dir(std::string(home) + "/Downloads");
         }
         return true;
     }

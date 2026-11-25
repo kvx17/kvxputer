@@ -32,9 +32,15 @@ private:
     void rename_selected();
     void decode_selected();
     void stop_tx();
+    void bind_favourite_slot(size_t slot);
+    void play_favourite_slot(size_t slot);
+    void import_subs_from_dir(const std::string& dir);
     static void timer_cb(lv_timer_t* t);
 
     bool library_mode_{false};
+    bool help_on_{false};
+    bool renaming_{false};
+    std::string rename_buf_;
     platform::RfSettings settings_;
     std::vector<std::string> names_;
     std::vector<platform::SubFileInfo> meta_;
