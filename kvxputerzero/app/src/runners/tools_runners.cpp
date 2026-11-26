@@ -335,6 +335,26 @@ int run_dtmf(const std::vector<std::string>& args, std::atomic<bool>&, const Lin
             f1 = 941;
             f2 = 1477;
             break;
+        case 'A':
+        case 'a':
+            f1 = 697;
+            f2 = 1633;
+            break;
+        case 'B':
+        case 'b':
+            f1 = 770;
+            f2 = 1633;
+            break;
+        case 'C':
+        case 'c':
+            f1 = 852;
+            f2 = 1633;
+            break;
+        case 'D':
+        case 'd':
+            f1 = 941;
+            f2 = 1633;
+            break;
         default:
             continue;
         }

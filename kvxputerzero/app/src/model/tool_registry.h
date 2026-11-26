@@ -76,6 +76,7 @@ enum class ToolId {
     IrCarrier,
     WifiMonitorAdapter,
     WifiAnalyzer,
+    WifiRadio,
     WifiConnect,
     WifiDisconnect,
     WifiAp,
@@ -218,6 +219,7 @@ struct ToolDesc {
 inline constexpr ToolDesc kTools[] = {
     {ToolId::WifiMonitorAdapter, "wifi_monitor_adapter", "Monitor adapter", "wifi"},
     {ToolId::WifiAnalyzer, "wifi_analyzer", "WiFi Analyzer", "wifi"},
+    {ToolId::WifiRadio, "radio", "Radio", "wifi"},
     {ToolId::WifiConnect, "wifi_connect", "Connect", "wifi"},
     {ToolId::WifiDisconnect, "wifi_disconnect", "Disconnect", "wifi"},
     {ToolId::WifiAp, "wifi_ap", "Start WiFi AP", "wifi"},

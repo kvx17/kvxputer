@@ -73,6 +73,16 @@ enum class AppPage {
     DimTime,
     SoundMenu,
     PowerMenu,
+    // pocket-zero-tools instruments
+    Flashlight,
+    Keys,
+    Counter,
+    Metronome,
+    AudioAnalyzer,
+    QrScan,
+    Level,
+    Motion,
+    SystemInfo,
 };
 
 enum class ColorTarget {

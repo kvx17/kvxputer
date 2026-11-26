@@ -14,6 +14,7 @@ enum class ChannelKind {
     GalleryFill,    // Pictures browser
     ChannelFill,    // tool_registry menu for this channel id
     DiscoveryFill,  // discovery tools (BLE scan, walls, spectrum, wardrive)
+    LevelFill,      // bubble level / compass instrument (opens Level directly)
     ComingSoon,     // later wave
     UseStock,       // OS already covers
 };
@@ -47,6 +48,7 @@ inline constexpr ChannelDesc kChannels[] = {
     {"pcconnect", "PC Connect", ChannelKind::ChannelFill, nullptr},
     {"clock", "Clock", ChannelKind::ClockFill, nullptr},
     {"charge", "Charge", ChannelKind::ChargeFill, nullptr},
+    {"level", "Level", ChannelKind::LevelFill, nullptr},
     {"others", "Tools", ChannelKind::ToolsFill, nullptr},
     {"modules", "Modules", ChannelKind::ChannelFill, nullptr},
     {"config", "Config", ChannelKind::ConfigFill, nullptr},

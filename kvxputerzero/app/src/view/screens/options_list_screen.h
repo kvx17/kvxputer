@@ -24,6 +24,7 @@ public:
                       app::AssetManager& assets,
                       std::string title,
                       std::vector<MenuEntry> entries);
+    ~OptionsListScreen() override;
 
 protected:
     void build() override;
@@ -34,8 +35,11 @@ private:
     void refresh();
     void move_selection(int delta);
     void activate();
+    void remember_selection();
+    std::string cursor_key();
 
     std::string title_;
+    std::string cursor_key_;
     std::vector<MenuEntry> entries_;
     lv_obj_t* list_{nullptr};
     std::vector<lv_obj_t*> rows_;

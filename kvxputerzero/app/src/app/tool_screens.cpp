@@ -34,6 +34,7 @@
 #include "net_info.h"
 #include "recon_scan.h"
 #include "doc_screen.h"
+#include "dtmf_dialer_screen.h"
 #include "info_screen.h"
 #include "menu_icons.h"
 #include "theme.h"
@@ -54,6 +55,7 @@
 #include "roku_screen.h"
 #include "hid_remote_screen.h"
 #include "jam_detect_screen.h"
+#include "radio_screen.h"
 #include "usb_probe.h"
 #include "wifi_analyzer_screen.h"
 #include "elevate.h"
@@ -2299,21 +2301,7 @@ Worker dtmf_listen_worker() {
 Screen make_dtmf(VM& vm, AssetManager& assets, const Stage& st) {
     const ToolId id = ToolId::Dtmf;
     if (st.name == "listen") return make_run(vm, assets, "DTMF Listen", dtmf_listen_worker());
-    if (st.name == "dialer") {
-        std::vector<MenuEntry> e;
-        for (int r = 0; r < 4; ++r) {
-            for (int c = 0; c < 4; ++c) {
-                const char k = kDtmfLayout[r][c];
-                const float lo = kDtmfRows[r];
-                const float hi = kDtmfCols[c];
-                e.push_back({sfmt("%c   (%.0f + %.0f Hz)", k, lo, hi), [&vm, lo, hi]() {
-                                 std::string err;
-                                 if (!platform::play_dual_tone(lo, hi, 150, err)) nav_info(vm, "Audio: " + err);
-                             }});
-            }
-        }
-        return make_options(vm, assets, "DTMF Dialer", std::move(e));
-    }
+    if (st.name == "dialer") return std::make_unique<screen::DtmfDialerScreen>(vm, assets);
     std::vector<MenuEntry> e;
     e.push_back(stage_entry(vm, id, "Dialer", "dialer"));
     e.push_back(stage_entry(vm, id, "Listen", "listen"));
@@ -5106,6 +5094,7 @@ std::unique_ptr<screen::KvxScreen> make_tool_run_screen(viewmodel::BaseViewModel
     const Stage st = parse_stage(param);
 
     switch (id) {
+    case ToolId::WifiRadio: return std::make_unique<screen::RadioScreen>(vm, assets);
     // --- Net -----------------------------------------------------------------------------
     case ToolId::NetToolkit: return make_net_toolkit(vm, assets, st);
     case ToolId::ScanHosts: return make_run(vm, assets, "Scan Hosts", scan_hosts_worker(param));

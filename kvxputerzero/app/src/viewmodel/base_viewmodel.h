@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace viewmodel {
@@ -68,6 +69,9 @@ public:
     int menu_index() const;
     void set_menu_index(int index);
     void move_menu(int delta);
+    // Session cursor for a menu list. 0 when that menu has not been opened.
+    int menu_cursor(const std::string& key) const;
+    void set_menu_cursor(const std::string& key, int index);
 
     void open_codec_menu();
     void open_codec_op(int op);
@@ -79,6 +83,15 @@ public:
     void open_life_counter(int game);
     void open_timer();
     void open_matrix();
+    void open_flashlight();
+    void open_keys();
+    void open_counter();
+    void open_metronome();
+    void open_audio();
+    void open_qr_scan();
+    void open_level();
+    void open_motion();
+    void open_system_info();
     void open_config_menu();
     void open_color_picker(model::ColorTarget target);
     void open_color_hex();
@@ -178,6 +191,7 @@ private:
     reactive::IntSubject current_page_subject_;
     reactive::IntSubject channel_index_subject_;
     reactive::IntSubject menu_index_subject_;
+    std::unordered_map<std::string, int> menu_cursors_;
     reactive::IntSubject pri_color_subject_;
     reactive::IntSubject sec_color_subject_;
     reactive::IntSubject bg_color_subject_;

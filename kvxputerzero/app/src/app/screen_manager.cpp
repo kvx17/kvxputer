@@ -24,6 +24,15 @@
 #include "shortcut_capture_screen.h"
 #include "shortcut_pick_screen.h"
 #include "matrix_screen.h"
+#include "flashlight_screen.h"
+#include "keys_screen.h"
+#include "counter_screen.h"
+#include "metronome_screen.h"
+#include "audio_screen.h"
+#include "qr_scan_screen.h"
+#include "level_screen.h"
+#include "motion_screen.h"
+#include "system_screen.h"
 #include "options_list_screen.h"
 #include "passgen_screen.h"
 #include "pda_calendar_screen.h"
@@ -198,6 +207,15 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
                            view::tool_icon(model::ToolId::MediaPlayer)});
         entries.push_back({"Timer", [this]() { view_model_.open_timer(); }, view::ICON_MENU_TIMER});
         entries.push_back({"Matrix", [this]() { view_model_.open_matrix(); }, view::ICON_CH_SCRIPTS, 0x39FF14});
+        entries.push_back({"Flashlight", [this]() { view_model_.open_flashlight(); }, view::ICON_INFO});
+        entries.push_back({"Keys", [this]() { view_model_.open_keys(); }, view::ICON_CH_TOOLS});
+        entries.push_back({"Counter", [this]() { view_model_.open_counter(); }, view::ICON_MENU_COMBO});
+        entries.push_back({"Metronome", [this]() { view_model_.open_metronome(); }, view::ICON_MENU_TIMER});
+        entries.push_back({"Audio", [this]() { view_model_.open_audio(); }, view::tool_icon(model::ToolId::Microphone)});
+        entries.push_back({"QR Scan", [this]() { view_model_.open_qr_scan(); }, view::ICON_MENU_QR});
+        entries.push_back({"Level", [this]() { view_model_.open_level(); }, view::ICON_CH_TOOLS});
+        entries.push_back({"Motion", [this]() { view_model_.open_motion(); }, view::ICON_CH_TOOLS});
+        entries.push_back({"System", [this]() { view_model_.open_system_info(); }, view::ICON_CH_CONFIG});
         entries.push_back({"DTMF", [this]() { view_model_.open_tool(model::ToolId::Dtmf); },
                            view::tool_icon(model::ToolId::Dtmf)});
         entries.push_back({"Morse", [this]() { view_model_.open_tool(model::ToolId::Morse); },
@@ -343,6 +361,33 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::Matrix:
         return std::make_unique<screen::MatrixScreen>(view_model_, assets_);
+
+    case model::AppPage::Flashlight:
+        return std::make_unique<screen::FlashlightScreen>(view_model_, assets_);
+
+    case model::AppPage::Keys:
+        return std::make_unique<screen::KeysScreen>(view_model_, assets_);
+
+    case model::AppPage::Counter:
+        return std::make_unique<screen::CounterScreen>(view_model_, assets_);
+
+    case model::AppPage::Metronome:
+        return std::make_unique<screen::MetronomeScreen>(view_model_, assets_);
+
+    case model::AppPage::AudioAnalyzer:
+        return std::make_unique<screen::AudioScreen>(view_model_, assets_);
+
+    case model::AppPage::QrScan:
+        return std::make_unique<screen::QrScanScreen>(view_model_, assets_);
+
+    case model::AppPage::Level:
+        return std::make_unique<screen::LevelScreen>(view_model_, assets_);
+
+    case model::AppPage::Motion:
+        return std::make_unique<screen::MotionScreen>(view_model_, assets_);
+
+    case model::AppPage::SystemInfo:
+        return std::make_unique<screen::SystemScreen>(view_model_, assets_);
 
     case model::AppPage::Passgen:
         return std::make_unique<screen::PassgenScreen>(view_model_, assets_);

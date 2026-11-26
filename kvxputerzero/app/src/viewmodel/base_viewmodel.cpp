@@ -225,6 +225,24 @@ void BaseViewModel::go_back() {
     case model::AppPage::Matrix:
         show_page(model::AppPage::ChannelMenu);
         break;
+    case model::AppPage::Flashlight:
+    case model::AppPage::Keys:
+    case model::AppPage::Counter:
+    case model::AppPage::Metronome:
+    case model::AppPage::AudioAnalyzer:
+    case model::AppPage::QrScan:
+    case model::AppPage::Motion:
+    case model::AppPage::SystemInfo:
+        show_page(model::AppPage::ChannelMenu);
+        break;
+    case model::AppPage::Level:
+        // Level is both a main-menu channel and a Tools entry; return to whichever.
+        if (model_.current_channel().kind == model::ChannelKind::LevelFill) {
+            show_page(model::AppPage::ChannelGrid);
+        } else {
+            show_page(model::AppPage::ChannelMenu);
+        }
+        break;
     case model::AppPage::ToolRun:
     case model::AppPage::ToolPrompt: {
         // Nested tool steps store stage in tool_param; Esc returns to the channel tool menu
@@ -313,6 +331,9 @@ void BaseViewModel::open_selected_channel() {
     case model::ChannelKind::DiscoveryFill:
         model_.set_discovery_filter("");
         open_discovery();
+        break;
+    case model::ChannelKind::LevelFill:
+        show_page(model::AppPage::Level);
         break;
     case model::ChannelKind::ComingSoon:
     case model::ChannelKind::UseStock:
@@ -457,6 +478,16 @@ void BaseViewModel::move_menu(int delta) {
     set_menu_index(model_.menu_index() + delta);
 }
 
+int BaseViewModel::menu_cursor(const std::string& key) const {
+    const auto it = menu_cursors_.find(key);
+    return it == menu_cursors_.end() ? 0 : it->second;
+}
+
+void BaseViewModel::set_menu_cursor(const std::string& key, int index) {
+    if (key.empty()) return;
+    menu_cursors_[key] = index < 0 ? 0 : index;
+}
+
 void BaseViewModel::open_codec_menu() {
     show_page(model::AppPage::CodecMenu);
 }
@@ -502,6 +533,42 @@ void BaseViewModel::open_timer() {
 
 void BaseViewModel::open_matrix() {
     show_page(model::AppPage::Matrix);
+}
+
+void BaseViewModel::open_flashlight() {
+    show_page(model::AppPage::Flashlight);
+}
+
+void BaseViewModel::open_keys() {
+    show_page(model::AppPage::Keys);
+}
+
+void BaseViewModel::open_counter() {
+    show_page(model::AppPage::Counter);
+}
+
+void BaseViewModel::open_metronome() {
+    show_page(model::AppPage::Metronome);
+}
+
+void BaseViewModel::open_audio() {
+    show_page(model::AppPage::AudioAnalyzer);
+}
+
+void BaseViewModel::open_qr_scan() {
+    show_page(model::AppPage::QrScan);
+}
+
+void BaseViewModel::open_level() {
+    show_page(model::AppPage::Level);
+}
+
+void BaseViewModel::open_motion() {
+    show_page(model::AppPage::Motion);
+}
+
+void BaseViewModel::open_system_info() {
+    show_page(model::AppPage::SystemInfo);
 }
 
 void BaseViewModel::open_config_menu() {

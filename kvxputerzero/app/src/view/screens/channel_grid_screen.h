@@ -34,7 +34,7 @@ private:
     lv_obj_t* footer_{nullptr};
     lv_obj_t* footer_name_{nullptr};
     lv_obj_t* footer_hint_{nullptr};
-    std::array<lv_obj_t*, 4> page_dots_{};
+    std::array<lv_obj_t*, kPageCount> page_dots_{};
     lv_obj_t* grid_{nullptr};
     std::array<lv_obj_t*, kSlots> tiles_{};
     std::array<lv_obj_t*, kSlots> tile_icons_{};

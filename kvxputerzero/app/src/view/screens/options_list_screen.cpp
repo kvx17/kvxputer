@@ -13,7 +13,30 @@ OptionsListScreen::OptionsListScreen(viewmodel::BaseViewModel& view_model,
                                      std::string title,
                                      std::vector<MenuEntry> entries)
     : KvxScreen(view_model, assets), title_(std::move(title)), entries_(std::move(entries)) {
+    cursor_key_ = cursor_key();
+    // Confirmations ("Delete?", "Reboot?") always open on the first row.
+    if (cursor_key_.empty() || title_.empty() || title_.back() == '?') selected_ = 0;
+    else selected_ = view_model.menu_cursor(cursor_key_);
     init();
+}
+
+OptionsListScreen::~OptionsListScreen() {
+    remember_selection();
+}
+
+std::string OptionsListScreen::cursor_key() {
+    // Captured when the menu is built. The page may already have changed by the
+    // time this screen is destroyed, so the key is stored and reused.
+    const auto page = view_model().current_page();
+    if (page == model::AppPage::ToolRun || page == model::AppPage::ToolPrompt) {
+        return "tool:" + std::to_string(static_cast<int>(view_model().active_tool_id())) + ":" + title_;
+    }
+    return "page:" + std::to_string(static_cast<int>(page)) + ":" + title_;
+}
+
+void OptionsListScreen::remember_selection() {
+    if (cursor_key_.empty() || title_.empty() || title_.back() == '?') return;
+    view_model().set_menu_cursor(cursor_key_, selected_);
 }
 
 void OptionsListScreen::build() {
