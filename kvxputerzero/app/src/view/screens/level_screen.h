@@ -55,6 +55,22 @@ private:
 
     bool mag_cal_{false};
     float mx_min_{1e9f}, mx_max_{-1e9f}, my_min_{1e9f}, my_max_{-1e9f};
+    float mz_min_{1e9f}, mz_max_{-1e9f};  // hard-iron on Z too (needed for the standing compass)
+    // Extra readouts (from pocket-zero level.tsx): gravity magnitude, field
+    // strength, zero state, and compass-calibration progress.
+    float grav_g_{1.f};
+    float field_ut_{0.f};
+    bool zeroed_{false};
+    // Orientation: standing (on the bottom edge) vs flat (on its back). Driven by
+    // the tilt-from-flat angle against a user-set threshold, with hysteresis.
+    bool standing_{false};
+    float tilt_deg_{0.f};
+    float ax_{0.f}, ay_{0.f}, az_{1.f};   // low-passed accel (g)
+    float mxf_{0.f}, myf_{0.f}, mzf_{0.f};  // low-passed mag
+    int orient_threshold_{45};
+    void update_hint();
+    void load_threshold();
+    void save_threshold();
 };
 
 } // namespace screen

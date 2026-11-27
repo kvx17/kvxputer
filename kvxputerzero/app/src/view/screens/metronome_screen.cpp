@@ -69,18 +69,18 @@ void MetronomeScreen::build() {
     make_header(root, "Metronome");
 
     auto* font = assets().load_standard_font(12);
-    auto* big = assets().load_standard_font(44);
+    auto* big = assets().load_standard_font(36);
 
     chip_ = view::widgets::make_status_chip(root, "STOPPED", view::StatusPillKind::Idle, font, tok);
 
     bpm_lbl_ = view::widgets::make_readout(root, big, tok);
-    lv_obj_align(bpm_lbl_, LV_ALIGN_TOP_MID, 0, 22);
+    lv_obj_align(bpm_lbl_, LV_ALIGN_TOP_MID, 0, 20);
 
     beat_cap_ = view::widgets::make_caption(root, font, tok);
-    lv_obj_align(beat_cap_, LV_ALIGN_TOP_MID, 0, 68);
+    lv_obj_align(beat_cap_, LV_ALIGN_TOP_MID, 0, 60);
 
     cw_ = 200;
-    ch_ = view::kContentHeight - 92;
+    ch_ = view::kContentHeight - 96;
     if (ch_ < 50) ch_ = 50;
     draw_ = lv_draw_buf_create(cw_, ch_, LV_COLOR_FORMAT_RGB565, 0);
     if (draw_ && draw_->data) {

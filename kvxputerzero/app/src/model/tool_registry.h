@@ -414,7 +414,7 @@ inline constexpr ToolDesc kTools[] = {
     // Keep Save as Discovery-visible helper (auto-save note)
     {ToolId::NfcSave, "nfc_save", "Save dump help", "nfc"},
 
-    {ToolId::Dtmf, "dtmf", "DTMF", "others"},
+    {ToolId::Dtmf, "dtmf", "Tone Dialer", "others"},
     {ToolId::Morse, "morse", "Morse", "others"},
     {ToolId::Microphone, "microphone", "Microphone", "others"},
     {ToolId::Mqtt, "mqtt", "MQTT", "others"},

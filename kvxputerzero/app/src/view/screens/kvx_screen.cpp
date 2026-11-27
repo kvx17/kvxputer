@@ -175,6 +175,15 @@ bool KvxScreen::handle_key(uint32_t key) {
     return false;
 }
 
+void KvxScreen::hide_action_bar() {
+    if (action_bar_ && action_bar_->root()) {
+        lv_obj_add_flag(action_bar_->root(), LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!content_) return;
+    lv_obj_set_size(content_, view::kScreenWidth, view::kScreenHeight - view::kTitleBarHeight);
+    lv_obj_align(content_, LV_ALIGN_TOP_MID, 0, view::kTitleBarHeight);
+}
+
 void KvxScreen::set_chrome_visible(bool visible) {
     chrome_visible_ = visible;
     if (title_bar_ && title_bar_->root()) {

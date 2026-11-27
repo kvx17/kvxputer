@@ -208,7 +208,8 @@ void RadioScreen::render() {
     if (header_) lv_label_set_text_fmt(header_, "%s", status.c_str());
 
     if (entries.empty()) {
-        if (body_) lv_label_set_text(body_, "(scanning...)");
+        if (header_) lv_label_set_text(header_, "Nearby");
+        if (body_) lv_label_set_text(body_, "Searching Wi-Fi + Bluetooth...");
         return;
     }
     sel_ = std::clamp(sel_, 0, static_cast<int>(entries.size()) - 1);

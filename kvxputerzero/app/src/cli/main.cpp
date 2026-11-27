@@ -258,7 +258,7 @@ int interactive() {
         {"passgen", "Passgen"},       {"totp", "TOTP"},           {"combo", "Combo"},
         {"qr", "QRCodes"},            {"barcode", "Barcode"},     {"pda", "PDA"},
         {"media_player", "Media Player"}, {"timer", "Timer"},     {"matrix", "Matrix"},
-        {"dtmf", "DTMF"},             {"morse", "Morse"},         {"microphone", "Microphone"},
+        {"dtmf", "Tone Dialer"},      {"morse", "Morse"},         {"microphone", "Microphone"},
         {"mqtt", "MQTT"},             {"llm_chat", "LLM Chat"},   {"drone_id", "Drone ID"},
         {"ibutton", "iButton"},
     };

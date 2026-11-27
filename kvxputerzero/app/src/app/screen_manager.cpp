@@ -213,10 +213,10 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
         entries.push_back({"Metronome", [this]() { view_model_.open_metronome(); }, view::ICON_MENU_TIMER});
         entries.push_back({"Audio", [this]() { view_model_.open_audio(); }, view::tool_icon(model::ToolId::Microphone)});
         entries.push_back({"QR Scan", [this]() { view_model_.open_qr_scan(); }, view::ICON_MENU_QR});
-        entries.push_back({"Level", [this]() { view_model_.open_level(); }, view::ICON_CH_TOOLS});
+        entries.push_back({"Level", [this]() { view_model_.open_level(); }, view::ICON_COMPASS});
         entries.push_back({"Motion", [this]() { view_model_.open_motion(); }, view::ICON_CH_TOOLS});
         entries.push_back({"System", [this]() { view_model_.open_system_info(); }, view::ICON_CH_CONFIG});
-        entries.push_back({"DTMF", [this]() { view_model_.open_tool(model::ToolId::Dtmf); },
+        entries.push_back({"Tone Dialer", [this]() { view_model_.open_tool(model::ToolId::Dtmf); },
                            view::tool_icon(model::ToolId::Dtmf)});
         entries.push_back({"Morse", [this]() { view_model_.open_tool(model::ToolId::Morse); },
                            view::tool_icon(model::ToolId::Morse)});

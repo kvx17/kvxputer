@@ -57,6 +57,8 @@ protected:
 
     // Hide title + action bars and expand content to the full 320x170 viewport.
     void set_chrome_visible(bool visible);
+    // Hide the key 4–8 bar and give that strip to the content. Title bar stays.
+    void hide_action_bar();
     bool chrome_visible() const { return chrome_visible_; }
 
     lv_color_t pri_color() const;

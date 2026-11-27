@@ -47,8 +47,11 @@ bool play_tone(float freq_hz, int duration_ms, std::string& error) {
     }
     const std::string msg =
         run_cmd("aplay -q -t raw -f S16_LE -r " + std::to_string(rate) + " -c 1 " + path + " 2>&1");
-    if (!msg.empty() && msg.find("not found") != std::string::npos) {
-        error = "audio playback unavailable (aplay)";
+    if (!msg.empty()) {
+        error = msg.find("not found") != std::string::npos ? "audio playback unavailable (aplay)" : msg;
+        while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
+        const auto nl = error.find('\n');
+        if (nl != std::string::npos) error.resize(nl);
         return false;
     }
     return true;
@@ -77,8 +80,11 @@ bool play_dual_tone(float f1, float f2, int duration_ms, std::string& error) {
     }
     const std::string msg =
         run_cmd("aplay -q -t raw -f S16_LE -r " + std::to_string(rate) + " -c 1 " + path + " 2>&1");
-    if (!msg.empty() && msg.find("not found") != std::string::npos) {
-        error = "audio playback unavailable (aplay)";
+    if (!msg.empty()) {
+        error = msg.find("not found") != std::string::npos ? "audio playback unavailable (aplay)" : msg;
+        while (!error.empty() && (error.back() == '\n' || error.back() == '\r')) error.pop_back();
+        const auto nl = error.find('\n');
+        if (nl != std::string::npos) error.resize(nl);
         return false;
     }
     return true;

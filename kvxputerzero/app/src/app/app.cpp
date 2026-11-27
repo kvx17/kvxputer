@@ -44,6 +44,8 @@
 #include "src/drivers/display/drm/lv_linux_drm.h"
 #else
 #include "src/drivers/display/fb/lv_linux_fbdev.h"
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 #endif
 
@@ -1165,6 +1167,17 @@ lv_display_t* init_device_display() {
     if (lv_linux_fbdev_set_file(display, APP_FRAMEBUFFER_DEVICE) != LV_RESULT_OK) {
         lv_display_delete(display);
         return nullptr;
+    }
+
+    // The CardputerZero SPI panel is a deferred-I/O framebuffer: with MMAP flush
+    // the kernel coalesces frames (~18/s), merging animation frames into one or
+    // two. fsync()'ing the device after each rendered frame forces the panel to
+    // push that frame now (~panel refresh rate while moving, nothing while idle)
+    // so metronome/level/motion/audio animate at full rate. Mirrors pocket-zero.
+    static int fb_fd = ::open(APP_FRAMEBUFFER_DEVICE, O_RDWR | O_CLOEXEC);
+    if (fb_fd >= 0) {
+        lv_display_add_event_cb(
+            display, [](lv_event_t*) { ::fsync(fb_fd); }, LV_EVENT_RENDER_READY, nullptr);
     }
 
     platform::init_key_input(display);

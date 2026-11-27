@@ -47,8 +47,8 @@ void QrScanScreen::build() {
     result_ = lv_label_create(root);
     lv_obj_set_style_text_color(result_, tok.accent, 0);
     lv_obj_set_style_bg_color(result_, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(result_, LV_OPA_60, 0);
-    lv_obj_set_style_pad_all(result_, 2, 0);
+    lv_obj_set_style_bg_opa(result_, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(result_, 3, 0);
     if (font) lv_obj_set_style_text_font(result_, font, 0);
     lv_obj_set_width(result_, w_);
     lv_label_set_long_mode(result_, LV_LABEL_LONG_WRAP);
@@ -56,9 +56,12 @@ void QrScanScreen::build() {
     lv_label_set_text(result_, "Scanning for QR...");
 
     hint_ = lv_label_create(root);
-    lv_obj_set_style_text_color(hint_, tok.ink, 0);
+    lv_obj_set_style_text_color(hint_, tok.accent, 0);
     lv_obj_set_style_bg_color(hint_, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(hint_, LV_OPA_60, 0);
+    lv_obj_set_style_bg_opa(hint_, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(hint_, 3, 0);
+    lv_obj_set_width(hint_, w_);
+    lv_obj_set_style_text_align(hint_, LV_TEXT_ALIGN_CENTER, 0);
     if (font) lv_obj_set_style_text_font(hint_, font, 0);
     lv_obj_align(hint_, LV_ALIGN_BOTTOM_MID, 0, 0);
     lv_label_set_text(hint_, "Enter rescan   Esc back");

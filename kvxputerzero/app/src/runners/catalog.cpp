@@ -54,7 +54,7 @@ std::vector<Entry> build() {
                        "GUI-only display rain; no action to trigger"));
     out.push_back(make("tools", "media_player", "Media Player", Tid::MediaPlayer, Kind::Log, tools_media_player(),
                        false, false, {{"path", "wav path", true}}));
-    out.push_back(make("tools", "dtmf", "DTMF", Tid::Dtmf, Kind::Log, tools_dtmf(), false, false,
+    out.push_back(make("tools", "dtmf", "Tone Dialer", Tid::Dtmf, Kind::Log, tools_dtmf(), false, false,
                        {{"digits", "0-9*#", true}}));
     out.push_back(make("tools", "morse", "Morse", Tid::Morse, Kind::Log, tools_morse(), false, false,
                        {{"text", "message", true}}));
@@ -422,7 +422,7 @@ std::vector<Entry> build() {
     out.push_back(make("config", "about", "About", Tid::None, Kind::Info, config_tool("about")));
 
     // Registry leftovers that live under "others" channel id
-    out.push_back(make("others", "dtmf", "DTMF", Tid::Dtmf, Kind::Log, tools_dtmf()));
+    out.push_back(make("others", "dtmf", "Tone Dialer", Tid::Dtmf, Kind::Log, tools_dtmf()));
     out.push_back(make("others", "morse", "Morse", Tid::Morse, Kind::Log, tools_morse()));
     out.push_back(make("others", "microphone", "Microphone", Tid::Microphone, Kind::Log, tools_microphone()));
     out.push_back(make("others", "mqtt", "MQTT", Tid::Mqtt, Kind::Log, tools_mqtt()));

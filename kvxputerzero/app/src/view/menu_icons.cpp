@@ -57,6 +57,7 @@ const char* channel_icon(const char* id) {
     if (std::strcmp(id, "pcconnect") == 0) return ICON_CH_USB;
     if (std::strcmp(id, "clock") == 0) return ICON_CH_CLOCK;
     if (std::strcmp(id, "charge") == 0) return ICON_CH_CHARGE;
+    if (std::strcmp(id, "level") == 0) return ICON_COMPASS;
     if (std::strcmp(id, "others") == 0) return ICON_CH_TOOLS;
     if (std::strcmp(id, "modules") == 0) return ICON_CH_MODULES;
     if (std::strcmp(id, "config") == 0) return ICON_CH_CONFIG;

@@ -2300,12 +2300,12 @@ Worker dtmf_listen_worker() {
 
 Screen make_dtmf(VM& vm, AssetManager& assets, const Stage& st) {
     const ToolId id = ToolId::Dtmf;
-    if (st.name == "listen") return make_run(vm, assets, "DTMF Listen", dtmf_listen_worker());
+    if (st.name == "listen") return make_run(vm, assets, "Tone Listen", dtmf_listen_worker());
     if (st.name == "dialer") return std::make_unique<screen::DtmfDialerScreen>(vm, assets);
     std::vector<MenuEntry> e;
-    e.push_back(stage_entry(vm, id, "Dialer", "dialer"));
+    e.push_back(stage_entry(vm, id, "Tone Dialer", "dialer"));
     e.push_back(stage_entry(vm, id, "Listen", "listen"));
-    return make_options(vm, assets, "DTMF", std::move(e));
+    return make_options(vm, assets, "Tone Dialer", std::move(e));
 }
 
 const char* morse_code(char c) {

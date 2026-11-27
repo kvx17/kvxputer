@@ -45,7 +45,7 @@ private:
     bool scan_cancel_{false};  // plain flag passed to the blocking scanners
 
     std::vector<Entry> entries_;
-    std::string status_{"Scanning..."};
+    std::string status_{};
     int watch_rssi_{-127};
 
     lv_obj_t* header_{nullptr};
