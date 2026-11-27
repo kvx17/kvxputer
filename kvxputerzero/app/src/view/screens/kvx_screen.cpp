@@ -210,9 +210,14 @@ void KvxScreen::set_chrome_visible(bool visible) {
     }
 }
 
-bool KvxScreen::on_global_key(uint32_t key, const char* /*key_name*/, bool /*long_pressed*/, void* user_data) {
+bool KvxScreen::handle_long_key(uint32_t /*key*/) {
+    return false;
+}
+
+bool KvxScreen::on_global_key(uint32_t key, const char* /*key_name*/, bool long_pressed, void* user_data) {
     auto* self = static_cast<KvxScreen*>(user_data);
     if (!self) return false;
+    if (long_pressed && self->handle_long_key(key)) return true;
     if (self->handle_key(key)) return true;
     // Tab is its own key so a screen can hold it. Everyone else still treats it as Next.
     if (key == platform::kKeyTab) return self->handle_key(LV_KEY_NEXT);

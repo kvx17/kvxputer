@@ -90,6 +90,8 @@ public:
     void open_audio();
     void open_qr_scan();
     void open_level();
+    void open_weather();
+    void open_weather_settings();
     void open_motion();
     void open_system_info();
     void open_config_menu();

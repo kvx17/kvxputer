@@ -243,6 +243,13 @@ void BaseViewModel::go_back() {
             show_page(model::AppPage::ChannelMenu);
         }
         break;
+    case model::AppPage::Weather:
+        // Weather is a main-menu channel only.
+        show_page(model::AppPage::ChannelGrid);
+        break;
+    case model::AppPage::WeatherSettings:
+        show_page(model::AppPage::Weather);
+        break;
     case model::AppPage::ToolRun:
     case model::AppPage::ToolPrompt: {
         // Nested tool steps store stage in tool_param; Esc returns to the channel tool menu
@@ -334,6 +341,9 @@ void BaseViewModel::open_selected_channel() {
         break;
     case model::ChannelKind::LevelFill:
         show_page(model::AppPage::Level);
+        break;
+    case model::ChannelKind::WeatherFill:
+        show_page(model::AppPage::Weather);
         break;
     case model::ChannelKind::ComingSoon:
     case model::ChannelKind::UseStock:
@@ -561,6 +571,14 @@ void BaseViewModel::open_qr_scan() {
 
 void BaseViewModel::open_level() {
     show_page(model::AppPage::Level);
+}
+
+void BaseViewModel::open_weather() {
+    show_page(model::AppPage::Weather);
+}
+
+void BaseViewModel::open_weather_settings() {
+    show_page(model::AppPage::WeatherSettings);
 }
 
 void BaseViewModel::open_motion() {

@@ -83,6 +83,8 @@ enum class AppPage {
     Level,
     Motion,
     SystemInfo,
+    Weather,
+    WeatherSettings,
 };
 
 enum class ColorTarget {

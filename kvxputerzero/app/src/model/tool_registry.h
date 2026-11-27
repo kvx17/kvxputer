@@ -13,6 +13,7 @@ enum class ToolId {
     // Shared net
     NetToolkit,
     ScanHosts,
+    NetAnalyzer,
     ListenTcp,
     ClientTcp,
     Socks4,
@@ -283,6 +284,8 @@ inline constexpr ToolDesc kTools[] = {
     {ToolId::ChameleonStatus, "chameleon_status", "Chameleon Status", "ble"},
 
     {ToolId::ScanHosts, "scan_hosts", "Scan Hosts", "ethernet"},
+
+    {ToolId::NetAnalyzer, "net_analyzer", "Network Analyzer", "ethernet"},
 
     {ToolId::HidRemote, "hid_remote", "kvxkeyboard HID", "usb"},
     {ToolId::BadUsbHunter, "badusb_hunter", "BadUSB Hunter", "usb"},

@@ -1024,6 +1024,8 @@ private:
             vm_.show_page(model::AppPage::ClockSubMenu);
         } else if (lower == "charge") {
             vm_.show_page(model::AppPage::ChargeFace);
+        } else if (lower == "weather") {
+            vm_.open_weather();
         } else if (lower == "config") {
             vm_.open_config_menu();
         } else if (lower == "discovery") {

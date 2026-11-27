@@ -54,6 +54,8 @@ protected:
 
     // Return true if handled. Esc is always handled by base unless overridden returns and calls go_back.
     virtual bool handle_key(uint32_t key);
+    // Long-press of a key (fires in addition to the initial press). Default: ignore.
+    virtual bool handle_long_key(uint32_t key);
 
     // Hide title + action bars and expand content to the full 320x170 viewport.
     void set_chrome_visible(bool visible);

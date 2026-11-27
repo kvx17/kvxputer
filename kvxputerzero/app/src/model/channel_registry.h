@@ -15,6 +15,7 @@ enum class ChannelKind {
     ChannelFill,    // tool_registry menu for this channel id
     DiscoveryFill,  // discovery tools (BLE scan, walls, spectrum, wardrive)
     LevelFill,      // bubble level / compass instrument (opens Level directly)
+    WeatherFill,    // Open-Meteo weather app (opens Weather directly)
     ComingSoon,     // later wave
     UseStock,       // OS already covers
 };
@@ -49,6 +50,7 @@ inline constexpr ChannelDesc kChannels[] = {
     {"clock", "Clock", ChannelKind::ClockFill, nullptr},
     {"charge", "Charge", ChannelKind::ChargeFill, nullptr},
     {"level", "Level", ChannelKind::LevelFill, nullptr},
+    {"weather", "Weather", ChannelKind::WeatherFill, nullptr},
     {"others", "Tools", ChannelKind::ToolsFill, nullptr},
     {"modules", "Modules", ChannelKind::ChannelFill, nullptr},
     {"config", "Config", ChannelKind::ConfigFill, nullptr},

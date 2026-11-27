@@ -31,6 +31,8 @@
 #include "audio_screen.h"
 #include "qr_scan_screen.h"
 #include "level_screen.h"
+#include "weather_screen.h"
+#include "weather_settings_screen.h"
 #include "motion_screen.h"
 #include "system_screen.h"
 #include "options_list_screen.h"
@@ -388,6 +390,12 @@ std::unique_ptr<screen::KvxScreen> ScreenManager::make_screen(model::AppPage pag
 
     case model::AppPage::SystemInfo:
         return std::make_unique<screen::SystemScreen>(view_model_, assets_);
+
+    case model::AppPage::Weather:
+        return std::make_unique<screen::WeatherScreen>(view_model_, assets_);
+
+    case model::AppPage::WeatherSettings:
+        return std::make_unique<screen::WeatherSettingsScreen>(view_model_, assets_);
 
     case model::AppPage::Passgen:
         return std::make_unique<screen::PassgenScreen>(view_model_, assets_);

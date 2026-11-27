@@ -66,6 +66,7 @@ constexpr const char* ICON_CH_ETH       = "\uEDDE"; // network
 constexpr const char* ICON_CH_USB       = "\uE956"; // usb
 constexpr const char* ICON_CH_GPS       = "\uEDD6"; // gps-fix
 constexpr const char* ICON_COMPASS      = "\uE1C8"; // compass-fill
+constexpr const char* ICON_WEATHER      = "\uE540"; // cloud-sun-fill
 constexpr const char* ICON_CH_RFID      = "\uE2C8"; // identification-card
 constexpr const char* ICON_CH_NFC       = "\uED42"; // contactless-payment
 constexpr const char* ICON_CH_FILES     = "\uE256"; // folder-open
